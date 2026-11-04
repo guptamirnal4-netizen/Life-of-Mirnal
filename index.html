@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Life of Mirnal</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%92%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="title">
+    <div class="title-card">
+      <div class="title-kicker">School · College · Growing up</div>
+      <h1>LIFE OF<br />MIRNAL</h1>
+      <p class="title-tag">From the first day of Class 1 to the Clock Tower at BITS Pilani.</p>
+      <div class="title-menu"></div>
+      <p class="title-note">Best in Chrome on a laptop or desktop · Mouse + keyboard · Optional microphone</p>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="hud-box">
+        <div id="hud-class"></div>
+        <div class="hud-line"><span id="hud-time"></span> <span id="hud-slot"></span></div>
+      </div>
+      <div class="hud-box right"><div id="hud-progress"></div></div>
+    </div>
+    <div class="hud-mission"><span class="hud-label">Now</span> <span id="hud-mission"></span></div>
+    <div class="objective hidden"><div id="arrow">▲</div><div id="arrow-text"></div></div>
+    <div id="crosshair"></div>
+    <div id="anthem" class="hidden">
+      <div class="anthem-title">🇮🇳 National Anthem · Jana Gana Mana · stand at attention and sing along</div>
+      <div id="anthem-dev"></div>
+      <div id="anthem-rom"></div>
+      <div class="bar"><div id="anthem-bar" class="bar-fill"></div></div>
+      <div class="anthem-mic"><span id="anthem-mic-text"></span><div class="bar"><div id="anthem-mic-bar" class="bar-fill mic-fill"></div></div></div>
+      <div id="anthem-skip" class="anthem-skip">Press Enter (or say “skip”) to skip</div>
+    </div>
+    <div id="prompt" class="hidden"></div>
+    <div id="resume-hint" class="hidden">Click to play · <kbd>H</kbd> help · <kbd>Esc</kbd> pause</div>
+    <div class="hud-keys"><kbd>T</kbd> Timetable <kbd>M</kbd> Missions <kbd>J</kbd> Journey <kbd>V</kbd> View <kbd>F</kbd> Voice</div>
+  </div>
+
+  <div id="overlay"></div>
+  <div id="toast"></div>
+  <div id="mic"><span class="dot"></span><span class="mic-text">Listening…</span></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
