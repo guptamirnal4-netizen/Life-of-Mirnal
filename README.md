@@ -11,7 +11,7 @@ npm start                            # http://localhost:8080, offline conversati
 ANTHROPIC_API_KEY=sk-ant-... npm start   # optional: Claude-powered conversations
 ```
 
-The Claude key stays on your machine: only `server.mjs` uses it, and the browser never sees it. Replies use `claude-opus-5-5` at low effort, with server-side refusal fallbacks switched on (`fallbacks: "default"`). Override the model with `NPC_MODEL=...` or turn the AI off with `NPC_LLM=off`. If Claude is unavailable or slow, the game silently uses the offline engine.
+The Claude key stays on your machine: only `dev/server.mjs` (locally) and `api/` (on Vercel) use it, and the browser never sees it. Replies use `claude-opus-5-5` at low effort, with server-side refusal fallbacks switched on (`fallbacks: "default"`). Override the model with `NPC_MODEL=...` or turn the AI off with `NPC_LLM=off`. If Claude is unavailable or slow, the game silently uses the offline engine.
 
 Open http://localhost:8080 in Chrome. Click the game to capture the mouse.
 

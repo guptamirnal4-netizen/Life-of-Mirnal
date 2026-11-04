@@ -1,4 +1,4 @@
-// Local game server: serves the game files and (optionally) an /api/npc-chat endpoint that uses Claude
+// Local development server (Vercel uses api/ instead): serves the game files and (optionally) an /api/npc-chat endpoint that uses Claude
 // for natural, in-character replies. The API key stays on this machine and is never sent to the browser.
 //
 //   npm start                         → game only (offline conversation engine)
@@ -7,9 +7,9 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { npcChat, llmEnabled, disableLLM, MODEL, Anthropic } from './lib/npc-llm.mjs';
+import { npcChat, llmEnabled, disableLLM, MODEL, Anthropic } from '../lib/npc-llm.mjs';
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '127.0.0.1';
 const TYPES = {
