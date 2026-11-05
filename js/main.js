@@ -514,6 +514,7 @@ function interactTarget() {
   for (const it of campus.interactables) {
     if (it.id === 'mydesk' && (state.phase !== 'day' || player.seated)) continue;
     if (it.id === 'registration' && !isCollege(state.classNum)) continue;
+    if (it.id === 'assemblyLine' && isCollege(state.classNum)) continue;
     const d = Math.hypot(it.pos.x - pos.x, it.pos.z - pos.z);
     if (d > it.radius) continue;
     const dir = new THREE.Vector3(it.pos.x - pos.x, 0, it.pos.z - pos.z).normalize();
@@ -1372,7 +1373,7 @@ function frame() {
         onSlotChange(nowSlot, prev);
       }
       if (state.phase === 'day' && !practicalRunning) startLessonIfReady(nowSlot);
-      if (state.phase === 'day' && nowSlot.type === 'arrival' && !state.day.earlyPrompted && player.pos.distanceTo(campus.spots.assemblyPlayer) < 9) {
+      if (state.phase === 'day' && !isCollege(state.classNum) && nowSlot.type === 'arrival' && !state.day.earlyPrompted && player.pos.distanceTo(campus.spots.assemblyPlayer) < 9) {
         state.day.earlyPrompted = true;
         toast('🎤 You’re early! Press E at the assembly line to practise Jana Gana Mana with your voice.', 4500);
       }

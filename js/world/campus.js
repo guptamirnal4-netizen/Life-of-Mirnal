@@ -280,7 +280,7 @@ export class Campus {
     }
     this.box(38, -0.02, 24, 3, 0.05, 20, null, { tex: 'dirt', collide: false, tint: '#e6cf9a' });
     for (const sz of [14.2, 33.8]) for (const dx of [-0.15, 0, 0.15]) this.cyl(38 + dx, 0, sz, 0.025, 0.025, 0.7, '#e8d8b0');
-    this.label('Playground', 38, 3, -10, { height: 0.5 });
+    this.schoolOnly.push(this.label('Playground', 38, 3, -10, { height: 0.5 }));
     this.goals = [{ x: 22, dir: -1 }, { x: 54, dir: 1 }];
     this.fieldBounds = { minX: 21, maxX: 55, minZ: -11, maxZ: 29 };
     this.spots.playground = [];
@@ -351,7 +351,9 @@ export class Campus {
       g.add(leaf);
     });
     this.scene.add(g);
-    this.colliders.push({ minX: x - 0.3, maxX: x + 0.3, minZ: z - 0.3, maxZ: z + 0.3, minY: 0, maxY: 3, walkable: false, enabled: true });
+    const col = { minX: x - 0.3, maxX: x + 0.3, minZ: z - 0.3, maxZ: z + 0.3, minY: 0, maxY: 3, walkable: false, enabled: true };
+    this.colliders.push(col);
+    (this.trees ||= []).push({ g, col, x, z });
   }
 
   buildLandscape() {
@@ -798,7 +800,7 @@ export class Campus {
     const r = this.rooms.classroom;
     r.labelSprite.material.map.dispose();
     this.scene.remove(r.labelSprite);
-    const text = this.mode === 'college' ? 'Lecture Theatre' : this.classroomTitle || r.name;
+    const text = this.mode === 'college' ? 'Lecture Theatre (LTC)' : this.classroomTitle || r.name;
     r.labelSprite = this.label(text, r.door.at, 2.85, r.z1 + 0.3, { height: 0.42 });
   }
 
@@ -856,6 +858,10 @@ export class Campus {
     for (const o of this.schoolOnly) o.visible = !college;
     if (this.collegeGroup) this.collegeGroup.visible = college;
     for (const c of this.collegeColliders || []) c.enabled = college;
+    for (const t of this.collegeHiddenTrees || []) {
+      t.g.visible = !college;
+      t.col.enabled = !college;
+    }
     for (const r of ROOMS) {
       if (r.id === 'classroom') continue;
       if (!r.collegeName) continue;
@@ -880,6 +886,9 @@ export class Campus {
     }
   }
 
+  // College mode: a stylised BITS Pilani after the official campus map and aerial views (north = −z).
+  // Main Building + Clock Tower at the north, the red sunburst Rotunda in front, the formal NAB garden
+  // down the axis to the Saraswati Mandir and Shiv Ganga, courtyard Bhawans flanking the axis.
   buildCollegeDecor() {
     const grp = new THREE.Group();
     this.collegeGroup = grp;
@@ -887,36 +896,422 @@ export class Campus {
     this.collegeColliders = [];
     const opt = (o = {}) => ({ parent: grp, collideList: this.collegeColliders, ...o });
     const NAMES = {
-      staffroom: 'Faculty Chambers', principal: "Director's Office", library: 'Central Library',
-      sciencelab: 'Physics · Chemistry · Biology Labs', washroom: 'Washrooms', classroomB: 'Tutorial Room',
+      staffroom: 'Faculty Division (FD)', principal: "Director's Office", library: 'Library',
+      sciencelab: 'FD2 · Science Labs', washroom: 'Washrooms', classroomB: 'FD3 · Tutorial Rooms',
       complab: 'Computer Programming Lab', auditorium: 'Auditorium', reception: 'Academic Registration',
     };
     for (const [id, n] of Object.entries(NAMES)) this.rooms[id].collegeName = n;
 
-    // Signage
-    const sign = (text, x, y, z, o) => {
+    const sign = (text, x, y, z, o = { height: 0.5 }) => {
       const sp = makeLabel(text, o);
       sp.position.set(x, y, z);
       grp.add(sp);
       return sp;
     };
+    const place = { height: 0.55, bg: 'rgba(28,44,92,0.9)', color: '#ffffff' };
+    const lawnSign = { height: 0.5, bg: 'rgba(40,90,40,0.9)', color: '#f4ffe8' };
+    const hostelSign = { height: 0.5, bg: 'rgba(90,40,30,0.92)', color: '#fff4dc' };
     sign('BITS PILANI', 0, 4.3, 52, { size: 64, height: 0.8, bg: 'rgba(28,44,92,0.94)' });
+    sign('Main Gate', 0, 3.1, 53.2, { height: 0.4 });
     sign('Campus Shuttle', -14, 3.5, 44, { height: 0.45, bg: 'rgba(40,40,40,0.8)' });
-    sign('Central Lawns', 0, 3.6, -14.5, { height: 0.45 });
     sign('ANC · All Night Canteen', -36, 3.9, 5.5, { height: 0.5, bg: 'rgba(20,24,40,0.85)' });
     sign('Maggi · Parathas · Chai · Cold coffee', -36, 2.35, 5.6, { height: 0.32, bg: 'rgba(47,93,58,1)', color: '#fff7d6' });
     sign('Main Building', -2, WALL_H + 4.45, -16.85, { size: 56, height: 0.62, bg: 'rgba(110,70,40,0.95)', color: '#fff4dc' });
+    sign('Clock Tower', 3.5, WALL_H + 22.5, -21.5, place);
 
-    // Central lawns over the old assembly paving
-    const lawn = new THREE.Mesh(worldPlane(21, 12, TEX_SIZE.grass), texturedMaterial('grass', { tint: '#c8e6a8' }));
-    lawn.rotation.x = -Math.PI / 2;
-    lawn.position.set(0, 0.018, -2.5);
-    lawn.receiveShadow = true;
-    grp.add(lawn);
+    const flat = (tex, x, z, w, d, y, tint) => {
+      const m = new THREE.Mesh(worldPlane(w, d, TEX_SIZE[tex]), texturedMaterial(tex, { tint }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, y, z);
+      m.receiveShadow = true;
+      grp.add(m);
+      return m;
+    };
+    const plane = (x, z, w, d, y, color) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, y, z);
+      m.receiveShadow = true;
+      grp.add(m);
+      return m;
+    };
+    const disc = (x, z, r, color, y, inner = 0, material = null) => {
+      const m = new THREE.Mesh(inner ? new THREE.RingGeometry(inner, r, 64) : new THREE.CircleGeometry(r, 64), material || new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, y, z);
+      m.receiveShadow = true;
+      grp.add(m);
+      return m;
+    };
+    const tree = (x, z, s = 0.8, kind = 0) => this.collegeTree(grp, x, z, s, kind);
+
+    // Main Building wings (the U shape)
+    for (const [x, w] of [[-42.5, 5], [38.5, 5]]) {
+      this.box(x, 0, -18.5, w, 6.4, 5, null, opt({ tex: 'plaster', tint: '#f3ead8' }));
+      this.box(x, 6.4, -18.5, w + 0.4, 0.35, 5.4, null, opt({ tex: 'plasterWhite', collide: false }));
+      for (const y of [1.1, 4.1]) this.box(x, y, -15.97, w - 1.4, 1.3, 0.05, '#2c4254', opt({ collide: false, roughness: 0.25 }));
+    }
+
+    // Rotunda: red/terracotta sunburst paving, ringed by a road
+    disc(0, -5, 10.8, '#7d7a74', 0.021, 9.2);
+    disc(0, -5, 9.2, null, 0.023, 0, new THREE.MeshStandardMaterial({ map: this.sunburstTexture(), roughness: 0.8 }));
+    sign('Rotunda', 0, 3.6, -14.5, place);
+
+    // NAB axis: a long formal garden with green strips, low hedges, twin water channels and tree rows
+    for (const sx of [-1, 1]) {
+      plane(sx * 4.6, 16, 2.4, 22, 0.022, '#7fb85a');
+      plane(sx * 2.4, 16, 0.55, 22, 0.024, '#3d7fae');
+      this.box(sx * 6.05, 0, 16, 0.5, 0.65, 22, '#3e7a32', opt({ collide: false }));
+      plane(sx * 8.7, 16, 4.6, 22, 0.022, '#8cc365');
+      for (let z = 6; z <= 26; z += 5) tree(sx * 11.3, z, 0.75, z % 2);
+    }
+    sign('NAB Garden', -8.7, 2.4, 9, lawnSign);
+    sign('South Park', 8.7, 2.4, 21, lawnSign);
+    // M-Lawns behind the Main Building, and the New BITS Workshop to the north
+    plane(16, -35.6, 44, 7.6, 0.02, '#8cc365');
+    sign('M-Lawns', 16, WALL_H + 5.2, -34, lawnSign);
+    this.solid(grp, opt, -18, -36.4, 16, 5.6, 4.2, '#d9d3c6', 'concrete');
+    for (let i = 0; i < 5; i++) {
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.12, 5.4), mat('#8e9aa3', { metalness: 0.5, roughness: 0.5 }));
+      roof.position.set(-24.4 + i * 3.2, 4.9, -36.4);
+      roof.rotation.z = 0.32;
+      roof.castShadow = true;
+      grp.add(roof);
+    }
+    sign('New BITS Workshop', -18, 6.4, -33.4, place);
 
     this.buildClockTower(grp);
-    this.buildHostel(grp, opt);
+    this.buildNAB(grp, opt, sign, place);
+    this.buildShivGangaAndMandir(grp, opt, sign, disc);
+
+    // Courtyard Bhawans flank the axis: Meera (girls) to the south-west, Rana Pratap–Ashok, Krishna,
+    // Gandhi and Bhagirath to the east.
+    const H = (x0, x1, z0, z1, face, name, girls = false, solar = false) => this.buildHostelBlock(grp, opt, sign, { x0, x1, z0, z1, face, name, girls, solar, hostelSign });
+    H(-24, -13, -6, 10, 'e', 'Boys Hostel', false, true);
+    H(-24, -13, 14, 24, 'e', 'Meera Bhawan · Girls Hostel', true);
+    H(13, 20.5, -12, 1, 'w', 'Rana Pratap · Ashok Bhawan', false, true);
+    H(13, 20.5, 4, 13.5, 'w', 'Krishna Bhawan');
+    H(13, 20.5, 16.5, 23.5, 'w', 'Gandhi Bhawan', false, true);
+    H(13, 20.5, 25.5, 31.5, 'w', 'Bhagirath Bhawan');
+
+    // North-east: FD-I and the BITS Library (a courtyard block), and the Institute Canteen
+    H(42, 58, -38.5, -27.5, 's', 'FD-I · BITS Library', false, false);
+    this.solid(grp, opt, 50, -20.5, 8, 4.6, 3, '#f0e2c8', 'plasterWhite');
+    this.box(50, 3, -20.5, 8.6, 0.25, 5.2, null, opt({ tex: 'rooftile', collide: false }));
+    sign('IC · Institute Canteen', 50, 4.2, -17.9, place);
+
+    // North-west: Students' Activity Centre (solar roofs) with its pool, and Sky Lawns
+    this.solid(grp, opt, -53, -34.5, 10, 7, 6.2, '#e9dcc4', 'plaster');
+    this.solarRows(grp, -53, 6.6, -34.5, 9, 6);
+    for (let i = 0; i < 4; i++) this.box(-56.5 + i * 2.4, 3.2, -30.98, 1.6, 1.6, 0.05, '#30495c', opt({ collide: false, roughness: 0.2 }));
+    this.box(-54, 0, -28, 8, 0.35, 4.4, '#d7d2c8', opt());
+    this.box(-54, 0.36, -28, 7.2, 0.02, 3.6, '#3fa9d8', opt({ collide: false, roughness: 0.1, metalness: 0.2 }));
+    sign("SAC · Students' Activity Centre", -53, 7.8, -31, place);
+    plane(-52, -19.5, 12, 9, 0.02, '#8cc365');
+    sign('Sky Lawns', -52, 2.4, -19.5, lawnSign);
+    // West and south-west: Birla Shishu Vihar and Birla Balika Vidyapeeth (schools next to the campus)
+    this.solid(grp, opt, -53.5, 3, 9, 8, 4.6, '#efd9b0', 'plaster');
+    sign('Birla Shishu Vihar', -53.5, 5.8, 7.4, { height: 0.42 });
+    this.solid(grp, opt, -52.5, 44.5, 11, 8, 6, '#ecd2a6', 'plaster');
+    sign('Birla Balika Vidyapeeth', -52.5, 7.2, 40.3, { height: 0.42 });
+
+    // East: Gym Ground (oval red track around the field; field, goals and ball unchanged)
+    const track = new THREE.Mesh(new THREE.RingGeometry(19.4, 21, 96), new THREE.MeshStandardMaterial({ color: '#b5523b', roughness: 0.9 }));
+    track.rotation.x = -Math.PI / 2;
+    track.scale.set(0.86, 1, 1);
+    track.position.set(38, 0.025, 9);
+    grp.add(track);
+    sign('Gym Ground', 38, 3, -10, place);
+    // Blue tennis and basketball courts just north of it
+    for (const [cx, label] of [[25.5, 'Tennis'], [32.5, 'Basketball']]) {
+      plane(cx, -14.5, 6.4, 4, 0.024, '#2f6fa8');
+      for (const [w, d, dx, dz] of [[6, 0.08, 0, -1.8], [6, 0.08, 0, 1.8], [0.08, 3.6, -3, 0], [0.08, 3.6, 3, 0], [0.08, 3.6, 0, 0]]) plane(cx + dx, -14.5 + dz, w, d, 0.026, '#f2f2f2');
+      sign(label, cx, 1.8, -14.5, { height: 0.32 });
+    }
+
+    // South-east: Medical Centre, the cricket ground beyond it, VFAST, and C'not in the far south-east
+    this.solid(grp, opt, 29.5, 36.5, 7, 7, 5.6, '#f6f3ee', 'plasterWhite');
+    this.box(29.5, 3.6, 32.98, 1.4, 0.4, 0.05, '#d62828', opt({ collide: false }));
+    this.box(29.5, 3.2, 32.98, 0.4, 1.2, 0.05, '#d62828', opt({ collide: false }));
+    sign('Medical Centre', 29.5, 6.8, 33, place);
+    const oval = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: '#7fb85a', roughness: 0.9 }));
+    oval.rotation.x = -Math.PI / 2;
+    oval.scale.set(10, 4.6, 1);
+    oval.position.set(46, 0.021, 36.5);
+    grp.add(oval);
+    plane(46, 36.5, 4.2, 0.9, 0.024, '#d8c08a');
+    sign('Cricket Ground', 46, 2.4, 36.5, lawnSign);
+    this.solid(grp, opt, 50.5, 46.8, 13, 7.4, 8.4, '#efe1c6', 'plaster');
+    for (let f = 0; f < 3; f++) for (let i = 0; i < 5; i++) this.box(45.5 + i * 2.5, 0.9 + f * 2.7, 43.08, 1.4, 1.3, 0.05, '#30495c', opt({ collide: false, roughness: 0.2 }));
+    sign('VFAST Guest House', 50.5, 9.6, 43.1, place);
     this.buildCnot(grp, opt, sign);
+
+    // Trees along the roads
+    for (const [x, z] of [[-7, 38], [-7, 44], [-10, 48], [9, 38.5], [-28, -12], [-28, 0], [-28, 13], [-10.5, -14], [10.5, -14], [-46, 14], [56, 30], [40, 30], [34, 40]]) tree(x, z, 0.7, Math.abs(x + z) % 2);
+
+    // Trees that would stand inside new buildings are hidden in college mode.
+    const blocks = this.collegeColliders.filter((c) => c.maxY > 1);
+    this.collegeHiddenTrees = (this.trees || []).filter((t) => blocks.some((c) => t.x > c.minX - 1.2 && t.x < c.maxX + 1.2 && t.z > c.minZ - 1.2 && t.z < c.maxZ + 1.2));
+    // Footprints NPCs walk around; buildings closer than a walking lane are merged into one.
+    let rects = blocks.filter((c) => (c.maxX - c.minX) * (c.maxZ - c.minZ) > 2).map((c) => ({ minX: c.minX, maxX: c.maxX, minZ: c.minZ, maxZ: c.maxZ }));
+    const near = (a, b, g) => a.minX - g < b.maxX && b.minX - g < a.maxX && a.minZ - g < b.maxZ && b.minZ - g < a.maxZ;
+    for (let merged = true; merged;) {
+      merged = false;
+      outer: for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          if (!near(rects[i], rects[j], 3)) continue;
+          const a = rects[i];
+          const b = rects[j];
+          rects[i] = { minX: Math.min(a.minX, b.minX), maxX: Math.max(a.maxX, b.maxX), minZ: Math.min(a.minZ, b.minZ), maxZ: Math.max(a.maxZ, b.maxZ) };
+          rects.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+    rects = rects.filter((r) => !ROOMS.some((rm) => r.minX < rm.x1 && r.maxX > rm.x0 && r.minZ < rm.z1 && r.maxZ > rm.z0));
+    this.collegeObstacles = rects;
+  }
+
+  sunburstTexture() {
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 512;
+    const g = c.getContext('2d');
+    g.translate(256, 256);
+    g.fillStyle = '#e6d3b0';
+    g.beginPath(); g.arc(0, 0, 256, 0, Math.PI * 2); g.fill();
+    const n = 32;
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = i % 2 ? '#b8553a' : '#cf7350';
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.arc(0, 0, 250, (i / n) * Math.PI * 2, ((i + 1) / n) * Math.PI * 2);
+      g.closePath();
+      g.fill();
+    }
+    for (const [r, w, col] of [[250, 10, '#e6d3b0'], [175, 8, '#e6d3b0'], [95, 8, '#e6d3b0']]) {
+      g.strokeStyle = col;
+      g.lineWidth = w;
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke();
+    }
+    g.fillStyle = '#e6d3b0';
+    g.beginPath(); g.arc(0, 0, 40, 0, Math.PI * 2); g.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  solarRows(grp, x, y, z, w, d) {
+    const panel = mat('#1d2a44', { roughness: 0.25, metalness: 0.6 });
+    for (let k = -d / 2 + 0.9; k < d / 2; k += 1.6) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(w - 1, 0.06, 1.1), panel);
+      p.position.set(x, y + 0.35, z + k);
+      p.rotation.x = -0.35;
+      p.castShadow = true;
+      grp.add(p);
+    }
+  }
+
+  collegeTree(grp, x, z, scale = 1, kind = 0) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18 * scale, 0.32 * scale, 3 * scale, 8), mat('#5b3f27', { roughness: 1 }));
+    trunk.position.y = 1.5 * scale;
+    trunk.castShadow = true;
+    g.add(trunk);
+    const greens = kind ? ['#3d7a32', '#4c8a3a', '#2f6a2a'] : ['#4f8f3a', '#3f7d33', '#5d9c44'];
+    [[0, 3.6, 0, 1.9], [1, 4.3, 0.6, 1.3], [-0.9, 4.1, -0.5, 1.4]].forEach(([bx, by, bz, r], i) => {
+      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(r * scale, 1), new THREE.MeshStandardMaterial({ color: greens[i % 3], roughness: 0.95, flatShading: true }));
+      leaf.position.set(bx * scale, by * scale, bz * scale);
+      leaf.castShadow = true;
+      g.add(leaf);
+    });
+    grp.add(g);
+    this.collegeColliders.push({ minX: x - 0.25, maxX: x + 0.25, minZ: z - 0.25, maxZ: z + 0.25, minY: 0, maxY: 3, walkable: false, enabled: true });
+  }
+
+  // A plain building: one collider, textured walls, a slab roof.
+  solid(grp, opt, x, z, w, d, h, tint, tex = 'plaster') {
+    this.box(x, 0, z, w, h, d, null, opt({ tex, tint }));
+    this.box(x, h, z, w + 0.4, 0.35, d + 0.4, null, opt({ tex: 'plasterWhite', collide: false }));
+    this.box(x, 0, z, w + 0.04, 0.9, d + 0.04, null, opt({ tex: 'dado', collide: false }));
+  }
+
+  // NAB (New Academic Building): red brick and glass, west of the axis near the Main Building.
+  buildNAB(grp, opt, sign, place) {
+    const x0 = -24.5;
+    const x1 = -13;
+    const z0 = -16.4;
+    const z1 = -9.6;
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    this.box(cx, 0, cz, x1 - x0, 6.4, z1 - z0, null, opt({ tex: 'brick', tint: '#e8a07a' }));
+    for (const y of [1.0, 4.0]) this.box(x1 + 0.03, y, cz, 0.05, 1.6, z1 - z0 - 1.2, '#3a5a72', opt({ collide: false, roughness: 0.15, metalness: 0.3 }));
+    this.box(cx, 6.4, cz, x1 - x0 + 0.5, 0.4, z1 - z0 + 0.5, '#d8cfc0', opt({ collide: false }));
+    sign('NAB · New Academic Building', cx, 7.6, cz, place);
+  }
+
+  buildShivGangaAndMandir(grp, opt, sign, disc) {
+    // Shiv Ganga: a ring of dark-green water around a garden island with a small pavilion
+    const P = { x: 0, z: 30.5 };
+    disc(P.x, P.z, 2.85, '#d8cdb4', 0.03, 2.5);
+    disc(P.x, P.z, 2.5, '#2f5e4a', 0.32, 1.5);
+    disc(P.x, P.z, 1.5, '#7fb85a', 0.42);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.8, 0.42, 40, 1, true), mat('#cfc4ae'));
+    rim.position.set(P.x, 0.21, P.z);
+    grp.add(rim);
+    const island = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.55, 0.42, 32), mat('#bfb39a'));
+    island.position.set(P.x, 0.21, P.z);
+    grp.add(island);
+    for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) this.box(P.x + dx, 0.42, P.z + dz, 0.14, 1.4, 0.14, '#f3efe6', opt({ collide: false }));
+    const cupola = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat('#f3efe6'));
+    cupola.position.set(P.x, 1.82, P.z);
+    cupola.castShadow = true;
+    grp.add(cupola);
+    this.box(P.x + 2.1, 0.3, P.z, 1.4, 0.12, 0.8, null, opt({ tex: 'wood', collide: false }));
+    this.collegeColliders.push({ minX: P.x - 2.8, maxX: P.x + 2.8, minZ: P.z - 2.8, maxZ: P.z + 2.8, minY: 0, maxY: 0.45, walkable: false, enabled: true });
+    sign('Shiv Ganga', P.x, 3, P.z, { height: 0.42, bg: 'rgba(30,80,70,0.9)', color: '#ffffff' });
+
+    // Saraswati Mandir: white marble on a plinth in a garden beside Shiv Ganga
+    const marble = '#f5f1e8';
+    const X = -9;
+    const Z = 30.5;
+    const garden = new THREE.Mesh(new THREE.PlaneGeometry(8, 9), new THREE.MeshStandardMaterial({ color: '#8cc365', roughness: 0.9 }));
+    garden.rotation.x = -Math.PI / 2;
+    garden.position.set(X, 0.02, Z);
+    grp.add(garden);
+    this.box(X, 0, Z, 6, 0.8, 7, null, opt({ tex: 'plasterWhite', tint: '#f2ede2' }));
+    for (let i = 0; i < 3; i++) this.box(X + 3.3 + i * 0.35, 0, Z, 0.35, 0.8 - i * 0.26, 3, marble, opt({ collide: false }));
+    this.box(X - 0.8, 0.8, Z, 3.4, 3.2, 3.4, marble, opt({ collide: false, roughness: 0.4 }));
+    for (const dz of [-1.3, 1.3]) for (const dx of [1.4, 2.4]) this.box(X + dx, 0.8, Z + dz, 0.32, 2.6, 0.32, marble, opt({ collide: false, roughness: 0.4 }));
+    this.box(X + 1.9, 3.4, Z, 1.6, 0.35, 3.2, marble, opt({ collide: false, roughness: 0.4 }));
+    this.box(X + 0.92, 0.8, Z, 0.05, 2.2, 1.2, '#7a4b2a', opt({ collide: false }));
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 2.1, 7.5, 8, 6), mat(marble, { roughness: 0.45 }));
+    sh.position.set(X - 0.8, 4.0 + 3.75, Z);
+    sh.castShadow = true;
+    grp.add(sh);
+    for (const [dx, dz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) {
+      const mini = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.6, 2.4, 8), mat(marble, { roughness: 0.45 }));
+      mini.position.set(X - 0.8 + dx, 4.0 + 1.2, Z + dz);
+      mini.castShadow = true;
+      grp.add(mini);
+    }
+    const amalaka = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.35, 20), mat('#ece6d8'));
+    amalaka.position.set(X - 0.8, 11.9, Z);
+    grp.add(amalaka);
+    const kalash = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10), mat('#d4af37', { metalness: 0.8, roughness: 0.3 }));
+    kalash.position.set(X - 0.8, 12.35, Z);
+    grp.add(kalash);
+    const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 6), mat('#8a6a3a'));
+    flagPole.position.set(X - 0.8, 13.1, Z);
+    grp.add(flagPole);
+    const pennant = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), new THREE.MeshStandardMaterial({ color: '#ff7f1e', side: THREE.DoubleSide }));
+    pennant.position.set(X - 0.45, 13.5, Z);
+    grp.add(pennant);
+    sign('Saraswati Mandir', X, 14.4, Z, { height: 0.55, bg: 'rgba(150,80,20,0.92)', color: '#fff6e0' });
+  }
+
+  // Courtyard Bhawan: four wings around a green courtyard, balconies with drying clothes on the facade.
+  buildHostelBlock(grp, opt, sign, { x0, x1, z0, z1, face, name, girls, solar, hostelSign }) {
+    const floors = 3;
+    const fh = 3;
+    const H = floors * fh;
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    const w = x1 - x0;
+    const d = z1 - z0;
+    const wing = Math.min(2.6, Math.min(w, d) / 3);
+    const tint = girls ? '#f0d6d0' : '#ecd8b8';
+    // One collider for the whole block; the courtyard isn't reachable.
+    this.collegeColliders.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, minY: 0, maxY: H, walkable: false, enabled: true });
+    const wingBox = (x, z, ww, dd) => {
+      this.box(x, 0, z, ww, H, dd, null, opt({ tex: 'plaster', tint, collide: false }));
+      this.box(x, H, z, ww + 0.2, 0.5, dd + 0.2, null, opt({ tex: 'plasterWhite', collide: false }));
+      if (solar && ww * dd > 12) this.solarRows(grp, x, H + 0.2, z, Math.max(ww, 2.4) * 0.9 > ww ? ww : ww * 0.9, dd * 0.8);
+    };
+    wingBox(cx, z0 + wing / 2, w, wing);
+    wingBox(cx, z1 - wing / 2, w, wing);
+    wingBox(x0 + wing / 2, cz, wing, d - 2 * wing);
+    wingBox(x1 - wing / 2, cz, wing, d - 2 * wing);
+    const yard = new THREE.Mesh(new THREE.PlaneGeometry(w - 2 * wing, d - 2 * wing), new THREE.MeshStandardMaterial({ color: '#7fb85a', roughness: 0.95 }));
+    yard.rotation.x = -Math.PI / 2;
+    yard.position.set(cx, 0.03, cz);
+    grp.add(yard);
+    // Windows on all outer walls, balconies on the facade
+    const alongX = face === 'n' || face === 's';
+    const len = alongX ? w : d;
+    const out = { e: [1, 0], w: [-1, 0], n: [0, -1], s: [0, 1] }[face];
+    const fx = face === 'e' ? x1 : face === 'w' ? x0 : null;
+    const fz = face === 's' ? z1 : face === 'n' ? z0 : null;
+    const clothes = ['#e74c3c', '#3498db', '#f1c40f', '#ecf0f1', '#9b59b6', '#2ecc71', '#e67e22'];
+    const P = (along, offset) => (alongX ? [x0 + along, fz + out[1] * offset] : [fx + out[0] * offset, z0 + along]);
+    const B = (along, offset, y, wAlong, h, dOut, color, o = {}) => {
+      const [px, pz] = P(along, offset);
+      this.box(px, y, pz, alongX ? wAlong : dOut, h, alongX ? dOut : wAlong, color, opt({ collide: false, ...o }));
+    };
+    for (let f = 0; f < floors; f++) {
+      const y = f * fh;
+      for (let a = 1.6; a < len - 1; a += 3.2) {
+        const k = Math.round(a * 3 + f * 7 + x0);
+        B(a, 0.03, y + (f ? 0.2 : 1.0), f ? 1 : 1.2, f ? 2.2 : 1.2, 0.05, f ? '#5a4030' : '#2c4254', { roughness: 0.3, cast: false });
+        if (f > 0) {
+          B(a, 0.5, y, 2.6, 0.12, 1, null, { tex: 'concrete' });
+          B(a, 0.98, y + 0.12, 2.6, 0.9, 0.05, '#d8d2c4');
+          for (let i = 0; i < 3; i++) {
+            if ((k + i) % 2) continue;
+            const cl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.55), new THREE.MeshStandardMaterial({ color: clothes[Math.abs(k + i) % clothes.length], side: THREE.DoubleSide, roughness: 0.95 }));
+            const [px, pz] = P(a - 0.8 + i * 0.8, 0.8);
+            cl.position.set(px, y + 1.42, pz);
+            if (!alongX) cl.rotation.y = Math.PI / 2;
+            cl.castShadow = true;
+            grp.add(cl);
+          }
+        }
+      }
+    }
+    // Plain windows on the other long walls
+    const winMat = '#2c4254';
+    for (let f = 0; f < floors; f++) {
+      for (const side of ['n', 's', 'e', 'w']) {
+        if (side === face) continue;
+        const sAlongX = side === 'n' || side === 's';
+        const sLen = sAlongX ? w : d;
+        for (let a = 1.4; a < sLen - 0.8; a += 2.4) {
+          const px = sAlongX ? x0 + a : side === 'e' ? x1 + 0.03 : x0 - 0.03;
+          const pz = sAlongX ? (side === 's' ? z1 + 0.03 : z0 - 0.03) : z0 + a;
+          this.box(px, f * fh + 1, pz, sAlongX ? 0.9 : 0.05, 1.1, sAlongX ? 0.05 : 0.9, winMat, opt({ collide: false, roughness: 0.25, cast: false }));
+        }
+      }
+    }
+    B(len / 2, 0.6, 0, 2.4, 2.4, 1.2, null, { tex: 'plasterWhite' });
+    const [lx, lz] = P(len / 2, 0.4);
+    sign(name, lx, H + 1.3, lz, girls ? { ...hostelSign, bg: 'rgba(140,40,80,0.92)' } : hostelSign);
+  }
+
+  // C'not (Connaught Place): shops and eateries in the far south-east
+  buildCnot(grp, opt, sign) {
+    const shops = [['Akshay Supermarket', '#2e6fb5'], ['Eatery - Looters', '#c0392b'], ['Eatery - Food Ministry', '#e67e22'], ['Eatery - Sky Lab', '#7d3c98']];
+    shops.forEach(([name, color], i) => {
+      const x = 25 + i * 4;
+      const z = 48.8;
+      this.box(x, 0, z, 3.6, 2.7, 3, null, opt({ tex: 'plasterWhite', tint: '#efe6d6' }));
+      this.box(x, 0, z - 1.52, 3, 0.95, 0.05, null, opt({ tex: 'wood', collide: false }));
+      this.box(x, 0.95, z - 1.55, 3, 0.05, 0.4, '#d9d4cc', opt({ collide: false }));
+      this.box(x, 1.05, z - 1.52, 2.8, 1.3, 0.04, '#2a2520', opt({ collide: false, cast: false }));
+      const awning = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.06, 1.1), mat(color, { roughness: 0.8 }));
+      awning.position.set(x, 2.55, z - 1.95);
+      awning.rotation.x = 0.28;
+      awning.castShadow = true;
+      grp.add(awning);
+      for (let k = 0; k < 4; k++) {
+        const item = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.25, 0.15), mat(['#f1c40f', '#e74c3c', '#3498db', '#2ecc71'][(k + i) % 4]));
+        item.position.set(x - 0.75 + k * 0.5, 1.12, z - 1.5);
+        grp.add(item);
+      }
+      sign(name, x, 3.2 + (i % 2) * 0.45, z - 1.6, { height: 0.3, bg: color, color: '#ffffff' });
+    });
+    sign("C'NOT · Connaught Place", 31, 4.6, 47.2, { size: 60, height: 0.55, bg: 'rgba(25,25,25,0.85)', color: '#ffd84a' });
   }
 
   buildClockTower(grp) {
@@ -1014,78 +1409,6 @@ export class Campus {
     this.setClock(9 * 60);
   }
 
-  buildHostel(grp, opt) {
-    const x0 = 34;
-    const x1 = 54;
-    const z0 = 44.6;
-    const z1 = 50.6;
-    const cx = (x0 + x1) / 2;
-    const cz = (z0 + z1) / 2;
-    const floors = 3;
-    const fh = 3;
-    this.box(cx, 0, cz, x1 - x0, floors * fh, z1 - z0, null, opt({ tex: 'plaster', tint: '#ecd8b8' }));
-    this.box(cx, floors * fh, cz, x1 - x0 + 0.4, 0.7, z1 - z0 + 0.4, null, opt({ tex: 'plasterWhite', collide: false }));
-    this.box(cx, 0, z0 - 0.02, x1 - x0, 0.9, 0.05, null, opt({ tex: 'dado', collide: false }));
-    const clothes = ['#e74c3c', '#3498db', '#f1c40f', '#ecf0f1', '#9b59b6', '#2ecc71', '#e67e22'];
-    for (let f = 0; f < floors; f++) {
-      const y = f * fh;
-      for (let x = x0 + 1.6; x < x1 - 1; x += 3.3) {
-        const k = Math.round(x * 3 + f * 7);
-        this.box(x, y + 0.2 + (f ? 0 : 0.8), z0 - 0.03, f ? 1 : 1.2, f ? 2.2 : 1.2, 0.05, f ? '#5a4030' : '#2c4254', opt({ collide: false, roughness: 0.3, cast: false }));
-        if (f > 0) {
-          this.box(x, y, z0 - 0.5, 2.6, 0.12, 1, null, opt({ tex: 'concrete', collide: false }));
-          this.box(x, y + 0.12, z0 - 0.98, 2.6, 0.9, 0.05, '#d8d2c4', opt({ collide: false }));
-          this.box(x, y + 1.7, z0 - 0.8, 2.4, 0.015, 0.015, '#666', opt({ collide: false, cast: false }));
-          for (let i = 0; i < 3; i++) {
-            if ((k + i) % 2) continue;
-            const cl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.55), new THREE.MeshStandardMaterial({ color: clothes[(k + i) % clothes.length], side: THREE.DoubleSide, roughness: 0.95 }));
-            cl.position.set(x - 0.8 + i * 0.8, y + 1.42, z0 - 0.8);
-            cl.castShadow = true;
-            grp.add(cl);
-          }
-        }
-      }
-    }
-    this.box(cx, 0, z0 - 0.6, 2.4, 2.4, 1.2, null, opt({ tex: 'plasterWhite' }));
-    this.box(cx, 0.05, z0 - 1.21, 1.4, 2.1, 0.04, '#4a3020', opt({ collide: false }));
-    const s = makeLabel('Hostel', { height: 0.6, bg: 'rgba(90,40,30,0.92)', color: '#fff4dc' });
-    s.position.set(cx, floors * fh + 1.2, z0 - 0.4);
-    grp.add(s);
-    this.cylIn(grp, x0 + 2, floors * fh + 0.7, cz, 0.9, 1.0, 1.6, '#1d1f22');
-  }
-
-  cylIn(grp, x, y, z, rTop, rBottom, h, color) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, h, 18), mat(color));
-    m.position.set(x, y + h / 2, z);
-    m.castShadow = true;
-    grp.add(m);
-    return m;
-  }
-
-  buildCnot(grp, opt, sign) {
-    const shops = [['Stationery', '#2e6fb5'], ['Juice Corner', '#e67e22'], ['Xerox', '#7f8c8d'], ['Dhaba', '#c0392b']];
-    shops.forEach(([name, color], i) => {
-      const x = -40.5 + i * 3.6;
-      const z = 48.8;
-      this.box(x, 0, z, 3.2, 2.7, 3, null, opt({ tex: 'plasterWhite', tint: '#efe6d6' }));
-      this.box(x, 0, z - 1.52, 2.6, 0.95, 0.05, null, opt({ tex: 'wood', collide: false }));
-      this.box(x, 0.95, z - 1.55, 2.6, 0.05, 0.4, '#d9d4cc', opt({ collide: false }));
-      this.box(x, 1.05, z - 1.52, 2.4, 1.3, 0.04, '#2a2520', opt({ collide: false, cast: false }));
-      const awning = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.06, 1.1), mat(color, { roughness: 0.8 }));
-      awning.position.set(x, 2.55, z - 1.95);
-      awning.rotation.x = 0.28;
-      awning.castShadow = true;
-      grp.add(awning);
-      for (let k = 0; k < 4; k++) {
-        const item = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.25, 0.15), mat(['#f1c40f', '#e74c3c', '#3498db', '#2ecc71'][(k + i) % 4]));
-        item.position.set(x - 0.75 + k * 0.5, 1.12, z - 1.5);
-        grp.add(item);
-      }
-      sign(name, x, 3.2, z - 1.6, { height: 0.32, bg: color, color: '#ffffff' });
-    });
-    sign("C'not", -35, 4.3, 47.2, { size: 60, height: 0.6, bg: 'rgba(25,25,25,0.85)', color: '#ffd84a' });
-  }
-
   // Animated details: fans, the flag, and an indoor light that follows the player between rooms.
   update(dt, playerPos) {
     this.time += dt;
@@ -1133,7 +1456,53 @@ export class Campus {
       pts.push(r.outside.clone(), r.inside.clone());
     }
     pts.push(point.clone());
-    return pts;
+    return this.mode === 'college' && this.collegeObstacles ? this.avoidObstacles(from, pts) : pts;
+  }
+
+  // Inserts corner waypoints so straight-line walking goes around college buildings.
+  avoidObstacles(from, pts) {
+    const M = 0.9;
+    const inside = (p, o, m) => p.x > o.minX - m && p.x < o.maxX + m && p.z > o.minZ - m && p.z < o.maxZ + m;
+    const crosses = (a, b, o) => {
+      const minX = o.minX - M; const maxX = o.maxX + M; const minZ = o.minZ - M; const maxZ = o.maxZ + M;
+      let t0 = 0; let t1 = 1;
+      const dx = b.x - a.x; const dz = b.z - a.z;
+      for (const [p, q] of [[-dx, a.x - minX], [dx, maxX - a.x], [-dz, a.z - minZ], [dz, maxZ - a.z]]) {
+        if (Math.abs(p) < 1e-9) { if (q < 0) return false; continue; }
+        const r = q / p;
+        if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+      }
+      return t0 < t1;
+    };
+    const blocker = (a, b) => {
+      let best = null; let bestD = Infinity;
+      for (const o of this.collegeObstacles) {
+        if (inside(a, o, M - 0.05) || inside(b, o, M - 0.05)) continue;
+        if (!crosses(a, b, o)) continue;
+        const d = Math.hypot((o.minX + o.maxX) / 2 - a.x, (o.minZ + o.maxZ) / 2 - a.z);
+        if (d < bestD) { best = o; bestD = d; }
+      }
+      return best;
+    };
+    const out = [];
+    let a = from.clone();
+    const queue = pts.map((p) => p.clone());
+    for (let guard = 0; queue.length && guard < 40; guard++) {
+      const b = queue[0];
+      const o = blocker(a, b);
+      if (!o) {
+        out.push(queue.shift());
+        a = b;
+        continue;
+      }
+      const m = M + 0.5;
+      const corners = [[o.minX - m, o.minZ - m], [o.maxX + m, o.minZ - m], [o.minX - m, o.maxZ + m], [o.maxX + m, o.maxZ + m]].map(([x, z]) => new THREE.Vector3(x, 0, z));
+      const cost = (c) => Math.hypot(c.x - a.x, c.z - a.z) + Math.hypot(b.x - c.x, b.z - c.z);
+      const away = corners.filter((c) => Math.hypot(c.x - a.x, c.z - a.z) > 0.3);
+      const clear = away.filter((c) => !crosses(a, c, o)).sort((p, q) => cost(p) - cost(q));
+      queue.unshift(clear[0] || away.sort((p, q) => cost(p) - cost(q))[0]);
+    }
+    return out.concat(queue);
   }
 
   objectivePoint(location) {
