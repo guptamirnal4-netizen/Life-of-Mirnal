@@ -186,6 +186,11 @@ details summary { cursor: pointer; padding: 3px 0; }
 .anthem-mic .bar { margin-top: 4px; }
 #anthem .mic-fill { background: #e0302a; transition: width .08s; }
 
+#minimap { position: absolute; top: 74px; right: 12px; width: 200px; height: 200px; display: none; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35)); }
+#bigmap { position: fixed; inset: 0; z-index: 35; display: none; place-items: center; background: rgba(8,10,20,0.6); pointer-events: none; }
+#bigmap.open { display: grid; }
+#bigmap canvas { border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); max-width: 96vw; max-height: 96vh; }
+
 #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%) translateY(20px); background: rgba(12,16,32,0.9); color: #fff; padding: 10px 16px; border-radius: 12px; opacity: 0; transition: all .25s; z-index: 40; max-width: min(560px, 90vw); text-align: center; pointer-events: none; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #mic { position: fixed; right: 16px; bottom: 16px; z-index: 45; display: none; align-items: center; gap: 8px; background: #fff; border-radius: 999px; padding: 8px 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.3); font-weight: 600; }

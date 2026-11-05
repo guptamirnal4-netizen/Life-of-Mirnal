@@ -46,7 +46,9 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 - **Real conversations:** walk up to anyone and talk (E, or just speak with F). A chat window shows the conversation, with a 🎤 that reopens after every reply, a text box and suggestion chips. The offline engine (`js/core/chat.js`) works out what you actually said: greetings, how-are-you, hobbies, favourite subjects, games, help with today's lessons, homework, exams, food, the timetable, directions, jokes, feelings, compliments, rudeness, apologies, the future, streams and goodbyes, in English and common Hinglish. It answers in each character's personality, remembers facts you share ("I love Science"), asks you questions back and handles your answers, and says so when it doesn't understand instead of guessing. Teachers re-explain the actual topics they taught you. With a Claude key, the same grounded facts feed Claude for fully natural lines.
 - **People:** 7 classmates with personalities, interests, friendship levels and memories. They grow up with you, one joins in Class 6 and one moves away after Class 10. Subject teachers, PE teacher, principal, librarian, canteen uncle and guard follow the timetable around campus.
 - **Voice-first (on by default):** a new game asks for the microphone. Every multiple-choice question in lessons, exams, remedial exams, practicals and projects has to be answered out loud ("A", "option B", "the second one", or the answer itself), and mouse clicks on answers are refused. Every screen has a 🎤 button and F works everywhere. Arrive early at the assembly line to practise the anthem line by line. At assembly you can read the thought for the day aloud. Spoken answers, anthems sung and practice sessions show on the Learning Journey dashboard. If the microphone is unavailable or blocked, the game falls back to clicking, and it can be turned off in Settings. Recognition uses Chrome's speech service; no audio is stored.
-- **College Journey: BITS Pilani (Year 1):** start it from the title screen or from the school gate after graduating. The campus switches to college mode, with the Clock Tower, a lecture theatre, hostel, C'not kiosks, ANC, casual clothes, new batchmates and professors.
+- **College Journey: BITS Pilani (Year 1):** start it from the title screen or from the school gate after graduating. College is played on the real BITS Pilani campus at full scale (about 1.4 × 2 km), built from OpenStreetMap footprints: every building at its real position and shape, Bhawans with courtyards, the NAB axis, the Rotunda and Clock Tower, Saraswati Temple, Shiv Ganga, the Gymkhana with its track, C'not and ANC.
+  - **Real places:** lectures in NAB, chemistry lab in FD-II, library at the BITS Library, staff room in FD-I, registration and the computer lab in the Main Building, fest in SAC, assembly at the Rotunda, and you start at your Bhawan (Krishna).
+  - **Getting around:** C gets on or off a bicycle, the minimap (top right) points at your next objective, and N opens the full labelled campus map. Far-away characters are streamed in place so the day keeps moving.
   - **Courses:** the first-year courses follow BITS Pilani's published list. Semester 1: MATH F111, PHY F111, CHEM F111, BIO F111, BITS F110, plus the PHY/CHEM/BIO F110 labs (17 units). Semester 2: BITS F111, MATH F112, MATH F113, CS F111, EEE F111, BITS F112, plus the ME F112 workshop (20 units).
   - **A college day:** course registration, lectures answered by voice, afternoon labs, an EG sheet or TRW report, Oasis or APOGEE in the evening, then Compre.
   - **Grades:** a BITS-style grade sheet with letter grades, SGPA and CGPA.
@@ -62,7 +64,9 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 data/            curriculum-primary.js (1–5), curriculum-middle.js (6–10), senior-a/b.js (11–12),
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM
-js/world/        campus (3D school), player (first-person), npcs (characters, ball), labels
+js/world/        campus (3D school), bits-world (real-scale BITS campus), player, npcs (characters, ball), labels
+data/bits-campus.js  BITS Pilani footprints, roads and areas from OpenStreetMap, in metres from the Rotunda
+js/ui/minimap.js minimap and full map (N) for the college campus
 js/ui/           dom helpers, academic screens, dialogue, stream builder, learning journey
 js/voice.js      speech in/out; setResponder() is the hook for a future LLM backend (no keys in the client)
 js/main.js       game loop, school-day flow, NPC schedules, interactions, HUD
@@ -77,3 +81,7 @@ tests/           node --test: 15 tests for mastery, promotion, streams, history,
 - **Game design choices (configurable in data/streams.js):** a school timetable clash (Biology + Accountancy), at most 1 skill subject among the electives, and the subject-change window.
 - **Lesson content** is short, NCERT-level material written for gameplay. It covers 2 topics per subject per class (184 topics in total), not the full syllabus.
 - **Not built:** Unity (it isn't installed on this machine, so this is a browser game), LLM-driven conversations (dialogue is scripted, with an API hook), real-time multi-day years (one representative day per class), and stairs or multiple floors.
+
+## Credits
+
+Campus map data © OpenStreetMap contributors (ODbL), https://www.openstreetmap.org/copyright.

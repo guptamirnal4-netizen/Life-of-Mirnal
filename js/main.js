@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Campus } from './world/campus.js';
+import { BitsCampus } from './world/bits-world.js';
+import { createMinimap } from './ui/minimap.js';
 import { setupGraphics } from './world/environment.js';
 import { Player } from './world/player.js';
 import { NPC, NPCManager, Ball, studentHeight } from './world/npcs.js';
@@ -37,15 +39,81 @@ window.addEventListener('resize', () => {
 
 initUI();
 setMicHandler(() => handleVoice());
-const campus = new Campus(scene);
+// Two worlds: the school campus, and BITS Pilani at real scale (built the first time College Life starts).
+const schoolRoot = new THREE.Group();
+scene.add(schoolRoot);
+const schoolCampus = new Campus(schoolRoot);
+let campus = schoolCampus;
+let bitsCampus = null;
+let bitsRoot = null;
 const player = new Player(camera, canvas);
 const npcs = new NPCManager(scene, campus);
 const ball = new Ball(scene, campus.fieldBounds);
-const gfx = setupGraphics({ renderer, scene, campus });
+const gfx = setupGraphics({ renderer, scene, campus: () => campus });
 npcs.setPlayerPos(player.pos);
-campus.interactable('assemblyLine', 0, -6, 'Join the assembly line', { radius: 4.5 });
-const deskInteract = campus.interactable('mydesk', 0, 0, 'Sit at your desk', { radius: 1.6 });
-campus.interactable('registration', 15.5, 38, 'Register for your courses', { radius: 2.6 });
+function addMainInteractables(c, reg) {
+  c.interactable('assemblyLine', 0, -6, 'Join the assembly line', { radius: 4.5 });
+  c.deskInteract = c.interactable('mydesk', 0, 0, 'Sit at your desk', { radius: 1.6 });
+  c.interactable('registration', reg.x, reg.z, 'Register for your courses', { radius: 2.6 });
+}
+addMainInteractables(schoolCampus, { x: 15.5, z: 38 });
+let deskInteract = schoolCampus.deskInteract;
+const minimap = createMinimap();
+const bike = (() => {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: '#2a2f38', roughness: 0.4, metalness: 0.6 });
+  const tyre = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.9 });
+  for (const z of [-0.55, 0.55]) {
+    const w = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.04, 8, 24), tyre);
+    w.rotation.y = Math.PI / 2;
+    w.position.set(0, 0.36, z);
+    g.add(w);
+  }
+  const bar = (len, x, y, z, rx) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, len, 6), metal); m.position.set(x, y, z); m.rotation.x = rx; g.add(m); };
+  bar(1.1, 0, 0.62, 0, Math.PI / 2);
+  bar(0.6, 0, 0.55, 0.32, 0.4);
+  bar(0.55, 0, 0.6, -0.35, -0.3);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.26), tyre);
+  seat.position.set(0, 0.88, 0.3);
+  g.add(seat);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.55, 6), metal);
+  handle.rotation.z = Math.PI / 2;
+  handle.position.set(0, 0.95, -0.5);
+  g.add(handle);
+  g.visible = false;
+  g.traverse((o) => { o.castShadow = true; });
+  scene.add(g);
+  return g;
+})();
+
+function useWorld(kind) {
+  const college = kind === 'college';
+  if (college && !bitsCampus) {
+    bitsRoot = new THREE.Group();
+    scene.add(bitsRoot);
+    bitsCampus = new BitsCampus(bitsRoot);
+    const { dx, dz } = bitsCampus.roomOffset.reception;
+    addMainInteractables(bitsCampus, { x: 15.5 + dx, z: 38 + dz });
+  }
+  campus = college ? bitsCampus : schoolCampus;
+  schoolRoot.visible = !college;
+  if (bitsRoot) bitsRoot.visible = college;
+  deskInteract = campus.deskInteract;
+  npcs.campus = campus;
+  npcs.streamRadius = college ? 90 : null;
+  ball.bounds = campus.fieldBounds;
+  ball.reset();
+  camera.far = college ? 1100 : 300;
+  camera.updateProjectionMatrix();
+  gfx.setRange(college ? { fogNear: 170, fogFar: 720, skyScale: 1900 } : { fogNear: 90, fogFar: 270, skyScale: 280 });
+  minimap.setVisible(college);
+  if (!college) setBike(false);
+}
+
+function setBike(on) {
+  player.bike = on;
+  bike.visible = on && state?.settings.view === 'third';
+}
 const avatar = new NPC(scene, { id: 'mirnal', name: 'Mirnal', role: 'student', color: '#ffffff', pants: '#24345a', skinIndex: 0 });
 avatar.tag.visible = false;
 avatar.group.visible = false;
@@ -117,6 +185,7 @@ function clearWorld() {
 
 function addNPC(id, meta, opts, at) {
   const n = npcs.add(id, opts);
+  if (state && isCollege(state.classNum)) n.speed = opts.role === 'student' ? 4.6 : 3.6;
   npcMeta.set(id, meta);
   if (at) n.teleport(at);
   return n;
@@ -126,7 +195,7 @@ function spawnStaff() {
   if (isCollege(state.classNum)) {
     const S = COLLEGE_STAFF;
     addNPC('guard', { kind: 'staff', who: S.guard, role: 'guard' }, { name: S.guard.name, title: S.guard.role, role: 'staff', color: '#4b5d7a', pants: '#2b3445', height: 1.7, skinIndex: 1, outfit: 'guard' }, campus.spots.guard);
-    addNPC('canteen', { kind: 'staff', who: S.canteen, role: 'canteen' }, { name: S.canteen.name, title: S.canteen.role, role: 'staff', color: '#e8e2d0', pants: '#4a3b2a', height: 1.68, skinIndex: 3 }, new THREE.Vector3(-36, 0, 6.2));
+    addNPC('canteen', { kind: 'staff', who: S.canteen, role: 'canteen' }, { name: S.canteen.name, title: S.canteen.role, role: 'staff', color: '#e8e2d0', pants: '#4a3b2a', height: 1.68, skinIndex: 3 }, campus.spots.canteenStaff || new THREE.Vector3(-36, 0, 6.2));
     addNPC('librarian', { kind: 'staff', who: S.librarian, role: 'librarian' }, { name: S.librarian.name, title: S.librarian.role, role: 'staff', color: '#5a6a7a', pants: '#2a2a2a', height: 1.68, skinIndex: 2, outfit: 'formal', gender: 'm' }, campus.spots.librarian);
     addNPC('principal', { kind: 'staff', who: S.principal, role: 'principal' }, { name: S.principal.name, title: S.principal.role, role: 'staff', color: '#3a3a4a', pants: '#2a2a2a', height: 1.7, skinIndex: 4, outfit: 'formal', gender: 'm' }, campus.spots.principal);
     return;
@@ -173,7 +242,7 @@ function loadYear({ intro = true } = {}) {
   player.sensitivity = state.settings.sensitivity;
   lastSlotId = null;
   for (const cm of CLASSMATES) state.friends[cm.id] ||= { level: 10, memories: [], lastTalkDay: null, talksToday: 0 };
-  campus.setMode?.(isCollege(state.classNum) ? 'college' : 'school');
+  useWorld(isCollege(state.classNum) ? 'college' : 'school');
   if (state.phase === 'collegeYearDone') return setupCollegeDone(intro);
   if (state.phase === 'orientation') return setupOrientation(intro);
   if (state.phase === 'graduated') return setupGraduated();
@@ -354,10 +423,10 @@ function scheduleNPCs(slot) {
         } else npcs.send(id, null, campus.spots.playground[(i * 5) % 16]);
         break;
       case 'fest':
-        npcs.send(id, 'auditorium', new THREE.Vector3(-36 + (i % 4) * 1.6, 0, 26 + Math.floor(i / 4) * 2.2), { face: -Math.PI / 2 });
+        npcs.send(id, 'auditorium', campus.festSeat ? campus.festSeat(i) : new THREE.Vector3(-36 + (i % 4) * 1.6, 0, 26 + Math.floor(i / 4) * 2.2), { face: -Math.PI / 2 });
         break;
       case 'departure':
-        npcs.send(id, null, i % 2 ? new THREE.Vector3(-13 + (i % 3), 0, 41.5) : campus.spots.gate[i % campus.spots.gate.length]);
+        npcs.send(id, null, i % 2 && !isCollege(state.classNum) ? new THREE.Vector3(-13 + (i % 3), 0, 41.5) : campus.spots.gate[i % campus.spots.gate.length]);
         break;
       default:
     }
@@ -923,7 +992,7 @@ function openHelp() {
     h('table', {}, h('tbody', {}, [
       ['W A S D', 'Walk'], ['Mouse', 'Look around'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
       ['F', 'Voice: speak to choose options or talk (Chrome)'], ['T', 'Timetable'], ['M', 'Missions'], ['J', 'Learning Journey'],
-      ['V', 'Switch first-person / third-person view'], ['Hold Z', 'Fast-forward time'], ['Esc', 'Pause menu'],
+      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['Esc', 'Pause menu'],
     ].map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
     h('p', {}, 'Lessons start automatically when you sit at your desk (yellow mark) in the classroom during a lesson period. Sitting early makes time skip to the bell.'),
     h('p', {}, 'Voice: press F and say an option (“option two”, “raise hand”, “bye”), or near a classmate say “hello Diya”. Say “timetable” or “journey” to open them.')), { title: 'How to play', closable: true });
@@ -1004,7 +1073,7 @@ function showTitle() {
       h('button', { onclick: () => openPanel(h('div', {},
         h('p', {}, 'LIFE OF MIRNAL: a first-person Indian school and college life game. School runs from Class 1 to Class 12; college starts at BITS Pilani.'),
         h('p', {}, 'Built with Three.js (MIT licence). Every 3D object is generated from simple shapes in code, so there are no third-party art assets. National Anthem recording: U.S. Navy Band (public domain).'),
-        h('p', {}, 'Sunrise Public School, its staff and students, and the professors and batchmates at college are fictional. BITS Pilani first-year courses follow the official course list. Lesson content is simplified for gameplay.')), { title: 'Credits', closable: true }) }, 'Credits')),
+        h('p', {}, 'Sunrise Public School, its staff and students, and the professors and batchmates at college are fictional. BITS Pilani first-year courses follow the official course list. Lesson content is simplified for gameplay.'), h('p', {}, 'Campus map data © OpenStreetMap contributors (ODbL).')), { title: 'Credits', closable: true }) }, 'Credits')),
   ].filter(Boolean));
 }
 
@@ -1036,7 +1105,7 @@ function showVoiceOnboarding() {
       h('button', { class: 'primary', disabled: !voice.supported, onclick: async () => {
         status.textContent = 'Waiting for permission…';
         const ok = await voice.requestMic();
-        if (ok) { close(); toast('🎤 Microphone on. Let’s go to school!'); } else status.textContent = 'Permission was blocked. Allow the microphone in Chrome’s address bar, then try again.';
+        if (ok) { close(); toast(`🎤 Microphone on. Let’s go to ${state && isCollege(state.classNum) ? 'college' : 'school'}!`); } else status.textContent = 'Permission was blocked. Allow the microphone in Chrome’s address bar, then try again.';
       } }, '🎤 Turn on my microphone'))), { title: '🎤 This school runs on your voice' });
 }
 
@@ -1076,6 +1145,16 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Enter' && anthem) { anthem.skipped = true; return endAnthem(); }
   if (e.code === 'KeyV' && !isOpen()) return toggleView();
+  if (e.code === 'KeyC' && !isOpen() && isCollege(state.classNum) && state.phase !== 'graduated') {
+    if (player.seated || campus.roomAt(player.pos.x, player.pos.z)) return toast('Park the cycle outside first.');
+    setBike(!player.bike);
+    return toast(player.bike ? '🚲 On your cycle. Press C to get off.' : 'Cycle parked.');
+  }
+  if (e.code === 'KeyN' && isCollege(state.classNum)) {
+    const slot = currentSlot(slots, state.day.clock);
+    const o = objective(slot);
+    return minimap.toggleBig(player, o.loc && campus.objectivePoint(o.loc));
+  }
   if (isOpen()) return;
   if (e.code === 'KeyE') interact();
   else if (e.code === 'KeyT') { exitLock(); openTimetable(); } else if (e.code === 'KeyJ') { exitLock(); openJourney(ctx); } else if (e.code === 'KeyM') { exitLock(); openMissions(); } else if (e.code === 'KeyH') { exitLock(); openHelp(); } else if (e.code === 'KeyP') { exitLock(); openPause(); }
@@ -1130,6 +1209,12 @@ function toggleView() {
 function updateView(dt) {
   const third = state.settings.view === 'third';
   avatar.group.visible = third;
+  if (player.bike && campus.roomAt(player.pos.x, player.pos.z)) setBike(false);
+  bike.visible = player.bike && third;
+  if (bike.visible) {
+    bike.position.set(player.pos.x, player.pos.y, player.pos.z);
+    bike.rotation.y = player.yaw;
+  }
   document.getElementById('crosshair').classList.toggle('hidden', third);
   if (!third) return;
   avatar.poseAs(player.pos, player.yaw, player.moving, player.seated, dt);
@@ -1324,6 +1409,7 @@ function updateHUD(slot) {
   const practised = topics.filter((t) => (state.topics[t.id]?.level ?? 0) >= 3).length;
   hud.progress.textContent = topics.length ? `📘 ${practised}/${topics.length} topics practised · ⭐ ${state.reputation}` : `⭐ ${state.reputation}`;
   const target = obj.loc && campus.objectivePoint(obj.loc);
+  minimap.update(player, target);
   if (target && state.settings.showObjectiveArrow && !isOpen()) {
     const dx = target.x - player.pos.x;
     const dz = target.z - player.pos.z;
@@ -1425,4 +1511,4 @@ showTitle();
 frame();
 
 // Exposed for automated testing in the browser.
-window.__game = { get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, campus, get slots() { return slots; }, interact, handleInteractable, startGame, createState };
+window.__game = { get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState };

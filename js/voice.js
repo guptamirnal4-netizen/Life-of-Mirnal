@@ -10,6 +10,7 @@ const LETTERS = {
   b: 1, bee: 1, be: 1, bi: 1, 'बी': 1,
   c: 2, see: 2, sea: 2, si: 2, 'सी': 2,
   d: 3, dee: 3, di: 3, 'डी': 3,
+  e: 4, ee: 4, 'ई': 4,
 };
 const NUMBERS = {
   one: 0, first: 0, '1': 0, 'एक': 0, pehla: 0,

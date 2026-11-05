@@ -13,6 +13,13 @@ test('letters, homophones and cues pick the right option', () => {
   assert.equal(matchOption('the second one', opts), 1);
 });
 
+test('five-step practicals accept the letter E', () => {
+  const steps = ['Set up', 'Release', 'Time it', 'Find T', 'Calculate g'];
+  assert.equal(matchOption('option E', steps), 4);
+  assert.equal(matchOption('E', steps), 4);
+  assert.equal(matchOption('E', opts), -1);
+});
+
 test('saying the answer itself works', () => {
   assert.equal(matchOption('new delhi', opts), 1);
   assert.equal(matchOption('I think it is Kolkata', opts), 3);

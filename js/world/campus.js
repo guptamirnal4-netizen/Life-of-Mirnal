@@ -581,36 +581,60 @@ export class Campus {
     this.scene.add(t);
   }
 
+  // Interiors are written in school coordinates; the BITS world reuses them inside translated groups.
   buildRoomInteriors() {
-    const R = this.rooms;
-    for (const r of ROOMS) {
-      if (['classroom', 'staffroom', 'library', 'sciencelab', 'classroomB', 'complab'].includes(r.id)) {
-        const cx = (r.x0 + r.x1) / 2;
-        const cz = (r.z0 + r.z1) / 2;
-        this.tubeLight(cx, r.z0 + 0.3);
-        this.tubeLight(cx, r.z1 - 0.3);
-        if (r.id !== 'complab') {
-          const span = r.x1 - r.x0;
-          if (span > 10) { this.ceilingFan(cx - span / 4, cz); this.ceilingFan(cx + span / 4, cz); } else this.ceilingFan(cx, cz);
-        }
-      }
+    for (const r of ROOMS) this.roomLights(r);
+    this.interiorClassroomDado();
+    this.interiorStaffroom();
+    this.interiorPrincipal();
+    this.interiorLibrary();
+    this.interiorLab();
+    this.interiorComplab();
+    this.interiorAuditorium();
+    this.interiorReception();
+    this.interiorWashroom();
+    this.interiorClassroomB();
+    this.roomRefs = this.rooms;
+  }
+
+  roomLights(r) {
+    if (!['classroom', 'staffroom', 'library', 'sciencelab', 'classroomB', 'complab'].includes(r.id)) return;
+    const cx = (r.x0 + r.x1) / 2;
+    const cz = (r.z0 + r.z1) / 2;
+    this.tubeLight(cx, r.z0 + 0.3);
+    this.tubeLight(cx, r.z1 - 0.3);
+    if (r.id !== 'complab') {
+      const span = r.x1 - r.x0;
+      if (span > 10) { this.ceilingFan(cx - span / 4, cz); this.ceilingFan(cx + span / 4, cz); } else this.ceilingFan(cx, cz);
     }
+  }
+
+  interiorClassroomDado() {
     // Classroom interior dado (painted lower band)
     this.box(-16, 0, -30.88, 16, 1, 0.02, null, { tex: 'dadoGreen', collide: false, cast: false });
     this.box(-23.88, 0, -26, 0.02, 1, 10, null, { tex: 'dadoGreen', collide: false, cast: false });
     this.box(-8.12, 0, -26, 0.02, 1, 10, null, { tex: 'dadoGreen', collide: false, cast: false });
+  }
+
+  interiorStaffroom() {
     // Staff room
     this.box(-4, 0, -27, 5, 0.78, 1.6, null, { tex: 'wood' });
     this.box(-4, 0, -24, 5, 0.78, 1.2, null, { tex: 'wood' });
     this.box(-7.6, 0, -29.5, 0.6, 1.9, 2.4, '#7c8a96', { metalness: 0.5, roughness: 0.5 });
     this.spots.staffroom = [new THREE.Vector3(-6.5, 0, -28.5), new THREE.Vector3(-1.5, 0, -28.5), new THREE.Vector3(-6.5, 0, -25.5), new THREE.Vector3(-1.5, 0, -25.5), new THREE.Vector3(-6.5, 0, -22.5), new THREE.Vector3(-1.5, 0, -22.5), new THREE.Vector3(-4, 0, -29.8), new THREE.Vector3(-4, 0, -22.2)];
     this.spots.counsellor = new THREE.Vector3(-1.5, 0, -22.4);
+  }
+
+  interiorPrincipal() {
     // Principal
     this.box(3.5, 0, -28, 3, 0.8, 1.2, null, { tex: 'wood', tint: '#8a6040' });
     this.box(3.5, 0, -29.6, 0.8, 1.3, 0.6, '#5a2a22');
     this.box(3.5, 1.4, -30.85, 1.4, 0.9, 0.04, '#d8c8a0', { collide: false });
     this.spots.principal = new THREE.Vector3(3.5, 0, -29.5);
     this.interactable('principalDesk', 3.5, -26.8, 'Greet the Principal');
+  }
+
+  interiorLibrary() {
     // Library shelves with books
     const bookColors = ['#8b1e2d', '#1e4d8b', '#2d7a3a', '#c79a2a', '#5a2d82', '#1f1f1f', '#c0532a'];
     const bookGeo = new THREE.BoxGeometry(0.08, 0.3, 0.22);
@@ -648,6 +672,9 @@ export class Campus {
     this.spots.library = [new THREE.Vector3(10.5, 0, -24), new THREE.Vector3(13.5, 0, -24), new THREE.Vector3(10.5, 0, -27), new THREE.Vector3(13.5, 0, -27), new THREE.Vector3(16, 0, -23), new THREE.Vector3(9, 0, -22.6)];
     this.spots.librarian = new THREE.Vector3(17, 0, -22.8);
     this.box(17, 0, -24, 2, 0.9, 0.8, null, { tex: 'wood' });
+  }
+
+  interiorLab() {
     // Science lab
     for (const bz of [-28.5, -25]) {
       this.box(25, 0, bz, 9, 0.9, 1.4, '#3e4a52', { roughness: 0.35 });
@@ -667,6 +694,9 @@ export class Campus {
     this.interactable('microscope', 30, -27.4, 'Look through the microscope', { radius: 1.6 });
     this.spots.sciencelab = [new THREE.Vector3(21.5, 0, -27.3), new THREE.Vector3(24, 0, -27.3), new THREE.Vector3(26.5, 0, -27.3), new THREE.Vector3(29, 0, -27.3), new THREE.Vector3(21.5, 0, -23.8), new THREE.Vector3(28.5, 0, -23.8), new THREE.Vector3(26.5, 0, -22.5)];
     this.spots.labTeacher = new THREE.Vector3(25, 0, -30);
+  }
+
+  interiorComplab() {
     // Computer lab
     for (let i = 0; i < 3; i++) {
       for (let j = 0; j < 2; j++) {
@@ -678,17 +708,29 @@ export class Campus {
     }
     this.interactable('computer', -37.8, -9.4, 'Use a computer', { radius: 2.4 });
     this.spots.complab = [new THREE.Vector3(-41, 0, -11), new THREE.Vector3(-37.8, 0, -11), new THREE.Vector3(-34.6, 0, -11), new THREE.Vector3(-41, 0, -7), new THREE.Vector3(-37.8, 0, -7), new THREE.Vector3(-34.6, 0, -7)];
+  }
+
+  interiorAuditorium() {
     // Auditorium
     this.box(-41.5, 0, 30, 4, 0.8, 12, null, { tex: 'wood', tint: '#9a6a48' });
     this.box(-43.7, 0.8, 30, 0.1, 2.4, 11, '#7a1f2a', { collide: false });
     for (let rrow = 0; rrow < 5; rrow++) for (let c = 0; c < 2; c++) this.box(-35 + rrow * 1.8, 0, 26 + c * 7.5, 0.8, 0.5, 5, '#9a3a3a');
     this.spots.auditorium = new THREE.Vector3(-38.5, 0, 30);
     this.interactable('auditoriumStage', -38.5, 30, 'Talk to the counsellor', { radius: 2.5 });
+  }
+
+  interiorReception() {
     // Reception
     this.box(18, 0, 38, 1, 1, 4, null, { tex: 'wood' });
     this.spots.reception = new THREE.Vector3(19.5, 0, 38);
+  }
+
+  interiorWashroom() {
     // Washroom
     this.box(37, 0, -29.5, 4, 1.8, 0.2, '#b0bec5');
+  }
+
+  interiorClassroomB() {
     // Classroom B furniture (senior block)
     this.spots.classroomB = [];
     for (let rr = 0; rr < 3; rr++) {
@@ -701,7 +743,6 @@ export class Campus {
     }
     this.spots.classroomBTeacher = new THREE.Vector3(-37, 0, -29.8);
     this.box(-37, 0.9, -30.85, 5, 1.6, 0.08, '#1f3b2c', { collide: false });
-    this.roomRefs = R;
   }
 
   ensureBoard() {

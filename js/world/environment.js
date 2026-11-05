@@ -68,6 +68,16 @@ export function setupGraphics({ renderer, scene, campus }) {
     return dir.set(Math.cos(elevation) * Math.sin(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.cos(azimuth)).normalize();
   };
 
+  const world = () => (typeof campus === 'function' ? campus() : campus);
+  // Draw distance per world: the school is small, the real BITS campus is ~1.8 km long.
+  let range = { fogNear: scene.fog.near, fogFar: scene.fog.far };
+  const setRange = ({ fogNear, fogFar, skyScale }) => {
+    range = { fogNear, fogFar };
+    scene.fog.near = fogNear;
+    scene.fog.far = fogFar;
+    sky.scale.setScalar(skyScale);
+  };
+
   const update = (dt, { clock = 10 * 60, focus = null, quality: q = 'high' } = {}) => {
     setQuality(q);
     const d = sunDirection(clock);
@@ -86,8 +96,13 @@ export function setupGraphics({ renderer, scene, campus }) {
     const fz = Math.round(f.z / step) * step;
     sun.target.position.set(fx, 0, fz);
     sun.position.set(fx + d.x * 90, d.y * 90, fz + d.z * 90);
-    campus.update?.(dt, f);
+    sky.position.set(f.x, 0, f.z);
+    // Lift the fog with the viewer so aerial views stay clear; walking views are unchanged.
+    const lift = Math.max(0, f.y - 10);
+    scene.fog.near = range.fogNear + lift;
+    scene.fog.far = range.fogFar + lift * 1.6;
+    world().update?.(dt, f);
   };
 
-  return { sun, sky, hemi, update, setQuality };
+  return { sun, sky, hemi, update, setQuality, setRange };
 }

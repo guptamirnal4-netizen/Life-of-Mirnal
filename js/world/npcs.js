@@ -591,10 +591,24 @@ export class NPCManager {
     if (!n || !point) return;
     n.chase = null;
     n.walkTo(this.campus.pathTo(n.pos, roomId, point), opts);
+    if (this.streamRadius && this.playerPos && Math.hypot(n.pos.x - this.playerPos.x, n.pos.z - this.playerPos.z) > this.streamRadius) this.finishPath(n);
+  }
+
+  // Big-campus streaming: characters far from the player arrive instantly instead of walking for minutes.
+  finishPath(n) {
+    const last = n.path[n.path.length - 1];
+    if (!last) return;
+    n.pos.x = last.x;
+    n.pos.z = last.z;
+    n.baseY = last.y || 0;
+    n.path = [];
+    if (n.sitOnArrive) n.seated = true;
+    if (n.faceOnArrive !== null && n.faceOnArrive !== undefined) n.group.rotation.y = n.faceOnArrive;
   }
 
   update(dt, ball) {
     for (const n of this.npcs.values()) {
+      if (this.streamRadius && this.playerPos && n.path.length && !n.chase && Math.hypot(n.pos.x - this.playerPos.x, n.pos.z - this.playerPos.z) > this.streamRadius) this.finishPath(n);
       n.update(dt, ball, this.playerPos);
       if (this.playerPos && n.tag !== undefined) {
         const d = Math.hypot(n.pos.x - this.playerPos.x, n.pos.z - this.playerPos.z);
@@ -646,7 +660,8 @@ export class Ball {
   }
 
   reset() {
-    this.pos.set(38, 0.22, 9);
+    if (this.bounds?.center) this.pos.copy(this.bounds.center);
+    else this.pos.set(38, 0.22, 9);
     this.vel.set(0, 0, 0);
   }
 
@@ -662,7 +677,12 @@ export class Ball {
     this.mesh.rotation.z -= this.vel.x * dt * 3;
     const b = this.bounds;
     let scored = null;
-    if (this.pos.z > 6.5 && this.pos.z < 11.5) {
+    if (b.axis === 'z') {
+      if (this.pos.x > b.goalA && this.pos.x < b.goalB) {
+        if (this.pos.z < b.minZ + 1) scored = 'left';
+        if (this.pos.z > b.maxZ - 1) scored = 'right';
+      }
+    } else if (this.pos.z > 6.5 && this.pos.z < 11.5) {
       if (this.pos.x < b.minX + 1) scored = 'left';
       if (this.pos.x > b.maxX - 1) scored = 'right';
     }

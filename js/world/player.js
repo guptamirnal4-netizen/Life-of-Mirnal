@@ -76,7 +76,7 @@ export class Player {
       if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) move.sub(r);
       if (move.lengthSq() > 0) {
         const run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-        move.normalize().multiplyScalar(this.speed * (run ? 1.8 : 1) * dt);
+        move.normalize().multiplyScalar((this.bike ? 7.2 * (run ? 1.3 : 1) : this.speed * (run ? 1.8 : 1)) * dt);
         this.lastMove.copy(move).divideScalar(dt);
         this.moving = true;
         this.pos.x += move.x;
