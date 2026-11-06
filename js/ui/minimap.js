@@ -26,7 +26,7 @@ function drawBase() {
   };
   g.fillStyle = '#e9dcc0'; g.fillRect(0, 0, W, H);
   poly(D.boundary, '#efe4ca', null);
-  const col = { grass: '#a9d18e', wood: '#b7c79a', pitch: '#8cc878', ground: '#9fd08a', track: '#c96a4a', pool: '#5aa0e0', water: '#5aa0e0', shivganga: '#4e8f6b' };
+  const col = { grass: '#a9d18e', wood: '#b7c79a', pitch: '#8cc878', ground: '#9fd08a', track: '#dcc396', pool: '#5aa0e0', water: '#5aa0e0', shivganga: '#4e8f6b' };
   for (const a of D.areas) poly(a.poly, col[a.kind] || '#a9d18e');
   g.lineCap = 'round';
   for (const r of D.roads) {
