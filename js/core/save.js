@@ -10,7 +10,9 @@ export function deserialize(text) {
   const data = JSON.parse(text);
   if (!data || data.version !== SAVE_VERSION) throw new Error('Incompatible save file');
   data.settings = { ...DEFAULT_SETTINGS, ...data.settings };
-  if (data.settings.timeScale === 0.6) data.settings.timeScale = DEFAULT_SETTINGS.timeScale;
+  // 1.2 was the old default; any other valid speed is the player's own choice and is kept.
+  const speed = data.settings.timeScale;
+  if (typeof speed !== 'number' || !(speed >= 0.1 && speed <= 2) || speed === 1.2) data.settings.timeScale = DEFAULT_SETTINGS.timeScale;
   return data;
 }
 

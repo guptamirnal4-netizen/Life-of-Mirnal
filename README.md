@@ -18,12 +18,12 @@ Open http://localhost:8080 in Chrome. Click the game to capture the mouse.
 | Key | Action |
 |---|---|
 | W A S D / Mouse | Walk / look |
-| Shift / Space | Run / jump |
+| Shift / Space | Run (on foot only) / jump |
 | E | Interact, sit, stand, talk |
 | F | Voice: say an on-screen option ("option two", "raise hand", "bye"), "hello Diya", "timetable", "journey" |
 | T / M / J / H | Timetable / Missions / Learning Journey / Help |
 | V | Switch first-person / third-person view (also in Settings and the pause menu) |
-| Hold Z | Fast-forward time |
+| Hold Z | Fast-forward time (×4; only while held) |
 | Esc | Pause menu (save, settings, quit) |
 
 ## Deploy on Vercel
@@ -38,7 +38,7 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 ## What's in it
 
 - **Campus:** gate, security cabin, assembly ground with stage and flag, classroom (furniture changes with age), Classroom B, staff room, principal's office, library, science lab, computer lab, canteen, playground with goals, auditorium, reception, washrooms and school bus. Everything is built from code primitives, so there are no third-party assets.
-- **A school day for every class:** arrival, assembly (the whole school stands at attention and sings *Jana Gana Mana*; Enter or saying “skip” skips it, with Devanagari and romanised lyrics timed to the official 52 seconds, followed by a yearly event), one period per subject, break, lunch, a lab period (Class 6+), a games period and dismissal. The clock runs; missed periods are marked absent.
+- **A school day for every class:** arrival, assembly (the whole school stands at attention and sings *Jana Gana Mana*; Enter or saying “skip” skips it, with Devanagari and romanised lyrics timed to the official 52 seconds, followed by a yearly event), one period per subject, break, lunch, a lab period (Class 6+), a games period and dismissal. The clock runs at 0.35 game minutes per real second by default (Settings: Slow 0.2, Normal 0.35, Fast 0.6, Very fast 1), stops whenever a menu or the click-to-play screen is up, and only speeds up while you hold Z; missed periods are marked absent.
 - **Lessons:** sit at the yellow-marked desk and the lesson starts at the bell. The teacher teaches each topic, you can raise your hand, then answer a practice question.
 - **Exams and report cards:** annual exams (simulated CBSE boards in Class 10 and 12), theory and internal marks, the CBSE 9-point grade scale, a 33% pass mark and 75% attendance. Remedial exams, make-up classes, late project submission and repeating a year are all supported.
 - **Mirnal's Learning Journey (J):** a timeline for Classes 1–12, mastery per topic (Not started → Introduced → Learning in progress → Practised → Mastered) with an activity log, a growth dashboard, a portfolio and friendships. A low exam score never erases learning you already showed.
@@ -48,7 +48,7 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 - **Voice-first (on by default):** a new game asks for the microphone. Every multiple-choice question in lessons, exams, remedial exams, practicals and projects has to be answered out loud ("A", "option B", "the second one", or the answer itself), and mouse clicks on answers are refused. Every screen has a 🎤 button and F works everywhere. Arrive early at the assembly line to practise the anthem line by line. At assembly you can read the thought for the day aloud. Spoken answers, anthems sung and practice sessions show on the Learning Journey dashboard. If the microphone is unavailable or blocked, the game falls back to clicking, and it can be turned off in Settings. Recognition uses Chrome's speech service; no audio is stored.
 - **College Journey: BITS Pilani (Year 1):** start it from the title screen or from the school gate after graduating. College is played on the real BITS Pilani campus at full scale (about 1.4 × 2 km), built from OpenStreetMap footprints: every building at its real position and shape, Bhawans with courtyards, the NAB axis, the Rotunda and Clock Tower, Saraswati Temple, Shiv Ganga, the Gymkhana with its track, C'not and ANC.
   - **Real places:** lectures in NAB, chemistry lab in FD-II, library at the BITS Library, staff room in FD-I, registration and the computer lab in the Main Building, fest in SAC, assembly at the Rotunda, and you start at your Bhawan (Krishna).
-  - **Getting around:** C gets on or off a bicycle, the minimap (top right) points at your next objective, and N opens the full labelled campus map. Far-away characters are streamed in place so the day keeps moving.
+  - **Getting around:** walking is 1.5 m/s, Shift runs at 4 m/s, and C gets on or off a bicycle (W pedals, S brakes, A/D steer; up to 6.5 m/s, never indoors). The HUD shows which you're doing. The campus is real-size, so the cycle is how you make it to class on time, the minimap (top right) points at your next objective, and N opens the full labelled campus map. Far-away characters are streamed in place so the day keeps moving.
   - **Courses:** the first-year courses follow BITS Pilani's published list. Semester 1: MATH F111, PHY F111, CHEM F111, BIO F111, BITS F110, plus the PHY/CHEM/BIO F110 labs (17 units). Semester 2: BITS F111, MATH F112, MATH F113, CS F111, EEE F111, BITS F112, plus the ME F112 workshop (20 units).
   - **A college day:** course registration, lectures answered by voice, afternoon labs, an EG sheet or TRW report, Oasis or APOGEE in the evening, then Compre.
   - **Grades:** a BITS-style grade sheet with letter grades, SGPA and CGPA.

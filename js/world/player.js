@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 
-const RADIUS = 0.32;
 const GRAVITY = 22;
+
+// Starting values, tuned in play. Speeds are metres per second (1 unit = 1 m on the BITS campus).
+export const MOVE = {
+  walk: 1.5, run: 4, footAccel: 9, footDecel: 12, footRadius: 0.32,
+  bikeMax: 6.5, bikeAccel: 2.2, bikeBrake: 6, bikeCoast: 0.9, bikeTurn: 1.7, bikeRadius: 0.45,
+};
 
 export function eyeHeightFor(classNum) {
   return 1.02 + (classNum - 1) * 0.05;
@@ -22,6 +27,11 @@ export class Player {
     this.enabled = false;
     this.moving = false;
     this.lastMove = new THREE.Vector3();
+    this.vel = new THREE.Vector3(); // on foot: horizontal velocity
+    this.bikeSpeed = 0; // on the cycle: forward speed
+    this.steer = 0; // -1..1, for the handlebar
+    this.running = false;
+    this._bike = false;
 
     document.addEventListener('mousemove', (e) => {
       if (!this.enabled || document.pointerLockElement !== this.dom) return;
@@ -36,7 +46,23 @@ export class Player {
 
   setClass(classNum) {
     this.eye = eyeHeightFor(classNum);
-    this.speed = 3.2 + Math.min(classNum, 10) * 0.08;
+  }
+
+  // Mounting or dismounting always starts from a standstill.
+  get bike() { return this._bike; }
+  set bike(on) {
+    this._bike = !!on;
+    this.bikeSpeed = 0;
+    this.vel.set(0, 0, 0);
+  }
+
+  get speedNow() { return this._bike ? this.bikeSpeed : Math.hypot(this.vel.x, this.vel.z); }
+
+  // 'ride' | 'run' | 'walk' | 'idle'
+  gait() {
+    if (this._bike) return this.bikeSpeed > 0.15 ? 'ride' : 'idle';
+    const v = this.speedNow;
+    return v < 0.1 ? 'idle' : this.running && v > MOVE.walk + 0.4 ? 'run' : 'walk';
   }
 
   place(pos, yaw = 0) {
@@ -64,28 +90,63 @@ export class Player {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
+  key(...codes) {
+    return codes.some((c) => this.keys.has(c));
+  }
+
+  // On foot: WASD sets a direction, Shift raises the target speed; velocity eases towards it.
+  footStep(dt) {
+    const f = this.forward();
+    const r = new THREE.Vector3(-f.z, 0, f.x);
+    const want = new THREE.Vector3();
+    if (this.key('KeyW', 'ArrowUp')) want.add(f);
+    if (this.key('KeyS', 'ArrowDown')) want.sub(f);
+    if (this.key('KeyD', 'ArrowRight')) want.add(r);
+    if (this.key('KeyA', 'ArrowLeft')) want.sub(r);
+    this.running = want.lengthSq() > 0 && this.key('ShiftLeft', 'ShiftRight');
+    if (want.lengthSq() > 0) want.normalize().multiplyScalar(this.running ? MOVE.run : MOVE.walk);
+    const diff = want.sub(this.vel);
+    const rate = (want.lengthSq() >= this.vel.lengthSq() ? MOVE.footAccel : MOVE.footDecel) * dt;
+    if (diff.length() > rate) diff.setLength(rate);
+    this.vel.add(diff);
+    return this.vel.clone().multiplyScalar(dt);
+  }
+
+  // On the cycle: W pedals, S brakes, A/D steer the handlebar. No running, no jumping.
+  bikeStep(dt) {
+    this.running = false;
+    const pedal = this.key('KeyW', 'ArrowUp');
+    const brake = this.key('KeyS', 'ArrowDown');
+    this.steer = (this.key('KeyA', 'ArrowLeft') ? 1 : 0) - (this.key('KeyD', 'ArrowRight') ? 1 : 0);
+    if (brake) this.bikeSpeed = Math.max(0, this.bikeSpeed - MOVE.bikeBrake * dt);
+    else if (pedal) this.bikeSpeed = Math.min(MOVE.bikeMax, this.bikeSpeed + MOVE.bikeAccel * dt);
+    else this.bikeSpeed = Math.max(0, this.bikeSpeed - MOVE.bikeCoast * dt);
+    this.yaw += this.steer * MOVE.bikeTurn * (0.35 + 0.65 * Math.min(1, this.bikeSpeed / 3)) * dt;
+    return this.forward().multiplyScalar(this.bikeSpeed * dt);
+  }
+
   update(dt, colliders) {
     this.moving = false;
     if (this.enabled && !this.seated && !this.frozen) {
-      const f = this.forward();
-      const r = new THREE.Vector3(-f.z, 0, f.x);
-      const move = new THREE.Vector3();
-      if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) move.add(f);
-      if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) move.sub(f);
-      if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) move.add(r);
-      if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) move.sub(r);
-      if (move.lengthSq() > 0) {
-        const run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-        move.normalize().multiplyScalar((this.bike ? 7.2 * (run ? 1.3 : 1) : this.speed * (run ? 1.8 : 1)) * dt);
-        this.lastMove.copy(move).divideScalar(dt);
-        this.moving = true;
+      const move = this._bike ? this.bikeStep(dt) : this.footStep(dt);
+      if (move.lengthSq() > 1e-10) {
+        const from = this.pos.clone();
         this.pos.x += move.x;
         this.resolve(colliders, 'x');
         this.pos.z += move.z;
         this.resolve(colliders, 'z');
+        const done = Math.hypot(this.pos.x - from.x, this.pos.z - from.z);
+        const asked = Math.hypot(move.x, move.z);
+        // Hitting a wall stops you instead of letting you push along it at full speed.
+        if (done < asked * 0.5) {
+          if (this._bike) this.bikeSpeed *= 0.2;
+          else this.vel.multiplyScalar(done / asked);
+        }
+        this.lastMove.set(this.pos.x - from.x, 0, this.pos.z - from.z).divideScalar(dt);
+        this.moving = this.lastMove.lengthSq() > 0.01;
       }
       const floor = this.floorAt(colliders);
-      if (this.keys.has('Space') && this.pos.y <= floor + 0.001) this.velY = 6.2;
+      if (!this._bike && this.keys.has('Space') && this.pos.y <= floor + 0.001) this.velY = 6.2;
       this.velY -= GRAVITY * dt;
       this.pos.y += this.velY * dt;
       if (this.pos.y <= floor) {
@@ -93,6 +154,7 @@ export class Player {
         this.velY = 0;
       }
     }
+    if (!this.enabled || this.seated || this.frozen) { this.vel.set(0, 0, 0); this.bikeSpeed = 0; this.steer = 0; this.running = false; }
     const eye = this.seated ? this.eye * 0.8 : this.eye;
     this.camera.position.set(this.pos.x, this.pos.y + eye, this.pos.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
@@ -110,6 +172,7 @@ export class Player {
   }
 
   resolve(colliders, axis) {
+    const RADIUS = this._bike ? MOVE.bikeRadius : MOVE.footRadius;
     for (const c of colliders) {
       if (!c.enabled) continue;
       if (this.pos.y >= c.maxY - 0.05) continue;

@@ -501,10 +501,12 @@ export class NPC {
   }
 
   animate(dt, walking, baseY = 0) {
-    this.phase += dt * (walking ? (this.chase ? 12 : 9) : 1.5);
+    if (this.gait === 'ride' || this.gait === 'bikeIdle') return this.animateRide(dt, baseY);
+    const running = walking && this.gait === 'run';
+    this.phase += dt * (walking ? (running ? 13 : this.chase ? 12 : 9) : 1.5);
     this.breath += dt * 2.2;
     const s = Math.sin(this.phase);
-    const swing = walking ? s * (this.longSkirt ? 0.3 : 0.55) : 0;
+    const swing = walking ? s * (this.longSkirt ? 0.3 : running ? 0.95 : 0.55) : 0;
     this.legs[0].rotation.x = swing;
     this.legs[1].rotation.x = -swing;
     this.knees[0].rotation.x = walking ? Math.max(0, -Math.sin(this.phase - 0.6)) * 0.9 : 0;
@@ -512,10 +514,14 @@ export class NPC {
     const attention = this.singing;
     this.arms[0].rotation.x = walking ? -swing * 0.8 : attention ? 0 : Math.sin(this.breath * 0.5) * 0.03;
     this.arms[1].rotation.x = walking ? swing * 0.8 : attention ? 0 : -Math.sin(this.breath * 0.5) * 0.03;
-    this.elbows[0].rotation.x = walking ? -0.25 - Math.max(0, swing) * 0.4 : -0.08;
-    this.elbows[1].rotation.x = walking ? -0.25 - Math.max(0, -swing) * 0.4 : -0.08;
+    this.elbows[0].rotation.x = running ? -1.25 : walking ? -0.25 - Math.max(0, swing) * 0.4 : -0.08;
+    this.elbows[1].rotation.x = running ? -1.25 : walking ? -0.25 - Math.max(0, -swing) * 0.4 : -0.08;
+    if (running) {
+      this.knees[0].rotation.x *= 1.6;
+      this.knees[1].rotation.x *= 1.6;
+    }
     this.torso.scale.y = 1 + Math.sin(this.breath) * 0.012;
-    this.body.position.y = walking ? Math.abs(Math.cos(this.phase)) * 0.03 : 0;
+    this.lean(running ? 0.16 : 0, walking ? Math.abs(Math.cos(this.phase)) * (running ? 0.08 : 0.03) : 0);
     this.pos.y = baseY + (this.seated ? -0.36 * this.scale : 0);
     this.blob.visible = !this.seated;
     if (this.seated) {
@@ -539,12 +545,40 @@ export class NPC {
     this.head.rotation.y = this.headYaw;
   }
 
+  // Tilt the upper body forward around the hips (the legs hang from the root, not from the body).
+  lean(a, lift = 0) {
+    this.body.rotation.x = a;
+    this.body.position.set(0, 0.9 * (1 - Math.cos(a)) + lift, -0.9 * Math.sin(a));
+  }
+
+  // Sitting on the cycle: hands on the handlebar, legs pedalling in step with the wheels.
+  animateRide(dt, baseY) {
+    const pedalling = this.gait === 'ride';
+    if (pedalling) this.phase += dt * (2.2 + this.rideSpeed * 1.1);
+    this.blob.visible = false;
+    this.pos.y = baseY + 0.91 - 0.9 * this.scale; // hips on the saddle
+    this.lean(0.32);
+    this.torso.scale.y = 1;
+    for (const i of [0, 1]) {
+      const p = this.phase + i * Math.PI;
+      this.legs[i].rotation.x = -1.05 + Math.sin(p) * 0.42;
+      this.knees[i].rotation.x = 1.2 + Math.cos(p) * 0.45;
+      this.arms[i].rotation.x = -1.05;
+      this.elbows[i].rotation.x = -0.35;
+    }
+    this.mouth.scale.set(1, 1, 1);
+    this.head.rotation.x = -0.25;
+    this.head.rotation.y = 0;
+  }
+
   // Drive this model from the player (third-person avatar).
-  poseAs(pos, yaw, walking, seated, dt) {
+  poseAs(pos, yaw, walking, seated, dt, gait = 'walk', speed = 0) {
     this.pos.x = pos.x;
     this.pos.z = pos.z;
     this.group.rotation.y = yaw + Math.PI;
     this.seated = !!seated;
+    this.gait = gait;
+    this.rideSpeed = speed;
     this.animate(dt, walking, pos.y);
   }
 

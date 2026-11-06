@@ -47,6 +47,13 @@ export function nextSlot(slots, clock) {
   return slots.find((s) => s.start > clock) || null;
 }
 
+// One frame of game time. Stops at the next slot boundary so no timetable change is ever skipped.
+export function advanceClock(slots, clock, dt, timeScale, fastForward = 1) {
+  const next = nextSlot(slots, clock);
+  const limit = next ? next.start : slots[slots.length - 1].end;
+  return Math.min(limit, clock + Math.min(dt, 0.05) * timeScale * fastForward);
+}
+
 // A BITS day: lectures from 8, a lunch break at the mess/ANC, labs in the afternoon, the fest in the evening.
 function buildCollegeDay(classNum) {
   const courses = getClassSubjects(classNum);

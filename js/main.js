@@ -7,8 +7,8 @@ import { Player } from './world/player.js';
 import { NPC, NPCManager, Ball, studentHeight } from './world/npcs.js';
 import { ANTHEM_LINES, ANTHEM_DURATION, ANTHEM_AUDIO_URL, LYRIC_WORDS } from '../data/anthem.js';
 import { openAnthemPractice } from './ui/anthempractice.js';
-import { createState, ensureYear, activeClassmates, adjustFriend } from './core/state.js';
-import { buildDay, currentSlot, nextSlot, fmt } from './core/timetable.js';
+import { createState, ensureYear, activeClassmates, adjustFriend, TIME_SPEEDS, FAST_FORWARD } from './core/state.js';
+import { buildDay, currentSlot, nextSlot, fmt, advanceClock } from './core/timetable.js';
 import { promote, repeatYear, applyRemedial, scoreLabs, applyCollegeGrades, cgpa, startCollege } from './core/academics.js';
 import { COLLEGE, COLLEGE_STAFF, COLLEGE_INTRO, ROADMAP } from '../data/college.js';
 import { saveGame, loadGame, hasSave } from './core/save.js';
@@ -63,11 +63,15 @@ const bike = (() => {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: '#2a2f38', roughness: 0.4, metalness: 0.6 });
   const tyre = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.9 });
+  g.userData.wheels = [];
   for (const z of [-0.55, 0.55]) {
     const w = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.04, 8, 24), tyre);
     w.rotation.y = Math.PI / 2;
     w.position.set(0, 0.36, z);
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.66, 0.02), metal);
+    w.add(spoke);
     g.add(w);
+    g.userData.wheels.push(w);
   }
   const bar = (len, x, y, z, rx) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, len, 6), metal); m.position.set(x, y, z); m.rotation.x = rx; g.add(m); };
   bar(1.1, 0, 0.62, 0, Math.PI / 2);
@@ -80,6 +84,7 @@ const bike = (() => {
   handle.rotation.z = Math.PI / 2;
   handle.position.set(0, 0.95, -0.5);
   g.add(handle);
+  g.userData.handle = handle;
   g.visible = false;
   g.traverse((o) => { o.castShadow = true; });
   scene.add(g);
@@ -335,7 +340,12 @@ function showCollegeIntro(c) {
       h('li', {}, `🎉 Evening: ${c === 13 ? 'Oasis' : 'APOGEE'} at the Auditorium`),
       h('li', {}, '📝 Midsems and the Comprehensive exam after the day')),
     h('p', { class: 'muted small' }, 'Courses follow BITS Pilani’s published first-year list. Professors, batchmates and events in the story are fictional.'),
-    h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'start begin go', onclick: () => closeAll() }, 'Start the day'))),
+    h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'start begin go', onclick: () => {
+      closeAll();
+      const reg = campus.objectivePoint('reception');
+      const far = reg ? Math.round(player.pos.distanceTo(reg) / 10) * 10 : 0;
+      if (far > 150) toast(`🚲 Registration is ${far} m away. Press C to ride your cycle, or hold Shift to run.`, 6000);
+    } }, 'Start the day'))),
   { title: `College Journey · ${y.label}` });
 }
 
@@ -1005,7 +1015,10 @@ function openSettings() {
     h('input', { type: 'range', min, max, step, value: s[key], oninput: (e) => { s[key] = Number(e.target.value); player.sensitivity = s.sensitivity; } }));
   openPanel(h('div', { class: 'settings' },
     range('Mouse sensitivity', 'sensitivity', 0.3, 2.5, 0.1),
-    range('Game time speed', 'timeScale', 0.2, 2, 0.1),
+    h('label', { class: 'setting' }, 'Game time speed',
+      h('select', { onchange: (e) => { s.timeScale = Number(e.target.value); } },
+        [[TIME_SPEEDS.slow, 'Slow'], [TIME_SPEEDS.normal, 'Normal'], [TIME_SPEEDS.fast, 'Fast'], [TIME_SPEEDS.veryFast, 'Very fast'], ...(Object.values(TIME_SPEEDS).includes(s.timeScale) ? [] : [[s.timeScale, 'Custom']])]
+          .map(([v, l]) => h('option', { value: v, selected: s.timeScale === v }, `${l} · ${v} game min per second (a 50-min lecture ≈ ${Math.round(50 / v / 60 * 10) / 10} min)`)))),
     h('label', { class: 'setting' }, 'Graphics',
       h('select', { onchange: (e) => { s.graphics = e.target.value; } },
         [['high', 'High (shadows, sharp detail)'], ['low', 'Low (faster on older laptops)']].map(([v, l]) => h('option', { value: v, selected: (s.graphics || 'high') === v }, l)))),
@@ -1146,7 +1159,8 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && anthem) { anthem.skipped = true; return endAnthem(); }
   if (e.code === 'KeyV' && !isOpen()) return toggleView();
   if (e.code === 'KeyC' && !isOpen() && isCollege(state.classNum) && state.phase !== 'graduated') {
-    if (player.seated || campus.roomAt(player.pos.x, player.pos.z)) return toast('Park the cycle outside first.');
+    if (player.seated) return toast('Stand up first (E).');
+    if (campus.roomAt(player.pos.x, player.pos.z)) return toast('No cycling indoors. Step outside first.');
     setBike(!player.bike);
     return toast(player.bike ? '🚲 On your cycle. Press C to get off.' : 'Cycle parked.');
   }
@@ -1209,20 +1223,27 @@ function toggleView() {
 function updateView(dt) {
   const third = state.settings.view === 'third';
   avatar.group.visible = third;
-  if (player.bike && campus.roomAt(player.pos.x, player.pos.z)) setBike(false);
+  if (player.bike && campus.roomAt(player.pos.x, player.pos.z)) {
+    setBike(false);
+    toast('Cycle parked outside. No riding indoors.');
+  }
   bike.visible = player.bike && third;
   if (bike.visible) {
-    bike.position.set(player.pos.x, player.pos.y, player.pos.z);
+    // Saddle (0.3 m behind the bike's centre) sits under the rider.
+    bike.position.copy(player.pos).addScaledVector(player.forward(), 0.3);
     bike.rotation.y = player.yaw;
+    for (const w of bike.userData.wheels) w.rotation.x -= (player.bikeSpeed * dt) / 0.34;
+    bike.userData.handle.rotation.set(0, player.steer * 0.35, Math.PI / 2);
   }
   document.getElementById('crosshair').classList.toggle('hidden', third);
   if (!third) return;
-  avatar.poseAs(player.pos, player.yaw, player.moving, player.seated, dt);
+  const gait = player.gait();
+  avatar.poseAs(player.pos, player.yaw, player.moving, player.seated, dt, player.bike ? (gait === 'ride' ? 'ride' : 'bikeIdle') : gait, player.speedNow);
   const eye = player.seated ? player.eye * 0.8 : player.eye;
   const head = new THREE.Vector3(player.pos.x, player.pos.y + eye, player.pos.z);
   const cp = Math.cos(player.pitch);
   const dir = new THREE.Vector3(-Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp);
-  const maxDist = player.seated ? 2.2 : 3.4;
+  const maxDist = player.seated ? 2.2 : player.bike ? 4.4 : 3.4;
   const cols = campus.allColliders();
   const at = (t) => {
     const p = head.clone().addScaledVector(dir, -t);
@@ -1350,6 +1371,8 @@ function endAnthem() {
 const hud = {
   cls: document.getElementById('hud-class'),
   time: document.getElementById('hud-time'),
+  move: document.getElementById('hud-move'),
+  ff: document.getElementById('hud-ff'),
   slot: document.getElementById('hud-slot'),
   mission: document.getElementById('hud-mission'),
   progress: document.getElementById('hud-progress'),
@@ -1401,6 +1424,9 @@ function updateHUD(slot) {
   const c = state.classNum;
   hud.cls.textContent = state.phase === 'collegeYearDone' ? 'BITS Pilani · Year 1 complete' : isCollege(c) ? `BITS Pilani · ${COLLEGE[c].label}` : state.phase === 'graduated' ? 'Graduated · Class of Sunrise' : state.phase === 'orientation' ? 'Class 10 → 11 · Orientation' : `Class ${c} · ${STAGES[stageOf(c)]}`;
   hud.time.textContent = state.phase === 'day' ? fmt(state.day.clock) : '';
+  const gait = player.gait();
+  hud.move.textContent = player.seated ? '🪑 Seated' : gait === 'ride' ? `🚲 Cycling · ${Math.round(player.speedNow * 3.6)} km/h` : gait === 'run' ? '🏃 Running' : gait === 'walk' ? '🚶 Walking' : player.bike ? '🚲 On your cycle' : '🧍 Standing';
+  hud.ff.classList.toggle('hidden', !fastForward || state.phase !== 'day');
   hud.slot.textContent = slot.label;
   const obj = objective(slot);
   hud.mission.textContent = obj.text;
@@ -1424,7 +1450,7 @@ function updateHUD(slot) {
     } else hud.arrow.parentElement.classList.add('hidden');
   } else hud.arrow.parentElement.classList.add('hidden');
   const t = !isOpen() && !player.seated ? interactTarget() : null;
-  hud.prompt.textContent = player.seated ? 'E · stand up' : t ? `E · ${t.label}` : '';
+  hud.prompt.textContent = player.seated ? (state.phase === 'day' && nextSlot(slots, state.day.clock)?.type === 'lesson' && !fastForward ? 'E · stand up · hold Z to fast-forward to the lecture' : 'E · stand up') : t ? `E · ${t.label}` : '';
   hud.prompt.classList.toggle('hidden', !hud.prompt.textContent || isOpen() || !!anthem);
   hud.resume.classList.toggle('hidden', !!document.pointerLockElement || isOpen() || mode !== 'playing');
 }
@@ -1440,13 +1466,11 @@ function frame() {
     const paused = isOpen();
     player.enabled = !paused && document.pointerLockElement === canvas;
     if (!paused) {
-      const slot = currentSlot(slots, state.day.clock);
-      if (state.phase === 'day' && !state.day.ended && !anthem) {
-        const next = nextSlot(slots, state.day.clock);
-        const waitingAtDesk = player.seated && (slot.type !== 'lesson' || state.day.lessonsDone[slot.subject]) && next?.type === 'lesson';
-        fastForward = player.keys.has('KeyZ') || waitingAtDesk;
+      // The clock runs only while you're actually playing: not behind a menu, not on the "click to play" screen.
+      fastForward = player.enabled && player.keys.has('KeyZ');
+      if (state.phase === 'day' && !state.day.ended && !anthem && player.enabled) {
         const departureEnd = slots.at(-1).end;
-        state.day.clock = Math.min(departureEnd, state.day.clock + dt * state.settings.timeScale * (fastForward ? 12 : 1));
+        state.day.clock = advanceClock(slots, state.day.clock, dt, state.settings.timeScale, fastForward ? FAST_FORWARD : 1);
         if (state.day.clock >= departureEnd) {
           toast('The last bus is leaving! Mirnal heads home.');
           endDay();

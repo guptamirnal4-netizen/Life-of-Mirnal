@@ -2,9 +2,13 @@ import { CLASSMATES } from '../../data/people.js';
 
 export const SAVE_VERSION = 1;
 
+// Game minutes per real second. Holding Z multiplies the chosen speed by FAST_FORWARD.
+export const TIME_SPEEDS = { slow: 0.2, normal: 0.35, fast: 0.6, veryFast: 1 };
+export const FAST_FORWARD = 4;
+
 export const DEFAULT_SETTINGS = {
   sensitivity: 1,
-  timeScale: 1.2, // game minutes per real second while exploring
+  timeScale: TIME_SPEEDS.normal,
   voiceLang: 'en-IN',
   tts: true,
   showObjectiveArrow: true,
