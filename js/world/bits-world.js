@@ -7,6 +7,7 @@ import { Campus, ROOMS, mat } from './campus.js';
 import { makeLabel } from './labels.js';
 import { texture, TEX_SIZE } from './textures.js';
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
+import { NavGraph } from './nav.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -171,6 +172,17 @@ const ROOM_HOSTS = {
   auditorium: { host: 'Student Activities Center (SAC)', name: 'SAC · Auditorium' },
 };
 
+// The two walk-through crossings of NAB (one per block, each crossing both blocks). Positions come from the
+// Google Earth imagery (paved bands and entry portals across both blocks) and the OSM footways that meet the
+// outer walls there; accurate to about ±5 m. Each passage runs east-west at a fixed z through one block.
+const NAB_PASSAGES = [
+  { host: 'New Academic Block', z: 97, name: 'NAB north crossing (west block)', outer: 'west' },
+  { host: 'NAB', z: 84, name: 'NAB north crossing (east block)', outer: 'east' },
+  { host: 'New Academic Block', z: 215, name: 'NAB south crossing (west block)', outer: 'west' },
+  { host: 'NAB', z: 206, name: 'NAB south crossing (east block)', outer: 'east' },
+];
+const PASSAGE_HALF = 2; // 4 m wide
+
 export class BitsCampus extends Campus {
   constructor(root) {
     super(root);
@@ -195,7 +207,9 @@ export class BitsCampus extends Campus {
     this.buildAreas();
     this.buildRoads();
     this.placeRooms();
+    this.planPassages();
     this.buildBuildings();
+    this.buildPassages();
     this.buildRotunda();
     this.buildClockTowerAt();
     this.buildTemple();
@@ -206,6 +220,7 @@ export class BitsCampus extends Campus {
     this.buildMainGate();
     this.buildStatues();
     this.buildLampPosts();
+    this.buildNav();
     this.buildTrees();
     this.buildLabels();
     this.flushGeometry();
@@ -408,7 +423,9 @@ export class BitsCampus extends Campus {
   }
 
   // Place an axis-aligned room inside the host so its door wall sits just inside the host's facade.
-  fitRoom(host, w, d, side, used) {
+  // The facade is measured on the door's own line (doorOff from the room's corner), the corridor from the door
+  // to the facade must stay inside the host, and the door must open onto open ground, not another building.
+  fitRoom(host, w, d, side, used, doorOff) {
     const bb = host.bb;
     const ok = (x0, z0) => {
       for (let t = 0; t <= 1.0001; t += 0.125) {
@@ -424,21 +441,31 @@ export class BitsCampus extends Campus {
     const cands = [];
     for (let v = along[0] + 1; v <= along[1] - 1; v += 1) cands.push(v);
     cands.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+    const horiz = side === 'south' || side === 'north';
     for (const c of cands) {
-      // door centre line c; find the facade on the door side
-      const axis = side === 'south' || side === 'north' ? 'x' : 'z';
-      const hits = crossings(host.outer, axis, c);
+      // room centre line c; the door runs along line dl, and the facade is found on that line
+      const dl = c - (horiz ? w : d) / 2 + doorOff;
+      const hits = crossings(host.outer, horiz ? 'x' : 'z', dl).sort((p, q) => p - q);
       if (!hits.length) continue;
-      const edge = side === 'south' || side === 'east' ? Math.max(...hits) : Math.min(...hits);
-      for (let inset = 0.6; inset < 14; inset += 0.4) {
-        let x0; let z0;
-        if (side === 'south') { x0 = c - w / 2; z0 = edge - inset - d; }
-        if (side === 'north') { x0 = c - w / 2; z0 = edge + inset; }
-        if (side === 'east') { z0 = c - d / 2; x0 = edge - inset - w; }
-        if (side === 'west') { z0 = c - d / 2; x0 = edge + inset; }
-        if (ok(x0, z0)) {
-          if (!best || inset < best.inset) best = { x0, z0, inset, edge, c };
-          break;
+      const out = side === 'south' || side === 'east' ? 1 : -1;
+      const at = (v) => (horiz ? [dl, v] : [v, dl]);
+      // Concave hosts cross the door line several times: every place the line leaves the host is a facade.
+      const edges = hits.filter((_, k) => (out > 0 ? k % 2 === 1 : k % 2 === 0));
+      if (out > 0) edges.reverse();
+      for (const edge of edges) {
+        const [ex, ez] = at(edge + out * 1.6);
+        if (this.isBuilt(ex, ez, 0.6)) continue; // door would open onto another building
+        for (let inset = 0.6; inset < 14; inset += 0.4) {
+          let x0; let z0;
+          if (side === 'south') { x0 = c - w / 2; z0 = edge - inset - d; }
+          if (side === 'north') { x0 = c - w / 2; z0 = edge + inset; }
+          if (side === 'east') { z0 = c - d / 2; x0 = edge - inset - w; }
+          if (side === 'west') { z0 = c - d / 2; x0 = edge + inset; }
+          if (ok(x0, z0)) {
+            const corridorIn = [...Array(Math.ceil(inset) + 1).keys()].every((k) => inBuilding(...at(edge - out * Math.min(inset, k + 0.3)), host));
+            if (corridorIn && (!best || inset < best.inset)) best = { x0, z0, inset, edge, c };
+            break;
+          }
         }
       }
       if (best && best.inset < 1.5) break;
@@ -458,7 +485,8 @@ export class BitsCampus extends Campus {
       const host = this.findBuilding(cfg.host);
       const w = s.x1 - s.x0; const d = s.z1 - s.z0;
       const used = usedByHost.get(host) || [];
-      const fit = this.fitRoom(host, w, d, s.door.side, used);
+      const horizDoor = s.door.side === 'south' || s.door.side === 'north';
+      const fit = this.fitRoom(host, w, d, s.door.side, used, s.door.at - (horizDoor ? s.x0 : s.z0));
       if (!fit) throw new Error(`Room ${id} does not fit in ${cfg.host}`);
       const dx = fit.x0 - s.x0; const dz = fit.z0 - s.z0;
       const horiz = s.door.side === 'south' || s.door.side === 'north';
@@ -479,6 +507,8 @@ export class BitsCampus extends Campus {
       if (s.door.side === 'west') cut = { minX: fit.edge - 2, maxX: r.x0 + 0.3, minZ: at - half, maxZ: at + half };
       cut.room = r;
       cut.side = s.door.side;
+      const ex = { south: [at, fit.edge + 1.6], north: [at, fit.edge - 1.6], east: [fit.edge + 1.6, at], west: [fit.edge - 1.6, at] }[s.door.side];
+      r.exit = new THREE.Vector3(ex[0], 0, ex[1]);
       this.hostCuts.get(host).push(cut);
     }
     for (const r of this.roomList) this.buildRoom(r);
@@ -512,6 +542,39 @@ export class BitsCampus extends Campus {
     return g;
   }
 
+  // ---------- NAB passages ----------
+  // Open both facades where each crossing meets them; the walls above the openings stay.
+  planPassages() {
+    this.passages = [];
+    for (const cfg of NAB_PASSAGES) {
+      const host = this.findBuilding(cfg.host);
+      const xs = crossings(host.outer, 'z', cfg.z).sort((a, b) => a - b);
+      if (xs.length !== 2) throw new Error(`NAB passage at z=${cfg.z} does not cross ${cfg.host} cleanly`);
+      const [x0, x1] = xs;
+      const z0 = cfg.z - PASSAGE_HALF; const z1 = cfg.z + PASSAGE_HALF;
+      for (const r of this.roomList) {
+        if (r.host === cfg.host && r.x0 < x1 && r.x1 > x0 && r.z0 < z1 + 1 && r.z1 > z0 - 1) throw new Error(`NAB passage at z=${cfg.z} runs into ${r.name}`);
+      }
+      const west = [x0 - 2, cfg.z]; const east = [x1 + 2, cfg.z];
+      const p = { ...cfg, x0, x1, minX: x0 - 2.5, maxX: x1 + 2.5, minZ: z0, maxZ: z1, a: cfg.outer === 'west' ? west : east, b: cfg.outer === 'west' ? east : west };
+      this.passages.push(p);
+      if (!this.hostCuts.has(host)) this.hostCuts.set(host, []);
+      for (const x of [x0, x1]) this.hostCuts.get(host).push({ minX: x - 1.5, maxX: x + 1.5, minZ: z0, maxZ: z1, passage: p });
+    }
+  }
+
+  // Side walls, ceiling and paving inside each crossing, so the hollow block stays closed off.
+  buildPassages() {
+    const wall = { tex: 'plaster', tint: '#cfc6b4', collide: true };
+    for (const p of this.passages) {
+      const len = p.x1 - p.x0; const mx = (p.x0 + p.x1) / 2;
+      for (const z of [p.minZ, p.maxZ]) this.box(mx, 0, z, len, 2.7, 0.25, null, wall);
+      this.box(mx, 2.7, p.z, len + 0.4, 0.3, PASSAGE_HALF * 2 + 0.25, null, { ...wall, collide: false });
+      this.box(mx, 0, p.z, len + 3, 0.04, PASSAGE_HALF * 2 - 0.1, null, { tex: 'concrete', tint: '#d9d2c4', collide: false });
+      this.label(p.name.replace(/ \(.*/, ''), p.a[0], 3.3, p.z, { height: 0.42 });
+    }
+  }
+
   // ---------- buildings ----------
   buildBuildings() {
     const skip = new Set(['Saraswati Temple']);
@@ -526,7 +589,7 @@ export class BitsCampus extends Campus {
       const roof = roofOf(b);
       this.addShape(roof, cx, cz, this.flatShape(b.outer, b.holes, h, roof === 'roofSolar' ? 16 : roof === 'roofGreen' ? TEX_SIZE.grass : 4));
       for (const hole of b.holes) this.addShape('grass', cx, cz, this.flatShape(hole, [], 0.03, TEX_SIZE.grass));
-      for (const cut of cuts) this.buildJambs(cut, h);
+      for (const cut of cuts) if (cut.room) this.buildJambs(cut, h);
       // domed corner kiosks on the Main Building wings
       if (b.name?.startsWith('Main Building (')) for (const [x, z] of b.outer) this.chhatri(x, h + 0.9, z, 1.4, cx, cz);
     }
@@ -576,7 +639,7 @@ export class BitsCampus extends Campus {
           continue;
         }
         b.quad([a[0], 0, a[1]], [c[0], 0, c[1]], [c[0], h, c[1]], [a[0], h, a[1]], [[u0, 0], [u1, 0], [u1, h / fac.floor], [u0, h / fac.floor]], nrm);
-        this.colliders.push({ minX: Math.min(a[0], c[0]) - 0.25, maxX: Math.max(a[0], c[0]) + 0.25, minZ: Math.min(a[1], c[1]) - 0.25, maxZ: Math.max(a[1], c[1]) + 0.25, minY: 0, maxY: h, walkable: false, enabled: true });
+        this.colliders.push({ minX: Math.min(a[0], c[0]) - 0.25, maxX: Math.max(a[0], c[0]) + 0.25, minZ: Math.min(a[1], c[1]) - 0.25, maxZ: Math.max(a[1], c[1]) + 0.25, minY: 0, maxY: h, walkable: false, enabled: true, wall: true });
       }
       if (detailed) par.quad([p0[0], h, p0[1]], [p1[0], h, p1[1]], [p1[0], h + 0.9, p1[1]], [p0[0], h + 0.9, p0[1]], [[0, 0], [1, 0], [1, 1], [0, 1]], nrm);
     }
@@ -1075,8 +1138,11 @@ export class BitsCampus extends Campus {
   // ---------- trees ----------
   buildTrees() {
     const pts = [];
+    const fb = this.fieldBounds;
     const add = (x, z, s) => {
       if (this.isBuilt(x, z, 1.5) || this.nearRoad(x, z, 0.8)) return;
+      if (fb && x > fb.minX - 3 && x < fb.maxX + 3 && z > fb.minZ - 3 && z < fb.maxZ + 3) return;
+      if (this.keepClear(x, z)) return;
       if (Math.hypot(x, z) < 30) return;
       if (this.gatePos && Math.hypot(x - this.gatePos.x, z - this.gatePos.z) < 26) return;
       if ((this.statuePts || []).some(([sx, sz]) => Math.hypot(x - sx, z - sz) < 9)) return;
@@ -1152,6 +1218,17 @@ export class BitsCampus extends Campus {
       }
     }
     this.treeCount = pts.length;
+    // Trunks: a lookup grid for the NPC checks and a low collider for the player. 1.2 m tall, so the
+    // third-person camera (always above head height) never snaps in when a tree passes behind you.
+    this.treeGrid = new Map();
+    for (const [x, z, k] of pts) {
+      const r = 0.34 * k;
+      const key = `${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+      if (!this.treeGrid.has(key)) this.treeGrid.set(key, []);
+      this.treeGrid.get(key).push([x, z, r]);
+      const h = Math.min(0.45, Math.max(0.25, 0.3 * k));
+      this.colliders.push({ minX: x - h, maxX: x + h, minZ: z - h, maxZ: z + h, minY: 0, maxY: 1.2, walkable: false, enabled: true, tree: true });
+    }
     this.buildPalms();
   }
 
@@ -1206,6 +1283,83 @@ export class BitsCampus extends Campus {
   }
 
   // ---------- runtime ----------
+  // ---------- people: where they can stand and how they get around ----------
+  // Open ground, a gameplay room, a door corridor or a NAB passage; `pad` keeps a body's width off the walls.
+  walkableAt(x, z, pad = 0) {
+    if (this.roomAt(x, z)) return true;
+    for (const cuts of this.hostCuts.values()) {
+      for (const q of cuts) {
+        const inset = q.passage ? pad : 0;
+        if (x > q.minX && x < q.maxX && z > q.minZ + inset && z < q.maxZ - inset) return true;
+      }
+    }
+    for (const p of this.passages) if (x > p.minX && x < p.maxX && z > p.minZ + pad && z < p.maxZ - pad) return true;
+    return !this.isBuilt(x, z, pad);
+  }
+
+  // Within `clear` metres of a tree trunk's surface.
+  treeNear(x, z, clear = 0) {
+    if (!this.treeGrid) return false;
+    const gx = Math.floor(x / 10); const gz = Math.floor(z / 10);
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        for (const [tx, tz, r] of this.treeGrid.get(`${gx + i},${gz + j}`) || []) if (Math.hypot(x - tx, z - tz) < r + clear) return true;
+      }
+    }
+    return false;
+  }
+
+  // Free-standing solid things outdoors (statues, stalls, benches...). Walls and trunks are checked separately.
+  solidAt(x, z, pad = 0.25) {
+    this.allColliders();
+    for (const c of this.colliderGrid.grid.get(`${Math.floor(x / 24)},${Math.floor(z / 24)}`) || []) {
+      if (!c.enabled || c.walkable || c.wall || c.tree || c.maxY < 0.4) continue;
+      if (x > c.minX - pad && x < c.maxX + pad && z > c.minZ - pad && z < c.maxZ + pad) return true;
+    }
+    return false;
+  }
+
+  npcBlocked(x, z) {
+    return !this.walkableAt(x, z, 0.35) || this.treeNear(x, z, 0.45) || this.solidAt(x, z);
+  }
+
+  // The nearest spot a person can actually stand on. Points inside gameplay rooms are left alone (seats).
+  freeSpot(p) {
+    if (this.roomAt(p.x, p.z) || !this.npcBlocked(p.x, p.z)) return p;
+    for (let r = 0.75; r <= 30; r += 0.75) {
+      const n = Math.ceil((2 * Math.PI * r) / 0.75);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const x = p.x + Math.cos(a) * r; const z = p.z + Math.sin(a) * r;
+        if (!this.npcBlocked(x, z)) return new THREE.Vector3(x, p.y || 0, z);
+      }
+    }
+    return p;
+  }
+
+  buildNav() {
+    this.nav = new NavGraph(D.roads, (x, z) => this.npcBlocked(x, z));
+    for (const p of this.passages) this.nav.addLink(p.a, p.b);
+    // Everywhere people stand or arrive, plus the straight line to their road, stays free of trees.
+    const spots = [];
+    const visit = (v) => { if (v instanceof THREE.Vector3) spots.push(v); else if (Array.isArray(v)) v.forEach(visit); };
+    for (const v of Object.values(this.spots)) visit(v);
+    for (const r of this.roomList) spots.push(r.exit);
+    for (const p of this.passages) spots.push(new THREE.Vector3(p.a[0], 0, p.a[1]), new THREE.Vector3(p.b[0], 0, p.b[1]));
+    this.clearZones = [];
+    for (const v of spots) {
+      if (this.roomAt(v.x, v.z)) continue;
+      const e = this.nav.entry(v.x, v.z);
+      const n = e.i === undefined ? null : this.nav.nodes[e.i];
+      this.clearZones.push(n && e.direct ? [v.x, v.z, n.x, n.z] : [v.x, v.z, v.x, v.z]);
+    }
+  }
+
+  keepClear(x, z) {
+    for (const [ax, az, bx, bz] of this.clearZones || []) if (segDist(x, z, [ax, az], [bx, bz]) < 2.2) return true;
+    return false;
+  }
+
   update(dt, playerPos) {
     super.update(dt, playerPos);
     if (!playerPos) return;
@@ -1243,18 +1397,22 @@ export class BitsCampus extends Campus {
     return null;
   }
 
+  // Out of the current room by its door, along the roads (and NAB passages), in by the target's door.
   pathTo(from, targetRoomId, point) {
-    const pts = [];
     const fromRoom = this.roomAt(from.x, from.z);
-    if (fromRoom && fromRoom !== targetRoomId) {
+    if (fromRoom && fromRoom === targetRoomId) return [point.clone()];
+    const pts = [];
+    let start = [from.x, from.z];
+    if (fromRoom) {
       const r = this.rooms[fromRoom];
-      pts.push(r.inside.clone(), r.outside.clone());
+      pts.push(r.inside.clone(), r.outside.clone(), r.exit.clone());
+      start = [r.exit.x, r.exit.z];
     }
-    if (targetRoomId && fromRoom !== targetRoomId) {
-      const r = this.rooms[targetRoomId];
-      pts.push(r.outside.clone(), r.inside.clone());
-    }
-    pts.push(point.clone());
+    const target = targetRoomId ? this.rooms[targetRoomId] : null;
+    const goal = target ? target.exit : this.freeSpot(point);
+    for (const [x, z] of this.nav.route(start, [goal.x, goal.z])) pts.push(new THREE.Vector3(x, 0, z));
+    if (target) pts.push(target.outside.clone(), target.inside.clone(), point.clone());
+    else pts[pts.length - 1] = goal.clone();
     return pts;
   }
 

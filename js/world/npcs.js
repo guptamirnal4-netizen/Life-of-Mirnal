@@ -440,6 +440,7 @@ export class NPC {
   }
 
   teleport(p) {
+    if (this.placeFilter) p = this.placeFilter(p);
     this.baseY = p.y || 0;
     this.pos.set(p.x, this.baseY, p.z);
     this.path = [];
@@ -602,6 +603,8 @@ export class NPCManager {
   add(id, opts) {
     if (this.npcs.has(id)) return this.npcs.get(id);
     const npc = new NPC(this.scene, { id, ...opts });
+    // On a campus that knows where people can stand (the BITS world), never place anyone inside a wall or tree.
+    npc.placeFilter = (p) => (this.campus?.freeSpot ? this.campus.freeSpot(p) : p);
     this.npcs.set(id, npc);
     return npc;
   }
