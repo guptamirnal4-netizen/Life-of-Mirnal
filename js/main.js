@@ -7,9 +7,10 @@ import { Player } from './world/player.js';
 import { NPC, NPCManager, Ball, studentHeight } from './world/npcs.js';
 import { ANTHEM_LINES, ANTHEM_DURATION, ANTHEM_AUDIO_URL, LYRIC_WORDS } from '../data/anthem.js';
 import { openAnthemPractice } from './ui/anthempractice.js';
-import { createState, ensureYear, activeClassmates, adjustFriend, TIME_SPEEDS, FAST_FORWARD } from './core/state.js';
+import { createState, ensureYear, activeClassmates, adjustFriend, newDay, newSem, TIME_SPEEDS, FAST_FORWARD } from './core/state.js';
 import { buildDay, currentSlot, nextSlot, fmt, advanceClock } from './core/timetable.js';
-import { promote, repeatYear, applyRemedial, scoreLabs, applyCollegeGrades, cgpa, startCollege } from './core/academics.js';
+import { promote, repeatYear, applyRemedial, scoreLabs, applyCollegeGrades, cgpa, startCollege, buildExam, scoreExam, blendMidsem } from './core/academics.js';
+import { CALENDAR, CALENDAR_NOTE, calendarDay, dayTitle, isLastDay } from '../data/college-calendar.js';
 import { COLLEGE, COLLEGE_STAFF, COLLEGE_INTRO, ROADMAP } from '../data/college.js';
 import { saveGame, loadGame, hasSave } from './core/save.js';
 import { streamGroup } from './core/streams.js';
@@ -251,7 +252,8 @@ function loadYear({ intro = true } = {}) {
   if (state.phase === 'collegeYearDone') return setupCollegeDone(intro);
   if (state.phase === 'orientation') return setupOrientation(intro);
   if (state.phase === 'graduated') return setupGraduated();
-  slots = buildDay(state.classNum, state.stream);
+  if (isCollege(state.classNum)) state.sem ||= newSem();
+  slots = buildDay(state.classNum, state.stream, isCollege(state.classNum) ? { calDay: today(), pendingLabs: pendingLabs() } : {});
   campus.rebuildClassroom(state.classNum, classroomTitle());
   const seat = campus.seats[campus.playerSeatIndex];
   deskInteract.pos.set(seat.desk.x, 1, seat.desk.z + 0.3);
@@ -331,20 +333,21 @@ function showCollegeIntro(c) {
   openPanel(h('div', {},
     h('div', { class: 'kicker' }, `BITS Pilani · ${y.period}`),
     COLLEGE_INTRO[c].map((p) => h('p', {}, p)),
-    h('h4', {}, 'Today'),
-    h('ul', { class: 'clean' },
-      c === 13 ? h('li', {}, '📝 Register for your courses at Academic Registration') : null,
-      h('li', {}, `🎓 Lectures: ${y.courses.map((x) => `${x.code} ${x.name}`).join(' · ')}`),
-      h('li', {}, `🧪 Labs: ${y.practicals.map((p) => p.name).join('; ')}`),
-      h('li', {}, `📁 Assignment (at the Library project table): ${y.project.name}`),
-      h('li', {}, `🎉 Evening: ${c === 13 ? 'Oasis' : 'APOGEE'} at the Auditorium`),
-      h('li', {}, '📝 Midsems and the Comprehensive exam after the day')),
+    h('h4', {}, `How the semester runs · ${CALENDAR[c].length} days`),
+    h('ol', { class: 'clean' },
+      h('li', {}, `📝 Day 1 · ${CALENDAR[c][0].month}: register for your courses at the Main Building. Your timetable is issued after you register.`),
+      h('li', {}, `📚 Classes: ${y.courses.map((x) => x.code).join(', ')}, a few lectures a day in NAB, labs in FD-II (${y.practicals.map((p) => p.name).join('; ')})`),
+      h('li', {}, `🏖 Holidays${c === 13 ? ' and BOSM' : ''} along the way`),
+      h('li', {}, '✏ Mid-semester tests in week 10, at your desk in NAB'),
+      h('li', {}, `🎉 ${c === 13 ? 'Oasis' : 'APOGEE'} at the Auditorium`),
+      h('li', {}, '📝 Comprehensive exams after the last day of classes, then your grade sheet')),
+    h('p', {}, `Each day you wake up at your Bhawan. When the day is done, sleep to move to the next one. Assignment (at the Library): ${y.project.name}.`),
     h('p', { class: 'muted small' }, 'Courses follow BITS Pilani’s published first-year list. Professors, batchmates and events in the story are fictional.'),
     h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'start begin go', onclick: () => {
       closeAll();
       const reg = campus.objectivePoint('reception');
       const far = reg ? Math.round(player.pos.distanceTo(reg) / 10) * 10 : 0;
-      if (far > 150) toast(`🚲 Registration is ${far} m away. Press C to ride your cycle, or hold Shift to run.`, 6000);
+      toast(`📝 ${dayTitle(today(), state.sem.day, semLength())}. Registration opens at 9:00 in the Main Building${far > 150 ? `, ${far} m away (C: cycle)` : ''}.`, 6500);
     } }, 'Start the day'))),
   { title: `College Journey · ${y.label}` });
 }
@@ -408,6 +411,7 @@ function scheduleNPCs(slot) {
       case 'assembly':
         npcs.send(id, null, campus.spots.assembly[(i * 2 + 1) % campus.spots.assembly.length], { face: Math.PI });
         break;
+      case 'exam':
       case 'lesson':
         if (inMyGroup(cm)) {
           const seat = seats[(seatI++ * 2 + 1) % seats.length];
@@ -446,7 +450,7 @@ function scheduleNPCs(slot) {
   let labAssigned = false;
   for (const [id, m] of npcMeta) {
     if (m.kind !== 'teacher') continue;
-    const teaching = slot.type === 'lesson' && m.subjects.some((s) => s.id === slot.subject);
+    const teaching = (slot.type === 'lesson' && m.subjects.some((s) => s.id === slot.subject)) || (slot.type === 'exam' && m.subjects.some((s) => s.id === slot.papers[0]));
     if (id === 'tch:pe') {
       if (slot.type === 'sports') npcs.send(id, null, new THREE.Vector3(38, 0, 2));
       else npcs.send(id, 'staffroom', campus.spots.staffroom[7]);
@@ -470,6 +474,7 @@ function onSlotChange(slot, prev) {
     state.day.attendance[prev.id] = 'absent';
     toast(`You missed ${prev.label.split('· ')[1]}. Marked absent.`, 3500);
   }
+  if (prev && prev.type === 'exam' && !state.day.examDone) toast(`You missed the ${prev.exam === 'midsem' ? 'mid-sem' : 'compre'} paper. It counts as zero.`, 4000);
   if (prev) bell();
   if (prev) toast(`🔔 ${fmt(slot.start)} · ${slot.label}`);
   scheduleNPCs(slot);
@@ -482,22 +487,118 @@ function onSlotChange(slot, prev) {
 function startLessonIfReady(slot) {
   if (slot.type !== 'lesson' || state.day.lessonsDone[slot.subject] || isOpen()) return;
   if (!player.seated || player.seated.index !== campus.playerSeatIndex) return;
-  const subject = getClassSubjects(state.classNum, state.stream).find((x) => x.id === slot.subject);
+  let subject = getClassSubjects(state.classNum, state.stream).find((x) => x.id === slot.subject);
+  const sem = isCollege(state.classNum) ? state.sem : null;
+  if (sem) {
+    // Each lecture teaches the next topic of the course; once all are covered, lectures revise them.
+    const n = sem.lectureNo[subject.id] || 0;
+    subject = { ...subject, name: `${subject.name} · Lecture ${n + 1}`, topics: [subject.topics[n % subject.topics.length]] };
+  }
   state.day.attendance[slot.id] = state.day.clock > slot.start + 15 ? 'late' : 'present';
   if (state.day.attendance[slot.id] === 'late') toast('You were late, but you made it.');
   exitLock();
   runLesson(ctx, { subject, classNum: state.classNum }, () => {
+    if (sem) {
+      sem.lectureNo[slot.subject] = (sem.lectureNo[slot.subject] || 0) + 1;
+      sem.attended[slot.subject] = (sem.attended[slot.subject] || 0) + 1;
+    }
     state.day.clock = Math.max(state.day.clock, slot.end);
     save(true);
   });
 }
 
+// ---------- College semester ----------
+const today = () => calendarDay(state.classNum, state.sem.day);
+const pendingLabs = () => getPracticals(state.classNum).filter((p) => state.day.practicalsDone[p.subject] === undefined).map((p) => p.subject);
+const semLength = () => CALENDAR[state.classNum].length;
+
+// Mid-sems and compre papers are written at your desk in the NAB lecture theatre.
+function startExamIfReady(slot) {
+  if (slot.type !== 'exam' || state.day.examDone || isOpen()) return;
+  if (!player.seated || player.seated.index !== campus.playerSeatIndex) return;
+  const mid = slot.exam === 'midsem';
+  exitLock();
+  runExam(ctx, state.classNum, { onlySubjects: slot.papers, topicLimit: mid ? 1 : null, title: mid ? 'Mid-semester test' : 'Comprehensive examination' }, (results) => {
+    state.day.examDone = true;
+    for (const [id, r] of Object.entries(results)) {
+      if (mid) state.sem.midsem[id] = r.outOf ? r.correct / r.outOf : 0;
+      else state.sem.compre[id] = r;
+    }
+    state.day.clock = Math.max(state.day.clock, slot.end);
+    save(true);
+    if (!mid && isLastDay(state.classNum, state.sem.day)) return finalizeSemester();
+    const lines = Object.entries(results).map(([, r]) => `${r.name}: ${r.correct}/${r.outOf}`);
+    toast(`📝 ${mid ? 'Mid-sem' : 'Compre'} paper done · ${lines.join(' · ')}`, 5000);
+    requestLock();
+  });
+}
+
+// After the last compre paper: compre + mid-sems + labs → grades and SGPA, then the grade sheet.
+function finalizeSemester() {
+  const c = state.classNum;
+  const missing = getClassSubjects(c).map((s) => s.id).filter((id) => !state.sem.compre[id]);
+  const results = { ...state.sem.compre };
+  if (missing.length) Object.assign(results, scoreExam(state, c, state.stream, buildExam(c, state.stream, missing), {}));
+  blendMidsem(results, state.sem.midsem);
+  Object.assign(results, scoreLabs(state, c));
+  const year = ensureYear(state, c);
+  year.results = results;
+  year.sgpa = applyCollegeGrades(c, results);
+  state.day.ended = true;
+  save(true);
+  exitLock();
+  openReport();
+}
+
+// Sleep: tally today's lectures, then wake up at the hostel on the next calendar day.
+function advanceDay() {
+  for (const s of slots) if (s.type === 'lesson') state.sem.held[s.subject] = (state.sem.held[s.subject] || 0) + 1;
+  const keep = { practicalsDone: state.day.practicalsDone, projectDone: state.day.projectDone, registered: state.sem.registered };
+  state.sem.day += 1;
+  state.day = { ...newDay(), ...keep };
+  state.player = null;
+  setBike(false);
+  save(true);
+  closeAll();
+  loadYear({ intro: false });
+  const d = today();
+  const lectures = slots.filter((x) => x.type === 'lesson').length;
+  const what = d.kind === 'class' ? `${lectures} lecture${lectures === 1 ? '' : 's'}${slots.some((x) => x.type === 'lab') ? ' and a lab' : ''} today` : slots.find((x) => x.type === 'exam')?.label || d.label || 'No classes today';
+  toast(`☀ ${dayTitle(d, state.sem.day, semLength())} · ${what}. Press T for the timetable.`, 6500);
+}
+
+// Jump to the start of the next timetable slot, or end the day if nothing is left.
+function skipToNext() {
+  const next = nextSlot(slots, state.day.clock);
+  closeAll();
+  if (!next || next.type === 'departure') {
+    if (isCollege(state.classNum)) return endDay();
+    state.day.clock = slots.at(-1).start;
+  } else state.day.clock = next.start;
+  requestLock();
+}
+
 function endDay() {
   if (state.day.ended) return;
+  const c = state.classNum;
+  if (isCollege(c)) {
+    if (isLastDay(c, state.sem.day)) return finalizeSemester();
+    state.day.ended = true;
+    exitLock();
+    save(true);
+    const done = slots.filter((x) => x.type === 'lesson' && state.day.lessonsDone[x.subject]).length;
+    const held = slots.filter((x) => x.type === 'lesson').length;
+    const next = calendarDay(c, state.sem.day + 1);
+    openPanel(h('div', {},
+      h('p', {}, held ? `Lectures today: ${done}/${held} attended.` : 'No lectures today.'),
+      h('p', {}, `Tomorrow: ${dayTitle(next, state.sem.day + 1, semLength())}${next.label ? ` · ${next.label}` : ''}.`),
+      h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'sleep next day tomorrow', onclick: () => advanceDay() }, '🌙 Sleep → next day'))),
+    { title: `Back at the Bhawan · ${dayTitle(today(), state.sem.day, semLength())}` });
+    return;
+  }
   state.day.ended = true;
   exitLock();
   save(true);
-  const c = state.classNum;
   const project = getProject(c, state.stream);
   openPanel(h('div', {},
     h('p', {}, isCollege(c) ? 'The day is over, and the rest of the semester flies by: tut tests, lab reports and late nights at ANC.' : 'The school day is over, and the rest of the term flies by: homework, revision and a few late nights.'),
@@ -836,7 +937,8 @@ function handleInteractable(id) {
     case 'labBench': {
       if (c <= 5) { toast('The science lab is for Class 6 and above. Soon!'); requestLock(); break; }
       if (slot.type !== 'lab') { toast('Practicals happen in the lab period. Check the timetable (T).'); requestLock(); break; }
-      const pending = getPracticals(c, state.stream).filter((p) => state.day.practicalsDone[p.subject] === undefined);
+      // In college each lab session is for one lab course (slot.lab); at school the lab period runs them all.
+      const pending = getPracticals(c, state.stream).filter((p) => state.day.practicalsDone[p.subject] === undefined && (!slot.lab || p.subject === slot.lab));
       if (!pending.length) { toast('All practicals done for today.'); requestLock(); break; }
       practicalRunning = true;
       const runNext = () => {
@@ -865,7 +967,10 @@ function handleInteractable(id) {
     case 'principalDesk': talkTo(npcs.get('principal') || { id: 'principal' }); break;
     case 'registration': {
       if (!isCollege(c)) { toast('The reception desk. Nothing to do here today.'); requestLock(); break; }
-      if (state.day.registered) { toast('You are already registered for this semester.'); requestLock(); break; }
+      if (state.sem.registered) { toast('You are already registered for this semester.'); requestLock(); break; }
+      const regSlot = slots.find((x) => x.type === 'arrival');
+      if (regSlot && state.day.clock < regSlot.start) { toast(`Registration opens at ${fmt(regSlot.start)}.`); requestLock(); break; }
+      const late = !regSlot || state.day.clock >= regSlot.end;
       const y = COLLEGE[c];
       const rows = [...y.courses, ...y.labCourses];
       const close = openPanel(h('div', {},
@@ -875,10 +980,12 @@ function handleInteractable(id) {
         h('p', {}, h('b', {}, `Total: ${rows.reduce((a, r) => a + r.units, 0)} units`)),
         h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'register confirm yes', onclick: () => {
           state.day.registered = true;
+          state.sem.registered = true;
           state.decisions.push({ classNum: c, text: `Registered for ${y.label}: ${rows.length} courses` });
           close();
-          toast('✔ Registered! Head to the Lecture Theatre for your first lecture.');
-          requestLock();
+          save(true);
+          toast(late ? '✔ Late registration done. Your timetable is issued.' : '✔ Registered! Your timetable is issued. Classes begin tomorrow.', 5000);
+          openTimetable(!late);
         } }, '🎤 Say “register” or click to confirm'))), { title: 'Course Registration', closable: true });
       break;
     }
@@ -922,8 +1029,9 @@ function openNoticeBoard() {
 }
 
 // ---------- Panels: timetable, missions, help, pause, settings ----------
-function openTimetable() {
+function openTimetable(justRegistered = false) {
   const clock = state.day.clock;
+  if (isCollege(state.classNum) && state.phase === 'day') return openSemesterTimetable(justRegistered);
   openPanel(h('table', {},
     h('thead', {}, h('tr', {}, ['Time', 'Period', 'Where', 'Status'].map((x) => h('th', {}, x)))),
     h('tbody', {}, slots.map((s) => {
@@ -934,6 +1042,41 @@ function openTimetable() {
       const now = clock >= s.start && clock < s.end;
       return h('tr', { class: now ? 'now' : '' }, h('td', {}, `${fmt(s.start)}–${fmt(s.end)}`), h('td', {}, s.label), h('td', {}, s.location === 'free' ? 'Anywhere' : s.location), h('td', {}, now ? '◀ now ' : '', status));
     }))), { title: `Timetable · ${classroomTitle()}`, closable: true });
+}
+
+// College: today's timetable, skip/sleep buttons, and the whole semester calendar.
+function openSemesterTimetable(justRegistered) {
+  const clock = state.day.clock;
+  const d = today();
+  const next = nextSlot(slots, clock);
+  const icon = { registration: '📝', class: '📚', holiday: '🏖', free: '☀', sports: '🏅', fest: '🎉', midsem: '✏', compre: '📝' };
+  const dayLine = (x, i) => {
+    const lectures = x.kind === 'class' ? '' : x.papers ? ` · ${x.papers.map((id) => getClassSubjects(state.classNum).find((s) => s.id === id)?.code).join(', ')}` : '';
+    const what = x.kind === 'midsem' ? 'Mid-semester test' : x.kind === 'compre' ? 'Comprehensive exam' : x.label || (x.kind === 'class' ? 'Classes' : x.kind);
+    return h('tr', { class: i === state.sem.day ? 'now' : '' }, h('td', {}, `${i + 1}`), h('td', {}, `W${x.week} ${x.weekday} · ${x.month}`), h('td', {}, `${icon[x.kind] || ''} ${what}${lectures}`), h('td', {}, i < state.sem.day ? '✔' : i === state.sem.day ? '◀ today' : ''));
+  };
+  openPanel(h('div', {},
+    justRegistered ? h('p', {}, h('b', {}, '✔ You’re registered. Here is your semester. Classes begin tomorrow.')) : null,
+    h('h4', {}, `Today · ${dayTitle(d, state.sem.day, semLength())}${d.label ? ` · ${d.label}` : ''}`),
+    h('table', {},
+      h('thead', {}, h('tr', {}, ['Time', 'What', 'Where', 'Status'].map((x) => h('th', {}, x)))),
+      h('tbody', {}, slots.map((s) => {
+        let status = '';
+        if (s.type === 'lesson') status = state.day.lessonsDone[s.subject] ? '✔ attended' : state.day.attendance[s.id] === 'absent' ? '✘ missed' : '';
+        if (s.type === 'exam') status = state.day.examDone ? '✔ written' : clock >= s.end ? '✘ missed' : '';
+        if (s.type === 'lab') status = state.day.practicalsDone[s.lab] !== undefined ? '✔ done' : '';
+        const now = clock >= s.start && clock < s.end;
+        const where = { free: 'Anywhere', classroom: 'NAB', sciencelab: 'FD-II lab', reception: 'Main Building', canteen: 'Mess / ANC', auditorium: 'SAC Auditorium', playground: 'Gymkhana', gate: 'Your Bhawan' }[s.location] || s.location;
+        return h('tr', { class: now ? 'now' : '' }, h('td', {}, `${fmt(s.start)}–${fmt(s.end)}`), h('td', {}, s.label), h('td', {}, where), h('td', {}, now ? '◀ now ' : '', status));
+      }))),
+    h('div', { class: 'row wrap' },
+      next && next.type !== 'departure' ? h('button', { 'data-voice': 'skip next wait', onclick: () => skipToNext() }, `⏩ Skip to ${fmt(next.start)} · ${next.label}`) : null,
+      h('button', { 'data-voice': 'sleep end day', onclick: () => { closeAll(); endDay(); } }, isLastDay(state.classNum, state.sem.day) ? '📝 Finish the semester' : '🌙 End the day and sleep')),
+    h('p', { class: 'muted small' }, 'Skipping past a lecture or paper marks it missed. Time runs at 15 s per game minute (Settings), and holding Z speeds it up.'),
+    h('h4', {}, `Semester calendar · ${COLLEGE[state.classNum].label}`),
+    h('table', {}, h('tbody', {}, CALENDAR[state.classNum].map(dayLine))),
+    h('p', { class: 'muted small' }, CALENDAR_NOTE)),
+  { title: `Timetable · ${COLLEGE[state.classNum].label}`, closable: true, wide: true });
 }
 
 function missionList() {
@@ -952,15 +1095,17 @@ function missionList() {
     const pr = getPracticals(c);
     return {
       mandatory: [
-        ['Register for your courses at Academic Registration', !!d.registered],
-        [`Attend lectures (${courses.filter((s) => d.lessonsDone[s.id]).length}/${courses.length})`, courses.every((s) => d.lessonsDone[s.id])],
+        ['Register for your courses (registration day)', !!state.sem.registered],
+        [`Today's lectures (${slots.filter((s) => s.type === 'lesson' && d.lessonsDone[s.subject]).length}/${slots.filter((s) => s.type === 'lesson').length})`, slots.filter((s) => s.type === 'lesson').every((s) => d.lessonsDone[s.subject])],
+        [`Semester attendance: ${(() => { const held = Object.values(state.sem.held).reduce((a, b) => a + b, 0); return held ? `${Math.round(Object.values(state.sem.attended).reduce((a, b) => a + b, 0) / held * 100)}%` : 'no lectures yet'; })()}`, true],
         [`Labs (${pr.filter((p) => d.practicalsDone[p.subject] !== undefined).length}/${pr.length})`, pr.every((p) => d.practicalsDone[p.subject] !== undefined)],
         [`Submit the assignment at the Library: ${COLLEGE[c].project.name}`, d.projectDone],
-        ['Midsems and the Comprehensive exam (end of day)', !!state.years[c]?.results],
+        [`Mid-sems written (${Object.keys(state.sem.midsem).length}/${courses.length})`, Object.keys(state.sem.midsem).length >= courses.length],
+        [`Compre papers written (${Object.keys(state.sem.compre).length}/${courses.length})`, !!state.years[c]?.results],
       ],
       optional: [
         [`Talk to batchmates (${d.optional.talked.length}/3)`, d.optional.talked.length >= 3],
-        [`Go to ${c === 13 ? 'Oasis' : 'APOGEE'} in the evening`, d.eventDone],
+        [`Go to ${c === 13 ? 'Oasis' : 'APOGEE'} (fest day)`, d.eventDone],
         ['Help a batchmate with a lecture', d.optional.helped],
         ['Grab something at ANC', d.optional.canteen],
         ['Read in the Central Library', d.optional.library],
@@ -1018,7 +1163,7 @@ function openSettings() {
     h('label', { class: 'setting' }, 'Game time speed',
       h('select', { onchange: (e) => { s.timeScale = Number(e.target.value); } },
         [[TIME_SPEEDS.slow, 'Slow'], [TIME_SPEEDS.normal, 'Normal'], [TIME_SPEEDS.fast, 'Fast'], [TIME_SPEEDS.veryFast, 'Very fast'], ...(Object.values(TIME_SPEEDS).includes(s.timeScale) ? [] : [[s.timeScale, 'Custom']])]
-          .map(([v, l]) => h('option', { value: v, selected: s.timeScale === v }, `${l} · ${v} game min per second (a 50-min lecture ≈ ${Math.round(50 / v / 60 * 10) / 10} min)`)))),
+          .map(([v, l]) => h('option', { value: v, selected: s.timeScale === v }, `${l} · ${Math.round(1 / v * 10) / 10} s per game minute (an hour ≈ ${Math.round(60 / v / 6) / 10} min)`)))),
     h('label', { class: 'setting' }, 'Graphics',
       h('select', { onchange: (e) => { s.graphics = e.target.value; } },
         [['high', 'High (shadows, sharp detail)'], ['low', 'Low (faster on older laptops)']].map(([v, l]) => h('option', { value: v, selected: (s.graphics || 'high') === v }, l)))),
@@ -1390,15 +1535,29 @@ function objective(slot) {
   if (state.phase === 'graduated') return { text: 'You graduated! Walk to the gate to begin college, or press J to relive school.', loc: 'gate' };
   if (state.phase === 'collegeYearDone') return { text: 'Year 1 complete! The road ahead is at the gate.', loc: 'gate' };
   if (isCollege(state.classNum)) {
-    if (slot.type === 'arrival' && !d.registered) return { text: 'Register for your courses at Academic Registration (E)', loc: 'reception' };
-    if (slot.type === 'arrival') return { text: 'Head to the Lecture Theatre', loc: 'classroom' };
+    const sem = state.sem;
+    const reg = slots.find((x) => x.type === 'arrival');
+    if (!sem.registered && reg && d.clock < reg.start) return { text: `Registration opens at ${fmt(reg.start)} at the Main Building. Head there after breakfast`, loc: 'reception' };
+    if (slot.type === 'arrival' && !sem.registered) return { text: 'Register for your courses at Academic Registration, Main Building (E)', loc: 'reception' };
+    if (!sem.registered && ['break', 'lunch'].includes(slot.type)) return { text: 'You missed registration: late registration at the Main Building (E)', loc: 'reception' };
+    if (slot.type === 'arrival') return { text: 'Registered! Classes begin tomorrow. Explore the campus (T: timetable)', loc: null };
     if (slot.type === 'lab') {
-      const pending = getPracticals(state.classNum).some((p) => d.practicalsDone[p.subject] === undefined);
-      return pending ? { text: 'Labs: go to the lab bench (E)', loc: 'sciencelab' } : { text: 'Labs done!', loc: null };
+      const pending = getPracticals(state.classNum).some((p) => p.subject === slot.lab && d.practicalsDone[p.subject] === undefined);
+      return pending ? { text: 'Lab session: go to the lab bench in FD-II (E)', loc: 'sciencelab' } : { text: 'Lab done for today!', loc: null };
     }
-    if (slot.type === 'fest') return d.eventDone ? { text: 'Enjoy the fest, then head back to the hostel', loc: null } : { text: `${state.classNum === 13 ? 'Oasis' : 'APOGEE'} is on! Go to the Auditorium stage (E)`, loc: 'auditorium' };
-    if (slot.type === 'departure') return { text: 'Head back to the hostel: walk to the gate (E)', loc: 'gate' };
+    if (slot.type === 'exam') return d.examDone ? { text: 'Paper done. Free for the rest of the day', loc: null } : { text: `${slot.label}: sit at your desk in the NAB lecture theatre`, loc: player.seated ? null : 'classroom' };
+    if (slot.type === 'fest') return d.eventDone ? { text: 'Enjoy the fest, then head back to the Bhawan', loc: null } : { text: `${today().fest} is on! Go to the Auditorium stage (E)`, loc: 'auditorium' };
+    if (slot.type === 'sports') return { text: 'BOSM is on: watch or play at the Gymkhana Grounds', loc: 'playground' };
+    if (slot.type === 'departure') return { text: 'Night: go back to your Bhawan (E at the gate) to sleep', loc: 'gate' };
     if (slot.type === 'lesson' && !d.lessonsDone[slot.subject]) return { text: `${slot.label}: take your seat (yellow mark)`, loc: player.seated ? null : 'classroom' };
+    if (slot.type === 'lesson') return { text: 'Lecture done. Next: check the timetable (T)', loc: null };
+    if (slot.type === 'break' || slot.type === 'lunch') {
+      const next = nextSlot(slots, d.clock);
+      const p = getProject(state.classNum);
+      if (next && ['lesson', 'lab', 'exam', 'fest', 'sports'].includes(next.type)) return { text: `${slot.label}. Next at ${fmt(next.start)}: ${next.label} (T → skip ahead)`, loc: null };
+      if (p && !d.projectDone && sem.registered) return { text: `${slot.label}. Assignment due: ${p.name} (Library)`, loc: 'library' };
+      return { text: `${slot.label} (T → skip ahead)`, loc: null };
+    }
   }
   switch (slot.type) {
     case 'arrival': return { text: 'Walk to the Assembly Ground', loc: 'assembly' };
@@ -1422,7 +1581,7 @@ function objective(slot) {
 
 function updateHUD(slot) {
   const c = state.classNum;
-  hud.cls.textContent = state.phase === 'collegeYearDone' ? 'BITS Pilani · Year 1 complete' : isCollege(c) ? `BITS Pilani · ${COLLEGE[c].label}` : state.phase === 'graduated' ? 'Graduated · Class of Sunrise' : state.phase === 'orientation' ? 'Class 10 → 11 · Orientation' : `Class ${c} · ${STAGES[stageOf(c)]}`;
+  hud.cls.textContent = state.phase === 'collegeYearDone' ? 'BITS Pilani · Year 1 complete' : isCollege(c) ? `BITS Pilani · ${COLLEGE[c].label} · ${dayTitle(today(), state.sem.day, semLength())}` : state.phase === 'graduated' ? 'Graduated · Class of Sunrise' : state.phase === 'orientation' ? 'Class 10 → 11 · Orientation' : `Class ${c} · ${STAGES[stageOf(c)]}`;
   hud.time.textContent = state.phase === 'day' ? fmt(state.day.clock) : '';
   const gait = player.gait();
   hud.move.textContent = player.seated ? '🪑 Seated' : gait === 'ride' ? `🚲 Cycling · ${Math.round(player.speedNow * 3.6)} km/h` : gait === 'run' ? '🏃 Running' : gait === 'walk' ? '🚶 Walking' : player.bike ? '🚲 On your cycle' : '🧍 Standing';
@@ -1450,7 +1609,7 @@ function updateHUD(slot) {
     } else hud.arrow.parentElement.classList.add('hidden');
   } else hud.arrow.parentElement.classList.add('hidden');
   const t = !isOpen() && !player.seated ? interactTarget() : null;
-  hud.prompt.textContent = player.seated ? (state.phase === 'day' && nextSlot(slots, state.day.clock)?.type === 'lesson' && !fastForward ? 'E · stand up · hold Z to fast-forward to the lecture' : 'E · stand up') : t ? `E · ${t.label}` : '';
+  hud.prompt.textContent = player.seated ? (state.phase === 'day' && ['lesson', 'exam'].includes(nextSlot(slots, state.day.clock)?.type) && !fastForward ? `E · stand up · hold Z to fast-forward to the ${nextSlot(slots, state.day.clock).type === 'exam' ? 'paper' : 'lecture'}` : 'E · stand up') : t ? `E · ${t.label}` : '';
   hud.prompt.classList.toggle('hidden', !hud.prompt.textContent || isOpen() || !!anthem);
   hud.resume.classList.toggle('hidden', !!document.pointerLockElement || isOpen() || mode !== 'playing');
 }
@@ -1483,6 +1642,7 @@ function frame() {
         onSlotChange(nowSlot, prev);
       }
       if (state.phase === 'day' && !practicalRunning) startLessonIfReady(nowSlot);
+      if (state.phase === 'day' && isCollege(state.classNum) && !state.day.ended) startExamIfReady(nowSlot);
       if (state.phase === 'day' && !isCollege(state.classNum) && nowSlot.type === 'arrival' && !state.day.earlyPrompted && player.pos.distanceTo(campus.spots.assemblyPlayer) < 9) {
         state.day.earlyPrompted = true;
         toast('🎤 You’re early! Press E at the assembly line to practise Jana Gana Mana with your voice.', 4500);
@@ -1535,4 +1695,4 @@ showTitle();
 frame();
 
 // Exposed for automated testing in the browser.
-window.__game = { get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState };
+window.__game = { get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };

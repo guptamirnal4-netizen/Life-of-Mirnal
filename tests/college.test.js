@@ -20,11 +20,12 @@ test('BITS first-year course list matches the official list', () => {
   assert.equal(units(14), 20);
 });
 
-test('college day has lectures, labs, fest, no assembly', () => {
-  const day = buildDay(13);
+test('a college class day has lectures in NAB and no school assembly', () => {
+  const day = buildDay(13, null, { calDay: { week: 2, weekday: 'Mon', month: 'Aug', kind: 'class' }, pendingLabs: ['phy110'] });
   assert.ok(!day.some((s) => s.type === 'assembly'));
-  assert.equal(day.filter((s) => s.type === 'lesson').length, 5);
-  assert.ok(day.some((s) => s.type === 'fest'));
+  assert.equal(day.filter((s) => s.type === 'lesson').length, 3);
+  assert.ok(day.filter((s) => s.type === 'lesson').every((s) => s.location === 'classroom'));
+  assert.ok(day.some((s) => s.type === 'lab' && s.lab === 'phy110'));
   for (let i = 1; i < day.length; i++) assert.equal(day[i].start, day[i - 1].end);
 });
 

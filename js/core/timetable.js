@@ -1,4 +1,5 @@
 import { getClassSubjects, getPracticals } from '../../data/curriculum.js';
+import { calendarDay, WEEKLY } from '../../data/college-calendar.js';
 
 const hm = (h, m) => h * 60 + m;
 export const fmt = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(Math.floor(mins % 60)).padStart(2, '0')}`;
@@ -6,8 +7,9 @@ export const fmt = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:
 export const PERIOD = 40;
 
 // One school day per class year: every subject gets one period, plus breaks, lab, sports.
-export function buildDay(classNum, stream) {
-  if (classNum >= 13) return buildCollegeDay(classNum);
+// College days come from the semester calendar: opts = { calDay, pendingLabs }.
+export function buildDay(classNum, stream, opts = {}) {
+  if (classNum >= 13) return buildCollegeDay(classNum, opts.calDay, opts.pendingLabs);
   const subjects = getClassSubjects(classNum, stream);
   const practicals = getPracticals(classNum, stream);
   const slots = [
@@ -54,33 +56,74 @@ export function advanceClock(slots, clock, dt, timeScale, fastForward = 1) {
   return Math.min(limit, clock + Math.min(dt, 0.05) * timeScale * fastForward);
 }
 
-// A BITS day: lectures from 8, a lunch break at the mess/ANC, labs in the afternoon, the fest in the evening.
-function buildCollegeDay(classNum) {
-  const courses = getClassSubjects(classNum);
-  const practicals = getPracticals(classNum);
-  const slots = [{ id: 'arrival', type: 'arrival', label: 'Morning · Course registration', start: hm(7, 30), end: hm(8, 0), location: 'reception' }];
-  let t = hm(8, 0);
-  courses.forEach((c, i) => {
-    slots.push({ id: `p${i + 1}`, type: 'lesson', label: `Lecture ${i + 1} · ${c.code} ${c.name}`, subject: c.id, start: t, end: t + 50, location: 'classroom' });
-    t += 50;
-    if (i === 3) {
-      slots.push({ id: 'lunch', type: 'lunch', label: 'Lunch · Mess and ANC', start: t, end: t + 40, location: 'canteen' });
-      t += 40;
-    }
+// One BITS day from the semester calendar. Every day starts at the hostel at 7:30 and ends back there at night;
+// what happens in between depends on the kind of day.
+function buildCollegeDay(classNum, calDay = calendarDay(classNum, 0), pendingLabs = []) {
+  const courses = Object.fromEntries(getClassSubjects(classNum).map((c) => [c.id, c]));
+  const slots = [];
+  let t = hm(7, 30);
+  const add = (id, type, label, end, location, extra = {}) => {
+    if (end <= t) return;
+    slots.push({ id, type, label, start: t, end, location, ...extra });
+    t = end;
+  };
+  const free = (id, label, end) => add(id, 'break', label, end, 'free');
+  const evening = () => {
+    free('evening', 'Evening · C’not, ANC, the grounds or the Bhawan', hm(21, 0));
+    add('departure', 'departure', 'Night · Back to the hostel', hm(22, 0), 'gate');
+  };
+  const title = calDay.label ? ` · ${calDay.label}` : '';
+
+  if (calDay.kind === 'registration') {
+    free('morning', 'Morning · Breakfast at the mess', hm(9, 0));
+    add('arrival', 'arrival', 'Course registration · Main Building', hm(13, 0), 'reception');
+    add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(14, 0), 'canteen');
+    free('afternoon', 'Afternoon · Explore the campus', hm(17, 30));
+    evening();
+    return slots;
+  }
+
+  if (calDay.kind === 'midsem' || calDay.kind === 'compre') {
+    const mid = calDay.kind === 'midsem';
+    const names = calDay.papers.map((id) => courses[id]?.code || id).join(', ');
+    free('morning', 'Morning · Last-minute revision', mid ? hm(9, 0) : hm(9, 30));
+    add('exam', 'exam', `${mid ? 'Mid-semester test' : 'Comprehensive exam'} · ${names}`, mid ? hm(10, 30) : hm(12, 30), 'classroom', { papers: calDay.papers, exam: calDay.kind });
+    free('after-exam', 'Free time · compare answers at ANC', hm(13, 0));
+    add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(14, 0), 'canteen');
+    free('afternoon', 'Afternoon · Study for the next paper', hm(17, 30));
+    evening();
+    return slots;
+  }
+
+  if (calDay.kind !== 'class') {
+    free('morning', 'Morning · Breakfast at the mess', hm(9, 0));
+    free('day', calDay.kind === 'holiday' ? `No classes${title}` : calDay.kind === 'free' ? 'Free day · no classes' : `Classwork suspended${title}`, hm(13, 0));
+    add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(14, 0), 'canteen');
+    if (calDay.kind === 'sports') {
+      free('afternoon', 'Afternoon · Free time', hm(16, 0));
+      add('sports', 'sports', 'BOSM · matches at the Gymkhana Grounds', hm(18, 0), 'playground');
+    } else if (calDay.kind === 'fest') {
+      free('afternoon', `Afternoon · ${calDay.fest} stalls and events`, hm(18, 0));
+      add('fest', 'fest', `Evening · ${calDay.fest} pro-night at the Auditorium`, hm(19, 0), 'auditorium');
+    } else free('afternoon', 'Afternoon · Free time', hm(17, 30));
+    evening();
+    return slots;
+  }
+
+  const week = WEEKLY[classNum][calDay.weekday] || { lectures: [] };
+  free('morning', `Morning · Breakfast at the mess${title}`, hm(8, 0));
+  week.lectures.forEach((id, i) => {
+    const c = courses[id];
+    add(`p${i + 1}`, 'lesson', `Lecture · ${c.code} ${c.name}`, t + 50, 'classroom', { subject: id });
+    if (i < week.lectures.length - 1) free(`gap${i + 1}`, 'Break · walk to the next lecture', t + 10);
   });
-  if (t < hm(14, 0)) {
-    slots.push({ id: 'break', type: 'break', label: 'Afternoon · Free time', start: t, end: hm(14, 0), location: 'free' });
-    t = hm(14, 0);
+  free('late-morning', 'Free time · Library, ANC or the Bhawan', hm(12, 30));
+  add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(13, 30), 'canteen');
+  if (week.lab && pendingLabs.includes(week.lab)) {
+    free('pre-lab', 'Afternoon · Head to the lab', hm(14, 0));
+    add('lab', 'lab', 'Lab session · FD-II', hm(16, 0), 'sciencelab', { lab: week.lab });
   }
-  const len = Math.max(50, practicals.length * 30);
-  slots.push({ id: 'lab', type: 'lab', label: 'Labs', start: t, end: t + len, location: 'sciencelab' });
-  t += len;
-  if (t < hm(17, 30)) {
-    slots.push({ id: 'evening', type: 'break', label: 'Evening · C’not, ANC or the grounds', start: t, end: hm(17, 30), location: 'free' });
-    t = hm(17, 30);
-  }
-  slots.push({ id: 'fest', type: 'fest', label: classNum === 13 ? 'Evening · Oasis (cultural fest)' : 'Evening · APOGEE (technical fest)', start: t, end: t + 60, location: 'auditorium' });
-  t += 60;
-  slots.push({ id: 'departure', type: 'departure', label: 'Night · Back to the hostel', start: t, end: t + 60, location: 'gate' });
+  free('afternoon', 'Afternoon · Free time', hm(17, 30));
+  evening();
   return slots;
 }

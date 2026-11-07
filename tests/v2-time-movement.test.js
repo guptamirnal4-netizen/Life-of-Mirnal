@@ -10,10 +10,10 @@ globalThis.document ??= { addEventListener() {} };
 globalThis.window ??= { addEventListener() {} };
 const { Player, MOVE } = await import('../js/world/player.js');
 
-test('new games run at Normal speed: 0.35 game minutes per real second', () => {
+test('new games run at Normal speed: one game minute every 15 real seconds', () => {
   assert.equal(DEFAULT_SETTINGS.timeScale, TIME_SPEEDS.normal);
-  assert.equal(TIME_SPEEDS.normal, 0.35);
-  assert.equal(createState().settings.timeScale, 0.35);
+  assert.equal(1 / TIME_SPEEDS.normal, 15);
+  assert.equal(createState().settings.timeScale, 1 / 15);
 });
 
 test('the clock advances by speed × seconds, and Z multiplies it by 4', () => {
@@ -22,10 +22,10 @@ test('the clock advances by speed × seconds, and Z multiplies it by 4', () => {
   // 20 frames of 50 ms = 1 real second
   let t = t0;
   for (let i = 0; i < 20; i++) t = advanceClock(slots, t, 0.05, TIME_SPEEDS.normal);
-  assert.ok(Math.abs(t - t0 - 0.35) < 1e-9);
+  assert.ok(Math.abs(t - t0 - 1 / 15) < 1e-9);
   t = t0;
   for (let i = 0; i < 20; i++) t = advanceClock(slots, t, 0.05, TIME_SPEEDS.normal, FAST_FORWARD);
-  assert.ok(Math.abs(t - t0 - 1.4) < 1e-9);
+  assert.ok(Math.abs(t - t0 - 4 / 15) < 1e-9);
 });
 
 test('a long frame is capped, so a stall cannot jump the clock', () => {
@@ -51,7 +51,7 @@ test('the clock stops at the next slot boundary instead of skipping a slot', () 
   assert.deepEqual(seen, slots.map((s) => s.id));
 });
 
-test('save migration: old default 1.2 becomes Normal, chosen speeds are kept, junk is repaired', () => {
+test('save migration: old defaults 1.2 and 0.35 become Normal, chosen speeds are kept, junk is repaired', () => {
   const load = (timeScale) => {
     const s = createState();
     s.settings.timeScale = timeScale;
@@ -60,6 +60,7 @@ test('save migration: old default 1.2 becomes Normal, chosen speeds are kept, ju
   };
   assert.equal(load(1.2).settings.timeScale, TIME_SPEEDS.normal);
   assert.equal(load(1.2).classNum, 5);
+  assert.equal(load(0.35).settings.timeScale, TIME_SPEEDS.normal);
   for (const v of [0.2, 0.6, 1, 0.8]) assert.equal(load(v).settings.timeScale, v);
   for (const v of ['fast', null, -1, 50, NaN]) assert.equal(load(v).settings.timeScale, TIME_SPEEDS.normal);
   const s = createState();
@@ -76,7 +77,7 @@ function makePlayer() {
 }
 const run = (p, seconds, colliders = []) => { for (let i = 0; i < seconds * 60; i++) p.update(1 / 60, colliders); };
 
-test('walking reaches 1.5 m/s and eases in and out', () => {
+test('walking reaches walking speed and eases in and out', () => {
   const p = makePlayer();
   p.keys.add('KeyW');
   p.update(1 / 60, []);
@@ -92,7 +93,7 @@ test('walking reaches 1.5 m/s and eases in and out', () => {
   assert.equal(p.gait(), 'idle');
 });
 
-test('Shift runs at 4 m/s on foot', () => {
+test('Shift runs faster on foot', () => {
   const p = makePlayer();
   p.keys.add('KeyW');
   p.keys.add('ShiftLeft');
@@ -101,15 +102,17 @@ test('Shift runs at 4 m/s on foot', () => {
   assert.equal(p.gait(), 'run');
   const z0 = p.pos.z;
   run(p, 1);
-  assert.ok(Math.abs(z0 - p.pos.z - MOVE.run) < 0.01, 'covers 4 m in a second');
+  assert.ok(Math.abs(z0 - p.pos.z - MOVE.run) < 0.01, 'covers MOVE.run metres in a second');
+  assert.ok(MOVE.run > MOVE.walk * 2);
 });
 
-test('the cycle is its own mode: builds up speed, tops out at 6.5 m/s, Shift and Space do nothing', () => {
+test('the cycle is its own mode: builds up speed, tops out at bikeMax, Shift and Space do nothing', () => {
   const p = makePlayer();
   p.bike = true;
   p.keys.add('KeyW');
   run(p, 1);
   assert.ok(p.speedNow > 1.5 && p.speedNow < 3, `gradual acceleration (got ${p.speedNow})`);
+  assert.ok(MOVE.bikeMax > MOVE.run);
   p.keys.add('ShiftLeft');
   p.keys.add('Space');
   run(p, 6);

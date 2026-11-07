@@ -177,15 +177,15 @@ export function runProject(ctx, classNum, { late = false } = {}, onDone) {
   const picker = attachVoice(ctx, grid, { buttons: () => [...grid.querySelectorAll('button.option')] });
 }
 
-export function runExam(ctx, classNum, { onlySubjects = null, remedial = false } = {}, onDone) {
+export function runExam(ctx, classNum, { onlySubjects = null, remedial = false, topicLimit = null, title: customTitle = null } = {}, onDone) {
   const stream = ctx.state.stream;
-  const exam = buildExam(classNum, stream, onlySubjects);
+  const exam = buildExam(classNum, stream, onlySubjects, topicLimit);
   const answers = {};
   let p = 0;
   let q = 0;
   let close;
   const board = classNum === 10 || classNum === 12;
-  const title = remedial ? 'Remedial Examination' : board ? `CBSE Board Examination (simulated) · Class ${classNum}` : `Annual Examination · Class ${classNum}`;
+  const title = customTitle ?? (remedial ? 'Remedial Examination' : board ? `CBSE Board Examination (simulated) · Class ${classNum}` : `Annual Examination · Class ${classNum}`);
 
   const screen = () => {
     const paper = exam[p];

@@ -2,10 +2,12 @@ import * as THREE from 'three';
 
 const GRAVITY = 22;
 
-// Starting values, tuned in play. Speeds are metres per second (1 unit = 1 m on the BITS campus).
+// Metres per second (1 unit = 1 m on the BITS campus). A brisk walk, a jog, and a student's cycle:
+// with time at 15 s per game minute, Krishna Bhawan → Main Building (≈380 m) is about 13 game minutes
+// on foot, 6 running and 4 by cycle.
 export const MOVE = {
-  walk: 1.5, run: 4, footAccel: 9, footDecel: 12, footRadius: 0.32,
-  bikeMax: 6.5, bikeAccel: 2.2, bikeBrake: 6, bikeCoast: 0.9, bikeTurn: 1.7, bikeRadius: 0.45,
+  walk: 2, run: 4.5, footAccel: 9, footDecel: 12, footRadius: 0.32,
+  bikeMax: 7, bikeAccel: 2.4, bikeBrake: 6, bikeCoast: 0.9, bikeTurn: 1.7, bikeRadius: 0.45,
 };
 
 export function eyeHeightFor(classNum) {

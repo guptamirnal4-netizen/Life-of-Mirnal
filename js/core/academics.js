@@ -1,6 +1,6 @@
 import { getClassSubjects, getPracticals, getProject, getLabCourses, SENIOR_SUBJECTS } from '../../data/curriculum.js';
 import { LETTER_GRADES } from '../../data/college.js';
-import { ensureYear, topicRecord, newDay } from './state.js';
+import { ensureYear, topicRecord, newDay, newSem } from './state.js';
 
 export const MASTERY = ['Not started', 'Introduced', 'Learning in progress', 'Practised', 'Mastered'];
 export const PASS_MARK = 33;
@@ -35,13 +35,14 @@ export function isLabSubject(classNum, subjectId, stream) {
   return getPracticals(classNum, stream).some((p) => p.subject === subjectId);
 }
 
-export function buildExam(classNum, stream, onlySubjects = null) {
+// topicLimit: only the first N topics of each course (a mid-semester test covers the first half).
+export function buildExam(classNum, stream, onlySubjects = null, topicLimit = null) {
   return getClassSubjects(classNum, stream)
     .filter((s) => !onlySubjects || onlySubjects.includes(s.id))
     .map((s) => ({
       subjectId: s.id,
       subjectName: s.name,
-      questions: s.topics.flatMap((t) => [
+      questions: s.topics.slice(0, topicLimit ?? s.topics.length).flatMap((t) => [
         { topicId: t.id, kind: 'exam', ...t.exam },
         { topicId: t.id, kind: 'revision', ...t.practice },
       ]),
@@ -78,7 +79,7 @@ export function scoreExam(state, classNum, stream, exam, answers) {
     const lab = isLabSubject(classNum, paper.subjectId, stream);
     const theoryMax = lab ? 70 : 80;
     const theory = Math.round((correct / paper.questions.length) * theoryMax);
-    const attended = day.lessonsDone[paper.subjectId] ? 1 : 0;
+    const attended = lectureAttendance(state, paper.subjectId);
     const subj = getClassSubjects(classNum, stream).find((s) => s.id === paper.subjectId);
     const practiced = subj.topics.filter((t) => state.topics[t.id]?.practiceCorrect).length / subj.topics.length;
     let internal;
@@ -93,10 +94,30 @@ export function scoreExam(state, classNum, stream, exam, answers) {
   return results;
 }
 
+// Share of a course's lectures attended: across the semester in college, today's lesson at school.
+export function lectureAttendance(state, subjectId) {
+  const held = state.sem?.held?.[subjectId] || 0;
+  if (held) return (state.sem.attended[subjectId] || 0) / held;
+  return state.day.lessonsDone[subjectId] ? 1 : 0;
+}
+
 export function lessonAttendance(state, classNum, stream) {
   const subjects = getClassSubjects(classNum, stream);
-  const present = subjects.filter((s) => state.day.lessonsDone[s.id]).length;
+  const present = subjects.reduce((sum, s) => sum + lectureAttendance(state, s.id), 0);
   return subjects.length ? present / subjects.length : 1;
+}
+
+// College theory marks: 35% mid-semester test, 65% comprehensive exam (the real split varies by course).
+export function blendMidsem(results, midsem = {}) {
+  for (const [id, r] of Object.entries(results)) {
+    if (r.lab || midsem[id] === undefined || !r.outOf) continue;
+    r.midsemPct = Math.round(midsem[id] * 100);
+    r.theory = Math.round(r.theoryMax * (0.35 * midsem[id] + 0.65 * (r.correct / r.outOf)));
+    r.total = r.theory + r.internal;
+    r.grade = grade(r.total);
+    r.passed = r.total >= PASS_MARK;
+  }
+  return results;
 }
 
 export function evaluatePromotion(state, classNum, stream) {
@@ -136,6 +157,7 @@ export function promote(state) {
   }
   state.classNum += 1;
   state.day = newDay();
+  if (state.classNum >= 13) state.sem = newSem();
   state.phase = state.classNum === 11 ? 'orientation' : 'day';
   ensureYear(state);
 }
@@ -270,6 +292,7 @@ export function startCollege(state) {
   state.classNum = 13;
   state.phase = 'day';
   state.day = newDay();
+  state.sem = newSem();
   state.player = null;
   state.decisions.push({ classNum: 12, text: 'Joined BITS Pilani for B.E. Chemical Engineering' });
   ensureYear(state);

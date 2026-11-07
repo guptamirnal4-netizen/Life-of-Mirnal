@@ -2,8 +2,11 @@ import { CLASSMATES } from '../../data/people.js';
 
 export const SAVE_VERSION = 1;
 
-// Game minutes per real second. Holding Z multiplies the chosen speed by FAST_FORWARD.
-export const TIME_SPEEDS = { slow: 0.2, normal: 0.35, fast: 0.6, veryFast: 1 };
+// Game minutes per real second. Normal: one game minute every 15 real seconds.
+// Holding Z multiplies the chosen speed by FAST_FORWARD.
+export const TIME_SPEEDS = { slow: 1 / 30, normal: 1 / 15, fast: 1 / 4, veryFast: 1 };
+// Defaults shipped by earlier versions; a save holding one of these gets today's default.
+export const OLD_DEFAULT_SPEEDS = [1.2, 0.35];
 export const FAST_FORWARD = 4;
 
 export const DEFAULT_SETTINGS = {
@@ -57,6 +60,11 @@ export function newDay() {
     optional: { talked: [], goal: false, library: false, canteen: false, helped: false },
     ended: false,
   };
+}
+
+// College only: progress through the semester calendar, kept across days.
+export function newSem() {
+  return { day: 0, registered: false, held: {}, attended: {}, lectureNo: {}, midsem: {}, compre: {} };
 }
 
 export function ensureYear(state, classNum = state.classNum) {
