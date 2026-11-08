@@ -263,7 +263,7 @@ function loadYear({ intro = true } = {}) {
   if (state.classNum === 11) {
     addNPC('counsellor', { kind: 'counsellor' }, { name: COUNSELLOR.name, title: 'Counsellor', role: 'teacher', color: '#2d6a6a', pants: '#333', height: 1.62, skinIndex: 2 }, campus.spots.counsellor);
   }
-  if (!state.player) player.place(campus.spots.spawn, 0);
+  if (!state.player) player.place(campus.spots.spawn, isCollege(state.classNum) ? Math.PI / 2 : 0); // college: in your room, facing the door
   if (intro) showYearIntro();
 }
 
@@ -336,12 +336,13 @@ function showCollegeIntro(c) {
     h('h4', {}, `How the semester runs · ${CALENDAR[c].length} days`),
     h('ol', { class: 'clean' },
       h('li', {}, `📝 Day 1 · ${CALENDAR[c][0].month}: register for your courses at the Main Building. Your timetable is issued after you register.`),
+      h('li', {}, '🍽 Every day: breakfast, lunch and dinner at the VKB mess, next to Krishna Bhawan (daily missions, M)'),
       h('li', {}, `📚 Classes: ${y.courses.map((x) => x.code).join(', ')}, a few lectures a day in NAB, labs in FD-II (${y.practicals.map((p) => p.name).join('; ')})`),
       h('li', {}, `🏖 Holidays${c === 13 ? ' and BOSM' : ''} along the way`),
       h('li', {}, '✏ Mid-semester tests in week 10, at your desk in NAB'),
       h('li', {}, `🎉 ${c === 13 ? 'Oasis' : 'APOGEE'} at the Auditorium`),
       h('li', {}, '📝 Comprehensive exams after the last day of classes, then your grade sheet')),
-    h('p', {}, `Each day you wake up at your Bhawan. When the day is done, sleep to move to the next one. Assignment (at the Library): ${y.project.name}.`),
+    h('p', {}, `Each day you wake up in your room in Krishna Bhawan. At night, walk back in and sleep in your bed (E) to move to the next day. Assignment (at the Library): ${y.project.name}.`),
     h('p', { class: 'muted small' }, 'Courses follow BITS Pilani’s published first-year list. Professors, batchmates and events in the story are fictional.'),
     h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'start begin go', onclick: () => {
       closeAll();
@@ -419,12 +420,14 @@ function scheduleNPCs(slot) {
         } else npcs.send(id, 'classroomB', campus.spots.classroomB[bI++ % campus.spots.classroomB.length], { sit: true, face: Math.PI });
         break;
       case 'break':
+        if (slot.meal && campus.spots.mess) { npcs.send(id, 'mess', campus.spots.mess[(i * 5) % campus.spots.mess.length]); break; }
         if (['football', 'cricket', 'kho-kho', 'badminton'].includes(cm.sport)) npcs.send(id, null, campus.spots.playground[i * 3 % 16]);
         else if (cm.personality === 'Introverted' || cm.personality === 'Helpful') npcs.send(id, 'library', campus.spots.library[i % campus.spots.library.length]);
         else npcs.send(id, null, campus.spots.canteen[i % campus.spots.canteen.length]);
         break;
       case 'lunch':
-        npcs.send(id, null, campus.spots.canteen[(i * 3) % campus.spots.canteen.length]);
+        if (slot.meal && campus.spots.mess) npcs.send(id, 'mess', campus.spots.mess[(i * 5) % campus.spots.mess.length]);
+        else npcs.send(id, null, campus.spots.canteen[(i * 3) % campus.spots.canteen.length]);
         break;
       case 'lab':
         if (inMyGroup(cm)) npcs.send(id, 'sciencelab', campus.spots.sciencelab[i % campus.spots.sciencelab.length], { face: Math.PI });
@@ -556,11 +559,11 @@ function advanceDay() {
   const keep = { practicalsDone: state.day.practicalsDone, projectDone: state.day.projectDone, registered: state.sem.registered };
   state.sem.day += 1;
   state.day = { ...newDay(), ...keep };
-  state.player = null;
   setBike(false);
-  save(true);
   closeAll();
+  state.player = null; // wake up in your room
   loadYear({ intro: false });
+  save(true);
   const d = today();
   const lectures = slots.filter((x) => x.type === 'lesson').length;
   const what = d.kind === 'class' ? `${lectures} lecture${lectures === 1 ? '' : 's'}${slots.some((x) => x.type === 'lab') ? ' and a lab' : ''} today` : slots.find((x) => x.type === 'exam')?.label || d.label || 'No classes today';
@@ -591,6 +594,7 @@ function endDay() {
     const next = calendarDay(c, state.sem.day + 1);
     openPanel(h('div', {},
       h('p', {}, held ? `Lectures today: ${done}/${held} attended.` : 'No lectures today.'),
+      h('p', {}, `Meals at the mess: ${mealsEaten()}/${slots.filter((x) => x.meal).length}.`),
       h('p', {}, `Tomorrow: ${dayTitle(next, state.sem.day + 1, semLength())}${next.label ? ` · ${next.label}` : ''}.`),
       h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'sleep next day tomorrow', onclick: () => advanceDay() }, '🌙 Sleep → next day'))),
     { title: `Back at the Bhawan · ${dayTitle(today(), state.sem.day, semLength())}` });
@@ -964,6 +968,7 @@ function handleInteractable(id) {
       requestLock();
       break;
     case 'canteen': openCanteen(ctx); break;
+    case 'mess': eatAtMess(slot); break;
     case 'principalDesk': talkTo(npcs.get('principal') || { id: 'principal' }); break;
     case 'registration': {
       if (!isCollege(c)) { toast('The reception desk. Nothing to do here today.'); requestLock(); break; }
@@ -1010,10 +1015,48 @@ function handleInteractable(id) {
       }
       if (state.phase === 'collegeYearDone') { showRoadmap(); break; }
       if (slot.type === 'departure') endDay();
-      else { toast(isCollege(c) ? `Classes and labs aren't over yet. Head back to the hostel after ${fmt(slots.at(-1).start)}.` : `School isn't over yet! Dismissal is at ${fmt(slots.at(-1).start)}.`); requestLock(); }
+      else { toast(isCollege(c) ? `Not bedtime yet: lights out from ${fmt(slots.at(-1).start)}. To sleep early, press T → End the day.` : `School isn't over yet! Dismissal is at ${fmt(slots.at(-1).start)}.`); requestLock(); }
       break;
     default:
   }
+}
+
+// ---------- The mess (college) ----------
+const MEALS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+// A sample hostel-mess menu, not the real VKB menu.
+const MENU = {
+  breakfast: ['Poha, bread-butter-jam, tea', 'Aloo paratha, curd, tea', 'Idli-sambar, cornflakes, milk', 'Upma, boiled eggs, coffee'],
+  lunch: ['Dal, rice, roti, aloo-gobhi, curd', 'Rajma-chawal, roti, salad', 'Kadhi-pakoda, rice, roti, bhindi', 'Chole, rice, roti, raita'],
+  dinner: ['Paneer butter masala, roti, dal, rice', 'Mix veg, roti, dal fry, rice, kheer', 'Egg curry or malai kofta, roti, rice', 'Dal baati churma, gatte ki sabzi'],
+};
+const mealsEaten = () => Object.values(state.day.meals || {}).filter(Boolean).length;
+const pendingMeal = (slot) => isCollege(state.classNum) && slot.meal && !state.day.meals?.[slot.meal];
+
+function eatAtMess(slot) {
+  const d = state.day;
+  d.meals ||= {};
+  const meal = slot.meal;
+  if (!meal) {
+    const next = slots.find((s) => s.meal && s.start > d.clock);
+    toast(next ? `The mess is closed now. ${MEALS[next.meal]} is served from ${fmt(next.start)}.` : 'The mess is closed for the night. Breakfast is from 07:30.');
+    requestLock();
+    return;
+  }
+  if (d.meals[meal]) { toast(`You've already had ${meal}. ${mealsEaten()}/${slots.filter((s) => s.meal).length} meals today.`); requestLock(); return; }
+  const menu = MENU[meal][state.sem.day % MENU[meal].length];
+  const close = openPanel(h('div', {},
+    h('p', {}, `${MEALS[meal]} is being served. Grab a steel thali and join the queue.`),
+    h('p', {}, h('b', {}, 'On the menu: '), menu),
+    h('p', { class: 'muted small' }, 'Sample menu. Eating takes about 20 game minutes.'),
+    h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'eat yes food', onclick: () => {
+      d.meals[meal] = true;
+      state.sem.meals = (state.sem.meals || 0) + 1;
+      d.clock = Math.min(d.clock + 20, slot.end);
+      close();
+      save(true);
+      toast(`✔ ${MEALS[meal]} done · ${mealsEaten()}/${slots.filter((s) => s.meal).length} meals today.`, 4000);
+      requestLock();
+    } }, '🎤 Say “eat” or click'))), { title: `VKB Mess · ${MEALS[meal]}`, closable: true });
 }
 
 function openNoticeBoard() {
@@ -1065,8 +1108,9 @@ function openSemesterTimetable(justRegistered) {
         if (s.type === 'lesson') status = state.day.lessonsDone[s.subject] ? '✔ attended' : state.day.attendance[s.id] === 'absent' ? '✘ missed' : '';
         if (s.type === 'exam') status = state.day.examDone ? '✔ written' : clock >= s.end ? '✘ missed' : '';
         if (s.type === 'lab') status = state.day.practicalsDone[s.lab] !== undefined ? '✔ done' : '';
+        if (s.meal) status = state.day.meals?.[s.meal] ? '✔ eaten' : clock >= s.end ? '✘ skipped' : '';
         const now = clock >= s.start && clock < s.end;
-        const where = { free: 'Anywhere', classroom: 'NAB', sciencelab: 'FD-II lab', reception: 'Main Building', canteen: 'Mess / ANC', auditorium: 'SAC Auditorium', playground: 'Gymkhana', gate: 'Your Bhawan' }[s.location] || s.location;
+        const where = { free: 'Anywhere', classroom: 'NAB', sciencelab: 'FD-II lab', reception: 'Main Building', canteen: 'Mess / ANC', mess: 'VKB mess', auditorium: 'SAC Auditorium', playground: 'Gymkhana', gate: 'Your room, Krishna Bhawan' }[s.location] || s.location;
         return h('tr', { class: now ? 'now' : '' }, h('td', {}, `${fmt(s.start)}–${fmt(s.end)}`), h('td', {}, s.label), h('td', {}, where), h('td', {}, now ? '◀ now ' : '', status));
       }))),
     h('div', { class: 'row wrap' },
@@ -1094,6 +1138,7 @@ function missionList() {
     const courses = getClassSubjects(c);
     const pr = getPracticals(c);
     return {
+      daily: slots.filter((s) => s.meal).map((s) => [`${MEALS[s.meal]} at the VKB mess (${fmt(s.start)}–${fmt(s.end)})`, !!d.meals?.[s.meal]]),
       mandatory: [
         ['Register for your courses (registration day)', !!state.sem.registered],
         [`Today's lectures (${slots.filter((s) => s.type === 'lesson' && d.lessonsDone[s.subject]).length}/${slots.filter((s) => s.type === 'lesson').length})`, slots.filter((s) => s.type === 'lesson').every((s) => d.lessonsDone[s.subject])],
@@ -1109,6 +1154,7 @@ function missionList() {
         ['Help a batchmate with a lecture', d.optional.helped],
         ['Grab something at ANC', d.optional.canteen],
         ['Read in the Central Library', d.optional.library],
+        [`Meals at the mess this semester: ${state.sem.meals || 0}`, false],
       ],
     };
   }
@@ -1137,6 +1183,7 @@ function openMissions() {
   const m = missionList();
   const row = ([t, done]) => h('li', { class: done ? 'done' : '' }, done ? '✔ ' : '○ ', t);
   openPanel(h('div', {},
+    m.daily ? [h('h4', {}, `Today’s missions · meals (${mealsEaten()}/${m.daily.length})`), h('ul', { class: 'clean missions' }, m.daily.map(row))] : null,
     h('h4', {}, 'Mandatory (needed for promotion)'), h('ul', { class: 'clean missions' }, m.mandatory.map(row)),
     h('h4', {}, 'Optional (make school life richer)'), h('ul', { class: 'clean missions' }, m.optional.map(row)),
     h('p', { class: 'muted small' }, 'Promotion needs 33% in every subject, 75% lesson attendance and the project. Optional missions never block promotion.')), { title: 'Missions', closable: true });
@@ -1537,7 +1584,10 @@ function objective(slot) {
   if (isCollege(state.classNum)) {
     const sem = state.sem;
     const reg = slots.find((x) => x.type === 'arrival');
-    if (!sem.registered && reg && d.clock < reg.start) return { text: `Registration opens at ${fmt(reg.start)} at the Main Building. Head there after breakfast`, loc: 'reception' };
+    if (!sem.registered && reg && d.clock < reg.start) {
+      if (pendingMeal(slot)) return { text: `Breakfast at the VKB mess first (E at the counter). Registration opens at ${fmt(reg.start)}`, loc: 'mess' };
+      return { text: `Registration opens at ${fmt(reg.start)} at the Main Building. Head there now`, loc: 'reception' };
+    }
     if (slot.type === 'arrival' && !sem.registered) return { text: 'Register for your courses at Academic Registration, Main Building (E)', loc: 'reception' };
     if (!sem.registered && ['break', 'lunch'].includes(slot.type)) return { text: 'You missed registration: late registration at the Main Building (E)', loc: 'reception' };
     if (slot.type === 'arrival') return { text: 'Registered! Classes begin tomorrow. Explore the campus (T: timetable)', loc: null };
@@ -1548,12 +1598,13 @@ function objective(slot) {
     if (slot.type === 'exam') return d.examDone ? { text: 'Paper done. Free for the rest of the day', loc: null } : { text: `${slot.label}: sit at your desk in the NAB lecture theatre`, loc: player.seated ? null : 'classroom' };
     if (slot.type === 'fest') return d.eventDone ? { text: 'Enjoy the fest, then head back to the Bhawan', loc: null } : { text: `${today().fest} is on! Go to the Auditorium stage (E)`, loc: 'auditorium' };
     if (slot.type === 'sports') return { text: 'BOSM is on: watch or play at the Gymkhana Grounds', loc: 'playground' };
-    if (slot.type === 'departure') return { text: 'Night: go back to your Bhawan (E at the gate) to sleep', loc: 'gate' };
+    if (slot.type === 'departure') return { text: 'Night: go to your room in Krishna Bhawan and sleep (E at the bed)', loc: 'gate' };
     if (slot.type === 'lesson' && !d.lessonsDone[slot.subject]) return { text: `${slot.label}: take your seat (yellow mark)`, loc: player.seated ? null : 'classroom' };
     if (slot.type === 'lesson') return { text: 'Lecture done. Next: check the timetable (T)', loc: null };
     if (slot.type === 'break' || slot.type === 'lunch') {
       const next = nextSlot(slots, d.clock);
       const p = getProject(state.classNum);
+      if (pendingMeal(slot)) return { text: `${MEALS[slot.meal]} is on at the VKB mess (E at the counter)${next && ['arrival', 'lesson', 'lab', 'exam', 'fest', 'sports'].includes(next.type) ? ` · ${next.label.split(' · ')[0]} at ${fmt(next.start)}` : ''}`, loc: 'mess' };
       if (next && ['lesson', 'lab', 'exam', 'fest', 'sports'].includes(next.type)) return { text: `${slot.label}. Next at ${fmt(next.start)}: ${next.label} (T → skip ahead)`, loc: null };
       if (p && !d.projectDone && sem.registered) return { text: `${slot.label}. Assignment due: ${p.name} (Library)`, loc: 'library' };
       return { text: `${slot.label} (T → skip ahead)`, loc: null };

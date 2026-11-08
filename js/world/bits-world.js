@@ -170,7 +170,16 @@ const ROOM_HOSTS = {
   reception: { host: 'Main Building (West Wing)', name: 'Academic Registration (AUGSD)' },
   complab: { host: 'Main Building (West Wing)', name: 'Computer Lab (CP)' },
   auditorium: { host: 'Student Activities Center (SAC)', name: 'SAC · Auditorium' },
+  hostelroom: { host: 'Krishna Bhawan', name: 'Krishna Bhawan · Your Room' },
+  mess: { host: 'VKB mess', name: 'VKB Mess · Dining Hall' },
 };
+
+// Rooms that exist only at BITS (local coordinates; placeRooms moves them into their hosts).
+// VKB mess is the OSM name of the mess building beside Krishna Bhawan.
+const BITS_ROOMS = [
+  { id: 'hostelroom', name: 'Your Room', x0: 0, x1: 4.6, z0: 0, z1: 3.8, door: { side: 'west', at: 1.9 }, wall: '#efe9dc', floor: 'terrazzo' },
+  { id: 'mess', name: 'Mess', x0: 0, x1: 14, z0: 0, z1: 9, door: { side: 'west', at: 4.5 }, wall: '#f3ead6', floor: 'terrazzo' },
+];
 
 // The two walk-through crossings of NAB (one per block, each crossing both blocks). Positions come from the
 // Google Earth imagery (paved bands and entry portals across both blocks) and the OSM footways that meet the
@@ -478,7 +487,7 @@ export class BitsCampus extends Campus {
     this.roomOffset = {};
     this.hostCuts = new Map();
     const usedByHost = new Map();
-    const school = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
+    const school = Object.fromEntries([...ROOMS, ...BITS_ROOMS].map((r) => [r.id, r]));
     this.rooms = {};
     for (const [id, cfg] of Object.entries(ROOM_HOSTS)) {
       const s = school[id];
@@ -521,7 +530,53 @@ export class BitsCampus extends Campus {
         this[fn]();
       });
     }
+    this.interiorHostelRoom(this.rooms.hostelroom);
+    this.interiorMess(this.rooms.mess);
     this.roomRefs = this.rooms;
+  }
+
+  // A first-year single: bed under the window, study table, steel cupboard. E at the bed sleeps.
+  interiorHostelRoom(r) {
+    const cx = (r.x0 + r.x1) / 2; const cz = (r.z0 + r.z1) / 2;
+    this.box(r.x1 - 0.55, 0, r.z0 + 1.15, 0.95, 0.42, 2.0, null, { tex: 'wood', tint: '#8a6040' });
+    this.box(r.x1 - 0.55, 0.42, r.z0 + 1.15, 0.9, 0.14, 1.95, '#e9ecf2', { collide: false });
+    this.box(r.x1 - 0.55, 0.56, r.z0 + 0.4, 0.6, 0.1, 0.35, '#ffffff', { collide: false });
+    this.box(r.x1 - 0.55, 0.57, r.z0 + 1.5, 0.92, 0.04, 1.2, '#3d5a8a', { collide: false }); // blanket
+    this.box(r.x1 - 0.12, 1.1, r.z0 + 1.15, 0.03, 1.1, 1.5, '#9fc3e0', { collide: false }); // window
+    this.box(r.x0 + 2.4, 0, r.z1 - 0.38, 1.3, 0.75, 0.6, null, { tex: 'wood' });
+    this.box(r.x0 + 2.4, 0, r.z1 - 1.0, 0.45, 0.46, 0.45, '#6b4a2e');
+    this.box(r.x0 + 2.4, 0.76, r.z1 - 0.3, 0.3, 0.22, 0.22, '#c0392b', { collide: false }); // books
+    this.box(r.x0 + 2.1, 0, r.z0 + 0.3, 1.0, 1.9, 0.5, '#7c8a96', { metalness: 0.5, roughness: 0.5 });
+    this.tubeLight(cx, r.z0 + 0.3);
+    this.ceilingFan(cx, cz);
+    this.interactable('gate', r.x1 - 1.4, r.z0 + 1.15, 'Sleep (end the day)', { radius: 1.5 });
+    this.bedSpot = new THREE.Vector3(r.x1 - 1.4, 0, r.z0 + 1.15);
+    this.spots.spawn = new THREE.Vector3(r.x0 + 2.6, 0, cz);
+  }
+
+  // Long tables with benches and a serving counter at the back. E at the counter eats the current meal.
+  interiorMess(r) {
+    const cz = (r.z0 + r.z1) / 2;
+    this.box(r.x1 - 1.2, 0, cz, 0.9, 1.0, 6, '#b8c2c8', { metalness: 0.6, roughness: 0.35 });
+    for (const dz of [-2, -0.7, 0.6, 1.9]) this.cyl(r.x1 - 1.2, 1.12, cz + dz, 0.35, 0.3, 0.25, '#d9dde0', { segments: 14 });
+    this.box(r.x1 - 0.12, 1.4, cz, 0.04, 1.1, 3.2, '#1f3b2c', { collide: false });
+    this.label('Today’s menu', r.x1 - 0.3, 2.75, cz, { height: 0.36 });
+    this.spots.mess = [];
+    for (const tx of [r.x0 + 3.5, r.x0 + 7.5]) {
+      for (const tz of [r.z0 + 1.8, r.z0 + 7.2]) {
+        this.box(tx, 0, tz, 3.0, 0.76, 0.9, null, { tex: 'wood', tint: '#b08a5a' });
+        for (const s of [-1, 1]) {
+          this.box(tx, 0, tz + s * 0.85, 3.0, 0.45, 0.3, '#6b4a2e', { collide: false });
+          for (const ox of [-1, 0, 1]) this.spots.mess.push(new THREE.Vector3(tx + ox, 0, tz + s * 0.85));
+        }
+      }
+    }
+    this.tubeLight(r.x0 + 5.5, r.z0 + 0.3);
+    this.tubeLight(r.x0 + 5.5, r.z1 - 0.3);
+    this.ceilingFan(r.x0 + 3.5, cz);
+    this.ceilingFan(r.x0 + 7.5, cz);
+    this.interactable('mess', r.x1 - 2.1, cz, 'Eat at the mess', { radius: 2.2 });
+    this.spots.messStaff = new THREE.Vector3(r.x1 - 0.5, 0, cz);
   }
 
   // Run school-coordinate building code, then shift everything it created by (dx, dz).
@@ -1023,23 +1078,20 @@ export class BitsCampus extends Campus {
     this.label('ANC · All Night Canteen', X, 4.6, Z - 6.4, { height: 0.7, bg: 'rgba(192,57,43,0.92)' });
   }
 
-  // "Your Bhawan": the player's hostel entrance (arrival, spawn and "back to the hostel").
+  // "Your Bhawan": the porch in front of your room's doorway in Krishna Bhawan (arrival and "back to the hostel").
   buildHostelGate() {
-    const b = this.findBuilding('Krishna Bhawan');
-    const bb = b.bb;
-    const zc = (bb.minZ + bb.maxZ) / 2;
-    const hits = crossings(b.outer, 'z', zc);
-    const xEdge = Math.min(...hits);
+    const room = this.rooms.hostelroom;
+    const zc = room.door.at;
+    const xEdge = room.exit.x + 1.6;
     const X = xEdge - 2.5;
-    this.box(xEdge - 1.2, 0, zc, 2.2, 3, 3.6, null, { tex: 'plasterWhite', tint: '#ecd8b8' });
+    for (const s of [-1, 1]) this.box(xEdge - 1.2, 0, zc + s * 1.75, 0.45, 3, 0.45, null, { tex: 'plasterWhite', tint: '#ecd8b8' });
+    this.box(xEdge - 1.2, 3, zc, 2.2, 0.35, 3.95, null, { tex: 'plasterWhite', tint: '#ecd8b8', collide: false });
     this.label('Your Bhawan · Krishna Bhawan', xEdge - 2.4, 4.2, zc, { height: 0.75, bg: 'rgba(30,60,110,0.92)' });
-    this.interactable('gate', X, zc, 'Go back to your Bhawan', { radius: 3.2 });
     this.spots.gate = [];
     for (let i = 0; i < 7; i++) this.spots.gate.push(new THREE.Vector3(X - 2 - (i % 3) * 1.4, 0, zc - 3 + Math.floor(i / 3) * 2.2));
-    this.spots.spawn = new THREE.Vector3(X - 1.5, 0, zc);
     this.spots.guard = new THREE.Vector3(X + 0.2, 0, zc + 2.4);
     this.spots.parents = new THREE.Vector3(X - 3, 0, zc + 4);
-    this.hostelEntrance = new THREE.Vector3(X, 0, zc);
+    this.hostelEntrance = this.bedSpot;
   }
 
   // Main Gate on the eastern town road: carved pink-sandstone pillars, a WELCOME banner and wooden gates.

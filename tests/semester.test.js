@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CALENDAR, WEEKLY } from '../data/college-calendar.js';
 import { buildDay } from '../js/core/timetable.js';
 import { getClassSubjects, getPracticals } from '../data/curriculum.js';
-import { createState } from '../js/core/state.js';
+import { createState, newDay, newSem } from '../js/core/state.js';
 import { startCollege, buildExam, scoreExam, blendMidsem, lectureAttendance } from '../js/core/academics.js';
 
 const KIND_ORDER = (cal, kind) => cal.map((d, i) => (d.kind === kind ? i : -1)).filter((i) => i >= 0);
@@ -95,4 +95,24 @@ test('a new semester starts on registration day with a clean record', () => {
   assert.equal(st.sem.day, 0);
   assert.equal(st.sem.registered, false);
   assert.deepEqual(st.sem.midsem, {});
+});
+
+test('every college day serves breakfast, lunch and dinner at the mess, in that order', () => {
+  for (const c of [13, 14]) {
+    CALENDAR[c].forEach((calDay) => {
+      const day = buildDay(c, null, { calDay, pendingLabs: ['phy110', 'chem110', 'bio110', 'cs111', 'ws112'] });
+      const meals = day.filter((s) => s.meal);
+      assert.deepEqual(meals.map((s) => s.meal), ['breakfast', 'lunch', 'dinner'], `${c} ${calDay.week} ${calDay.weekday}`);
+      for (const m of meals) assert.equal(m.location, 'mess');
+      assert.ok(meals.every((m) => m.end - m.start >= 30), 'each meal lasts at least 30 game minutes');
+      const dinner = meals[2];
+      assert.equal(day[day.indexOf(dinner) + 1].type, 'departure', 'dinner comes right before lights out');
+      assert.ok(!day.some((s) => ['lesson', 'lab', 'exam'].includes(s.type) && s.start < meals[0].end), 'breakfast is before the first lecture or paper');
+    });
+  }
+});
+
+test('a new day starts with no meals eaten, and the semester counts meals', () => {
+  assert.deepEqual(newDay().meals, {});
+  assert.equal(newSem().meals, 0);
 });

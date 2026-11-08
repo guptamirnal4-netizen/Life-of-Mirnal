@@ -58,13 +58,14 @@ export function newDay() {
     practicalsDone: {},
     projectDone: false,
     optional: { talked: [], goal: false, library: false, canteen: false, helped: false },
+    meals: {}, // college: breakfast / lunch / dinner eaten at the mess today
     ended: false,
   };
 }
 
 // College only: progress through the semester calendar, kept across days.
 export function newSem() {
-  return { day: 0, registered: false, held: {}, attended: {}, lectureNo: {}, midsem: {}, compre: {} };
+  return { day: 0, registered: false, held: {}, attended: {}, lectureNo: {}, midsem: {}, compre: {}, meals: 0 };
 }
 
 export function ensureYear(state, classNum = state.classNum) {

@@ -67,17 +67,21 @@ function buildCollegeDay(classNum, calDay = calendarDay(classNum, 0), pendingLab
     slots.push({ id, type, label, start: t, end, location, ...extra });
     t = end;
   };
-  const free = (id, label, end) => add(id, 'break', label, end, 'free');
+  const free = (id, label, end, extra) => add(id, 'break', label, end, 'free', extra);
+  // Meals are eaten at the mess: breakfast in the morning slot, lunch, and dinner before lights out.
+  const breakfast = (label, end) => add('morning', 'break', label, end, 'mess', { meal: 'breakfast' });
+  const lunch = (end) => add('lunch', 'lunch', 'Lunch · VKB mess', end, 'mess', { meal: 'lunch' });
   const evening = () => {
-    free('evening', 'Evening · C’not, ANC, the grounds or the Bhawan', hm(21, 0));
-    add('departure', 'departure', 'Night · Back to the hostel', hm(22, 0), 'gate');
+    free('evening', 'Evening · C’not, ANC, the grounds or the Bhawan', hm(19, 30));
+    add('dinner', 'break', 'Dinner · VKB mess', hm(21, 0), 'mess', { meal: 'dinner' });
+    add('departure', 'departure', 'Night · Back to your room in the Bhawan', hm(22, 0), 'gate');
   };
   const title = calDay.label ? ` · ${calDay.label}` : '';
 
   if (calDay.kind === 'registration') {
-    free('morning', 'Morning · Breakfast at the mess', hm(9, 0));
+    breakfast('Morning · Breakfast at the mess', hm(9, 0));
     add('arrival', 'arrival', 'Course registration · Main Building', hm(13, 0), 'reception');
-    add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(14, 0), 'canteen');
+    lunch(hm(14, 0));
     free('afternoon', 'Afternoon · Explore the campus', hm(17, 30));
     evening();
     return slots;
@@ -86,19 +90,19 @@ function buildCollegeDay(classNum, calDay = calendarDay(classNum, 0), pendingLab
   if (calDay.kind === 'midsem' || calDay.kind === 'compre') {
     const mid = calDay.kind === 'midsem';
     const names = calDay.papers.map((id) => courses[id]?.code || id).join(', ');
-    free('morning', 'Morning · Last-minute revision', mid ? hm(9, 0) : hm(9, 30));
+    breakfast('Morning · Breakfast and last-minute revision', mid ? hm(9, 0) : hm(9, 30));
     add('exam', 'exam', `${mid ? 'Mid-semester test' : 'Comprehensive exam'} · ${names}`, mid ? hm(10, 30) : hm(12, 30), 'classroom', { papers: calDay.papers, exam: calDay.kind });
     free('after-exam', 'Free time · compare answers at ANC', hm(13, 0));
-    add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(14, 0), 'canteen');
+    lunch(hm(14, 0));
     free('afternoon', 'Afternoon · Study for the next paper', hm(17, 30));
     evening();
     return slots;
   }
 
   if (calDay.kind !== 'class') {
-    free('morning', 'Morning · Breakfast at the mess', hm(9, 0));
+    breakfast('Morning · Breakfast at the mess', hm(9, 0));
     free('day', calDay.kind === 'holiday' ? `No classes${title}` : calDay.kind === 'free' ? 'Free day · no classes' : `Classwork suspended${title}`, hm(13, 0));
-    add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(14, 0), 'canteen');
+    lunch(hm(14, 0));
     if (calDay.kind === 'sports') {
       free('afternoon', 'Afternoon · Free time', hm(16, 0));
       add('sports', 'sports', 'BOSM · matches at the Gymkhana Grounds', hm(18, 0), 'playground');
@@ -111,14 +115,14 @@ function buildCollegeDay(classNum, calDay = calendarDay(classNum, 0), pendingLab
   }
 
   const week = WEEKLY[classNum][calDay.weekday] || { lectures: [] };
-  free('morning', `Morning · Breakfast at the mess${title}`, hm(8, 0));
+  breakfast(`Morning · Breakfast at the mess${title}`, hm(8, 0));
   week.lectures.forEach((id, i) => {
     const c = courses[id];
     add(`p${i + 1}`, 'lesson', `Lecture · ${c.code} ${c.name}`, t + 50, 'classroom', { subject: id });
     if (i < week.lectures.length - 1) free(`gap${i + 1}`, 'Break · walk to the next lecture', t + 10);
   });
   free('late-morning', 'Free time · Library, ANC or the Bhawan', hm(12, 30));
-  add('lunch', 'lunch', 'Lunch · Mess and ANC', hm(13, 30), 'canteen');
+  lunch(hm(13, 30));
   if (week.lab && pendingLabs.includes(week.lab)) {
     free('pre-lab', 'Afternoon · Head to the lab', hm(14, 0));
     add('lab', 'lab', 'Lab session · FD-II', hm(16, 0), 'sciencelab', { lab: week.lab });
