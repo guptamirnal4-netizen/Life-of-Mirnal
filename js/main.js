@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Campus } from './world/campus.js';
 import { BitsCampus } from './world/bits-world.js';
 import { createMinimap } from './ui/minimap.js';
-import { setupGraphics } from './world/environment.js';
+import { GraphicsEngine } from './graphics/GraphicsEngine.js';
+import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
 import { NPC, NPCManager, Ball, studentHeight } from './world/npcs.js';
 import { ANTHEM_LINES, ANTHEM_DURATION, ANTHEM_AUDIO_URL, LYRIC_WORDS } from '../data/anthem.js';
@@ -28,15 +29,9 @@ import { Voice, tokens } from './voice.js';
 // ---------- Renderer & scene ----------
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 300);
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+// Pixel ratio, resizing, tone mapping, shadows and quality profiles: js/graphics/ (created below, once the campus exists).
 
 initUI();
 setMicHandler(() => handleVoice());
@@ -50,7 +45,7 @@ let bitsRoot = null;
 const player = new Player(camera, canvas);
 const npcs = new NPCManager(scene, campus);
 const ball = new Ball(scene, campus.fieldBounds);
-const gfx = setupGraphics({ renderer, scene, campus: () => campus });
+const graphics = new GraphicsEngine({ renderer, scene, camera, campus: () => campus });
 npcs.setPlayerPos(player.pos);
 function addMainInteractables(c, reg) {
   c.interactable('assemblyLine', 0, -6, 'Join the assembly line', { radius: 4.5 });
@@ -111,7 +106,7 @@ function useWorld(kind) {
   ball.reset();
   camera.far = college ? 1100 : 300;
   camera.updateProjectionMatrix();
-  gfx.setRange(college ? { fogNear: 170, fogFar: 720, skyScale: 1900 } : { fogNear: 90, fogFar: 270, skyScale: 280 });
+  graphics.worldChanged(college ? { fogNear: 170, fogFar: 720, skyScale: 1900 } : { fogNear: 90, fogFar: 270, skyScale: 280 });
   minimap.setVisible(college);
   if (!college) setBike(false);
 }
@@ -1354,7 +1349,7 @@ function openHelp() {
     h('table', {}, h('tbody', {}, [
       ['W A S D', 'Walk'], ['Mouse', 'Look around'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
       ['F', 'Voice: speak to choose options or talk (Chrome)'], ['T', 'Timetable'], ['M', 'Missions'], ['J', 'Learning Journey'],
-      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['Esc', 'Pause menu'],
+      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
     ].map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
     h('p', {}, 'Lessons start automatically when you sit at your desk (yellow mark) in the classroom during a lesson period. Sitting early makes time skip to the bell.'),
     h('p', {}, 'Voice: press F and say an option (“option two”, “raise hand”, “bye”), or near a classmate say “hello Diya”. Say “timetable” or “journey” to open them.')), { title: 'How to play', closable: true });
@@ -1371,9 +1366,10 @@ function openSettings() {
       h('select', { onchange: (e) => { s.timeScale = Number(e.target.value); } },
         [[TIME_SPEEDS.slow, 'Slow'], [TIME_SPEEDS.normal, 'Normal'], [TIME_SPEEDS.fast, 'Fast'], [TIME_SPEEDS.veryFast, 'Very fast'], ...(Object.values(TIME_SPEEDS).includes(s.timeScale) ? [] : [[s.timeScale, 'Custom']])]
           .map(([v, l]) => h('option', { value: v, selected: s.timeScale === v }, `${l} · ${Math.round(1 / v * 10) / 10} s per game minute (an hour ≈ ${Math.round(60 / v / 6) / 10} min)`)))),
-    h('label', { class: 'setting' }, 'Graphics',
-      h('select', { onchange: (e) => { s.graphics = e.target.value; } },
-        [['high', 'High (shadows, sharp detail)'], ['low', 'Low (faster on older laptops)']].map(([v, l]) => h('option', { value: v, selected: (s.graphics || 'high') === v }, l)))),
+    h('label', { class: 'setting' }, 'Graphics quality',
+      h('select', { onchange: (e) => { s.graphics = e.target.value; graphics.setQuality(s.graphics); } },
+        PROFILE_ORDER.map((v) => h('option', { value: v, selected: (s.graphics || DEFAULT_PROFILE) === v }, `${PROFILES[v].label} (${PROFILES[v].note})`)))),
+    h('label', { class: 'setting check' }, h('input', { type: 'checkbox', checked: graphics.perf.visible, onchange: (e) => graphics.perf.setVisible(e.target.checked) }), 'Show performance stats (or press ` in the game)'),
     h('label', { class: 'setting' }, 'Voice language',
       h('select', { onchange: (e) => { s.voiceLang = e.target.value; } },
         [['en-IN', 'English (India)'], ['hi-IN', 'Hindi'], ['hinglish', 'Hinglish (English-India recogniser)']].map(([v, l]) => h('option', { value: v, selected: s.voiceLang === v }, l)))),
@@ -1510,6 +1506,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Enter' && anthem) { anthem.skipped = true; return endAnthem(); }
   if (e.code === 'KeyV' && !isOpen()) return toggleView();
+  if (e.code === 'Backquote') return graphics.perf.setVisible(!graphics.perf.visible);
   if (e.code === 'KeyC' && !isOpen() && isCollege(state.classNum) && state.phase !== 'graduated') {
     if (player.seated) return toast('Stand up first (E).');
     if (campus.roomAt(player.pos.x, player.pos.z)) return toast('No cycling indoors. Step outside first.');
@@ -1895,8 +1892,9 @@ function frame() {
       if (isCollege(state.classNum)) campus.setClock?.(state.day.clock);
     }
   }
-  gfx.update(dt, { clock: state?.day?.clock ?? 600, focus: player.pos, quality: state?.settings?.graphics || 'high' });
-  renderer.render(scene, camera);
+  if (state) graphics.setQuality(state.settings.graphics);
+  graphics.update(dt, { clock: state?.day?.clock ?? 600, focus: player.pos, view: state?.settings.view || 'first', riding: player.bike });
+  graphics.render();
 }
 
 // Title camera
@@ -1909,4 +1907,4 @@ showTitle();
 frame();
 
 // Exposed for automated testing in the browser.
-window.__game = { get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };
+window.__game = { graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };

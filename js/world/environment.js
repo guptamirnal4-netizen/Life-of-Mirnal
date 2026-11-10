@@ -1,13 +1,9 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 
-// Sky, sun, shadows, fog and quality settings. The sun follows the school clock.
+// Sky, sun, shadows and fog. The sun follows the school clock. Renderer settings, shadow map size and
+// quality profiles are in js/graphics/.
 export function setupGraphics({ renderer, scene, campus }) {
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.56;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
   const sky = new Sky();
   sky.scale.setScalar(280);
   const u = sky.material.uniforms;
@@ -23,9 +19,8 @@ export function setupGraphics({ renderer, scene, campus }) {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff0d4', 3.1);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera;
-  sc.left = -38; sc.right = 38; sc.top = 38; sc.bottom = -38; sc.near = 1; sc.far = 220;
+  sc.near = 1; sc.far = 220;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   scene.add(sun);
@@ -48,18 +43,6 @@ export function setupGraphics({ renderer, scene, campus }) {
   };
 
   const dir = new THREE.Vector3();
-  let quality = null;
-  const setQuality = (q) => {
-    if (q === quality) return;
-    quality = q;
-    const high = q !== 'low';
-    renderer.setPixelRatio(high ? Math.min(window.devicePixelRatio, 2) : 1);
-    renderer.shadowMap.enabled = high;
-    sun.castShadow = high;
-    scene.traverse((o) => {
-      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; });
-    });
-  };
 
   const sunDirection = (clockMinutes) => {
     const t = THREE.MathUtils.clamp((clockMinutes - 6 * 60) / (12 * 60), 0.02, 0.98);
@@ -78,8 +61,7 @@ export function setupGraphics({ renderer, scene, campus }) {
     sky.scale.setScalar(skyScale);
   };
 
-  const update = (dt, { clock = 10 * 60, focus = null, quality: q = 'high' } = {}) => {
-    setQuality(q);
+  const update = (dt, { clock = 10 * 60, focus = null } = {}) => {
     const d = sunDirection(clock);
     u.sunPosition.value.copy(d);
     const elevationDeg = THREE.MathUtils.radToDeg(Math.asin(d.y));
@@ -91,7 +73,7 @@ export function setupGraphics({ renderer, scene, campus }) {
     sun.color.setHSL(0.1, 0.6, 0.78 + 0.18 * Math.min(1, d.y * 1.5));
     const f = focus || new THREE.Vector3();
     // Snap the shadow frustum to texels so shadows don't shimmer while walking.
-    const step = 76 / 2048;
+    const step = (sc.right - sc.left) / sun.shadow.mapSize.x;
     const fx = Math.round(f.x / step) * step;
     const fz = Math.round(f.z / step) * step;
     sun.target.position.set(fx, 0, fz);
@@ -104,5 +86,5 @@ export function setupGraphics({ renderer, scene, campus }) {
     world().update?.(dt, f);
   };
 
-  return { sun, sky, hemi, update, setQuality, setRange };
+  return { sun, sky, hemi, update, setRange };
 }

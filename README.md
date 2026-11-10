@@ -70,11 +70,22 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 - **National Anthem, sung by everyone:** at every assembly the U.S. Navy Band's public-domain instrumental plays (see `audio/ATTRIBUTION.md`), lyrics appear line by line, and every character stands at attention and sings. Mirnal has to sing too. The microphone measures how long you sing and recognises anthem words. Singing along earns reputation; you can skip it any time. Lyric timing is approximate.
 - **Saving:** browser localStorage. It autosaves after lessons and year changes, and you can save manually from the pause menu.
 
+## Graphics
+
+- **Quality presets:** Low, Medium, High (default) and Ultra, under Pause → Settings. They change at once, without a reload, and are saved with the game.
+- **What each preset sets:**
+  - the pixel ratio, capped both by the preset and by a pixel budget, so a full-screen Retina window isn't rendered at full 2×
+  - the sun's shadows (off on Low, then soft shadows up to 4096 px)
+  - texture filtering
+- **Performance stats:** press `` ` `` in the game to show frame rate, frame time, draw calls and resolution.
+- **Code and assets:** the code is in `js/graphics/` (see the comments at the top of each file). Third-party files and their licences are listed in `ASSETS.md`.
+
 ## Code map
 
 ```
 data/            curriculum-primary.js (1–5), curriculum-middle.js (6–10), senior-a/b.js (11–12),
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
+js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PerformanceMonitor
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM
 js/world/        campus (3D school), bits-world (real-scale BITS campus), player, npcs (characters, ball), labels
 data/bits-campus.js  BITS Pilani footprints, roads and areas from OpenStreetMap, in metres from the Rotunda
