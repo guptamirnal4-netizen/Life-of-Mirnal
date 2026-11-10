@@ -94,7 +94,7 @@ test('local ↔ world coordinates round-trip', () => {
   }
 });
 
-test('inside, courtyard and outside are told apart; no trees in the building or its courtyards', () => {
+test('inside, courtyard and outside are told apart; no scattered trees in the building or its courtyards', () => {
   const H = make();
   const pt = (u, v) => H.world(u, v);
   const corridor = pt(6.15, H.ve);
@@ -104,6 +104,6 @@ test('inside, courtyard and outside are told apart; no trees in the building or 
   assert.equal(H.roomAt(court.x, court.z), null);
   assert.equal(H.roomAt(outside.x, outside.z), null);
   assert.equal(H.treeOk(corridor.x, corridor.z), false);
-  assert.equal(H.treeOk(court.x, court.z), false, 'the courtyards are concrete: no trees');
+  assert.equal(H.treeOk(court.x, court.z), false, 'the courtyards are concrete playgrounds: only the two planted shade trees');
   assert.equal(H.treeOk(outside.x - 30, outside.z), true, 'trees are fine away from the Bhawan');
 });

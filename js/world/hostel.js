@@ -1180,6 +1180,10 @@ export class Hostel {
         this.cyl(u, 3.2, v, 0.18, 0.25, 'e:#fff1c9', 10, 0.1);
       }
     }
+    // one shade tree in a far corner of each playground, clear of the pitch, the goals and the players;
+    // the campus tree builder plants them as [x, z, scale]
+    const [c1] = this.court;
+    this.shadeTrees = [this.world(c1.u1 - 5.5, c1.v0 + 5.5), this.world(c2.u0 + 5.5, c2.v1 - 5.5)].map((p) => [p.x, p.z, 1.0]);
   }
 
   // Porch at the entrance and the cycle stand beside it.

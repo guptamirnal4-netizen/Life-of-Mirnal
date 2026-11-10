@@ -1220,6 +1220,7 @@ export class BitsCampus extends Campus {
         }
       }
     }
+    pts.push(...(this.hostel.shadeTrees || []));
     const byChunk = new Map();
     for (const p of pts) {
       const k = chunkKey(p[0], p[1]);
