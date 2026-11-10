@@ -18,6 +18,7 @@ import { COLLEGE, COLLEGE_STAFF, COLLEGE_INTRO, ROADMAP } from '../data/college.
 import { saveGame, loadGame, hasSave } from './core/save.js';
 import { streamGroup } from './core/streams.js';
 import { getClassSubjects, getPracticals, getProject, getLabCourses, stageOf, STAGES, isCollege } from '../data/curriculum.js';
+import { MEALS, menuFor, PITSTOP } from '../data/mess.js';
 import { CLASSMATES, teacherFor, PRINCIPAL, GUARD, CANTEEN, LIBRARIAN, PARENTS, HOSTELMATES } from '../data/people.js';
 import { STREAMS, COUNSELLOR, SCHOOL } from '../data/streams.js';
 import { h, initUI, openPanel, isOpen, closeTop, toast, onOverlayChange, topPanel, closeAll, setMicHandler } from './ui/dom.js';
@@ -979,6 +980,8 @@ function handleInteractable(id) {
       break;
     case 'canteen': openCanteen(ctx); break;
     case 'mess': eatAtMess(slot); break;
+    case 'messmenu': openMessMenu(); break;
+    case 'pitstop': openPitstop(); break;
     case 'tt': playTT(npcs.get('hm:aditya')?.group.visible ? 'Aditya' : 'your wingie'); break;
     case 'foosball':
     case 'carrom': quickGame(id); break;
@@ -1196,13 +1199,6 @@ function studyAtDesk() {
 }
 
 // ---------- The mess (college) ----------
-const MEALS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
-// A sample hostel-mess menu, not the real VKB menu.
-const MENU = {
-  breakfast: ['Poha, bread-butter-jam, tea', 'Aloo paratha, curd, tea', 'Idli-sambar, cornflakes, milk', 'Upma, boiled eggs, coffee'],
-  lunch: ['Dal, rice, roti, aloo-gobhi, curd', 'Rajma-chawal, roti, salad', 'Kadhi-pakoda, rice, roti, bhindi', 'Chole, rice, roti, raita'],
-  dinner: ['Paneer butter masala, roti, dal, rice', 'Mix veg, roti, dal fry, rice, kheer', 'Egg curry or malai kofta, roti, rice', 'Dal baati churma, gatte ki sabzi'],
-};
 const mealsEaten = () => Object.values(state.day.meals || {}).filter(Boolean).length;
 const pendingMeal = (slot) => isCollege(state.classNum) && slot.meal && !state.day.meals?.[slot.meal];
 
@@ -1217,7 +1213,7 @@ function eatAtMess(slot) {
     return;
   }
   if (d.meals[meal]) { toast(`You've already had ${meal}. ${mealsEaten()}/${slots.filter((s) => s.meal).length} meals today.`); requestLock(); return; }
-  const menu = MENU[meal][state.sem.day % MENU[meal].length];
+  const menu = menuFor(state.sem.day)[meal];
   const close = openPanel(h('div', {},
     h('p', {}, `${MEALS[meal]} is being served. Grab a steel thali and join the queue.`),
     h('p', {}, h('b', {}, 'On the menu: '), menu),
@@ -1231,6 +1227,36 @@ function eatAtMess(slot) {
       toast(`✔ ${MEALS[meal]} done · ${mealsEaten()}/${slots.filter((s) => s.meal).length} meals today.`, 4000);
       requestLock();
     } }, '🎤 Say “eat” or click'))), { title: `VKB Mess · ${MEALS[meal]}`, closable: true });
+}
+
+const mealTimes = () => Object.fromEntries(slots.filter((s) => s.meal).map((s) => [s.meal, `${fmt(s.start)}–${fmt(s.end)}`]));
+
+// The menu board outside the mess: today and the next three days (the sample menu repeats every four days).
+function openMessMenu() {
+  const day = state.sem?.day || 0;
+  const times = mealTimes();
+  openPanel(h('div', {},
+    h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Day'), ...Object.keys(MEALS).map((m) => h('th', {}, `${MEALS[m]}${times[m] ? ` (${times[m]})` : ''}`)))),
+      h('tbody', {}, [0, 1, 2, 3].map((k) => { const m = menuFor(day + k); return h('tr', {}, h('td', {}, k === 0 ? h('b', {}, 'Today') : k === 1 ? 'Tomorrow' : `Day ${day + k + 1}`), ...Object.keys(MEALS).map((x) => h('td', {}, m[x]))); }))),
+    h('p', { class: 'muted small' }, 'Sample menu, not the real VKB menu. Extras are at Pitstop, inside by the door.')), { title: 'VKB Mess · Menu', closable: true });
+}
+
+// Pitstop, the extras counter in the mess: anything here goes on your mess bill.
+function openPitstop() {
+  const sem = state.sem;
+  sem.extras ||= 0;
+  const close = openPanel(h('div', {},
+    h('p', {}, 'Hungry between meals, or want something extra? Pick one. It goes on your mess bill.'),
+    h('div', { class: 'row wrap' }, PITSTOP.map((it) => h('button', { 'data-voice': it.id, onclick: () => {
+      sem.extras += it.price;
+      state.stats.extras = (state.stats.extras || 0) + 1;
+      state.day.optional.pitstop = true;
+      close();
+      save(true);
+      toast(`${it.emoji} ${it.name} (₹${it.price}) · mess bill this semester: ₹${sem.extras}`, 4000);
+      requestLock();
+    } }, `${it.emoji} ${it.name} · ₹${it.price}`))),
+    h('p', { class: 'muted small' }, `Extras this semester: ₹${sem.extras}. Prices are illustrative. Say the item's name to order.`)), { title: 'Pitstop · Extras', closable: true });
 }
 
 function openNoticeBoard() {
@@ -1329,6 +1355,7 @@ function missionList() {
         ['Grab something at ANC', d.optional.canteen],
         ['Read in the Central Library', d.optional.library],
         ['Play TT in the Krishna Bhawan common room', !!d.optional.tt],
+        ['Grab an extra at Pitstop (VKB mess)', !!d.optional.pitstop],
         ['Get a snack from the Bhawan vending machine', !!d.optional.vending],
         [`Meals at the mess this semester: ${state.sem.meals || 0}`, false],
       ],
@@ -1923,6 +1950,15 @@ function frame() {
       hudTimer = 0;
       updateHUD(currentSlot(slots, state.day.clock));
       if (isCollege(state.classNum)) campus.setClock?.(state.day.clock);
+      if (isCollege(state.classNum) && campus.setMessBoard) {
+        const s = currentSlot(slots, state.day.clock);
+        const key = `${state.sem?.day}|${s.meal || ''}`;
+        if (key !== campus.messKey) {
+          campus.messKey = key; // the day and meal the mess board and counter are showing
+          campus.setMessBoard({ day: state.sem?.day || 0, menu: menuFor(state.sem?.day || 0), times: mealTimes(), now: s.meal || null });
+          campus.setMessFood(s.meal || null);
+        }
+      }
     }
   }
   touch.update({ playing: mode === 'playing' && !!state && !isOpen(), college: !!state && isCollege(state.classNum), prompt: !hud.prompt.classList.contains('hidden'), seated: !!player.seated });

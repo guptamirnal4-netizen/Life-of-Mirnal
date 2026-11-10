@@ -10,6 +10,7 @@ import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
 import { NavGraph } from './nav.js';
 import { Hostel, WALK_IN, entranceOrder, mergeShells } from './hostel.js';
 import { CombHostel, COMB } from './comb-hostel.js';
+import { COUNTER_FOOD } from '../../data/mess.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -83,6 +84,13 @@ const FACADES = {
   school: { bay: 3.6, floor: 3.3, wall: '#f0d4c2', win: '#3b4f63', frame: '#fbf3ea' },
   food: { bay: 3.5, floor: 3.0, wall: '#f2e2c4', win: '#3a3a3a', frame: '#d84a2a' },
 };
+
+function paint(g, hex) {
+  const c = new THREE.Color(hex); const n = g.attributes.position.count;
+  const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+}
 
 function canvasTexture(w, h, draw, repeat = true) {
   const c = document.createElement('canvas');
@@ -553,20 +561,56 @@ export class BitsCampus extends Campus {
     this.roomRefs = this.rooms;
   }
 
-  // Long tables with benches and a serving counter at the back. E at the counter eats the current meal.
+  // Long tables with benches, the serving counter at the back (four steel tubs with the meal being served,
+  // thalis and a water jug; lids on between meals), thalis on the tables at mealtimes, the Pitstop extras
+  // counter by the door and a menu board inside and outside. E at the counter eats the current meal.
   interiorMess(r) {
     const cz = (r.z0 + r.z1) / 2;
+    const steel = []; const lids = []; const food = []; const stall = [];
+    const put = (list, g, x, y, z, color) => { const geo = g.index ? g.toNonIndexed() : g; geo.translate(x, y, z); if (color) paint(geo, color); list.push(geo); };
+    const merged = (list, material) => { const m = new THREE.Mesh(mergeGeometries(list), material); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); return m; };
+    // serving counter with four tubs; the food in them changes with the meal (setMessFood)
     this.box(r.x1 - 1.2, 0, cz, 0.9, 1.0, 6, '#b8c2c8', { metalness: 0.6, roughness: 0.35 });
-    for (const dz of [-2, -0.7, 0.6, 1.9]) this.cyl(r.x1 - 1.2, 1.12, cz + dz, 0.35, 0.3, 0.25, '#d9dde0', { segments: 14 });
-    this.box(r.x1 - 0.12, 1.4, cz, 0.04, 1.1, 3.2, '#1f3b2c', { collide: false });
-    this.label('Today’s menu', r.x1 - 0.3, 2.75, cz, { height: 0.36 });
+    this.messTubs = [];
+    for (const dz of [-2, -0.7, 0.6, 1.9]) {
+      put(steel, new THREE.CylinderGeometry(0.35, 0.3, 0.25, 16), r.x1 - 1.2, 1.125, cz + dz);
+      put(lids, new THREE.CylinderGeometry(0.2, 0.37, 0.12, 16), r.x1 - 1.2, 1.31, cz + dz);
+      put(lids, new THREE.CylinderGeometry(0.04, 0.04, 0.06, 8), r.x1 - 1.2, 1.4, cz + dz);
+      const top = new THREE.Mesh(new THREE.CircleGeometry(0.31, 18), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.75 }));
+      top.rotation.x = -Math.PI / 2;
+      top.position.set(r.x1 - 1.2, 1.244, cz + dz);
+      this.scene.add(top);
+      this.messTubs.push(top);
+    }
+    // a stack of thalis, a water jug and glasses at the end of the counter; rotis in a basket at mealtimes
+    for (let i = 0; i < 8; i++) put(steel, new THREE.CylinderGeometry(0.17, 0.15, 0.018, 18), r.x1 - 1.2, 1.0 + i * 0.02, cz + 2.65);
+    put(steel, new THREE.CylinderGeometry(0.09, 0.11, 0.3, 14), r.x1 - 1.2, 1.15, cz - 2.65);
+    for (const dx of [-0.25, 0.25]) put(steel, new THREE.CylinderGeometry(0.035, 0.03, 0.09, 10), r.x1 - 1.2 + dx, 1.045, cz - 2.6);
+    put(food, new THREE.CylinderGeometry(0.2, 0.16, 0.1, 14), r.x1 - 1.2, 1.05, cz - 1.35, '#a8834f');
+    for (let i = 0; i < 6; i++) put(food, new THREE.CylinderGeometry(0.11, 0.11, 0.01, 14), r.x1 - 1.2, 1.1 + i * 0.012, cz - 1.35, i % 2 ? '#c9934a' : '#d8a35a');
+    // today's menu above the counter (the same board as outside)
+    this.messMenuTex = canvasTexture(512, 640, () => {}, false);
+    const boardMat = new THREE.MeshStandardMaterial({ map: this.messMenuTex, roughness: 0.9 });
+    const inBoard = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.875), boardMat);
+    inBoard.rotation.y = -Math.PI / 2;
+    inBoard.position.set(r.x1 - 0.08, 2.1, cz);
+    this.scene.add(inBoard);
+    this.box(r.x1 - 0.05, 1.1, cz, 0.04, 2.0, 1.62, '#5b3d24', { collide: false });
+    // tables and benches; a thali with food and a steel glass at every seat
     this.spots.mess = [];
     for (const tx of [r.x0 + 3.5, r.x0 + 7.5]) {
       for (const tz of [r.z0 + 1.8, r.z0 + 7.2]) {
         this.box(tx, 0, tz, 3.0, 0.76, 0.9, null, { tex: 'wood', tint: '#b08a5a' });
         for (const s of [-1, 1]) {
           this.box(tx, 0, tz + s * 0.85, 3.0, 0.45, 0.3, '#6b4a2e', { collide: false });
-          for (const ox of [-1, 0, 1]) this.spots.mess.push(new THREE.Vector3(tx + ox, 0, tz + s * 0.85));
+          for (const ox of [-1, 0, 1]) {
+            this.spots.mess.push(new THREE.Vector3(tx + ox, 0, tz + s * 0.85));
+            const px = tx + ox; const pz = tz + s * 0.24;
+            put(food, new THREE.CylinderGeometry(0.17, 0.15, 0.018, 18), px, 0.77, pz, '#c3c8cd');
+            for (const [fx, fz, c] of [[-0.07, -0.05, '#e3a33a'], [0.07, -0.05, '#f7f4ea'], [0, 0.07, '#d98a2b']]) put(food, new THREE.CylinderGeometry(0.05, 0.05, 0.022, 10), px + fx, 0.785, pz + fz * s, c);
+            put(food, new THREE.CylinderGeometry(0.075, 0.075, 0.008, 12), px + 0.02, 0.8, pz - 0.01 * s, '#c9934a');
+            put(steel, new THREE.CylinderGeometry(0.035, 0.03, 0.09, 10), px + 0.24, 0.805, pz - 0.05 * s);
+          }
         }
       }
     }
@@ -576,6 +620,89 @@ export class BitsCampus extends Campus {
     this.ceilingFan(r.x0 + 7.5, cz);
     this.interactable('mess', r.x1 - 2.1, cz, 'Eat at the mess', { radius: 2.2 });
     this.spots.messStaff = new THREE.Vector3(r.x1 - 0.5, 0, cz);
+
+    // the door wall: "in" points into the hall, "along" runs along the wall
+    const out = { west: [-1, 0], east: [1, 0], south: [0, 1], north: [0, -1] }[r.door.side];
+    const inn = [-out[0], -out[1]]; const along = [-out[1], out[0]];
+    const wallAt = { west: [r.x0, r.door.at], east: [r.x1, r.door.at], south: [r.door.at, r.z1], north: [r.door.at, r.z0] }[r.door.side];
+    const at = (i, a) => [wallAt[0] + inn[0] * i + along[0] * a, wallAt[1] + inn[1] * i + along[1] * a];
+    const abox = (i, a, y, depth, len, h, color, opts) => { const [x, z] = at(i, a); const ux = Math.abs(along[0]) > 0.5; this.box(x, y, z, ux ? len : depth, h, ux ? depth : len, color, opts); };
+    const facing = (dir) => Math.atan2(dir[0], dir[1]);
+    // Pitstop: an extras counter beside the door, a fridge of cold drinks and a sign
+    abox(0.65, 2.55, 0, 0.7, 2.2, 1.0, '#8a5a34');
+    abox(0.65, 2.55, 1.0, 0.78, 2.28, 0.05, '#e9e2d4', { collide: false });
+    for (const [k, c] of ['#f2c14e', '#e85d2a', '#7fb069', '#f7f4ea', '#c0392b', '#3d7ea6'].entries()) {
+      const [x, z] = at(0.55, 1.75 + k * 0.32);
+      put(stall, new THREE.BoxGeometry(0.2, 0.14 + (k % 3) * 0.05, 0.2), x, 1.12 + (k % 3) * 0.025, z, c);
+    }
+    abox(0.4, 4.1, 0, 0.7, 0.7, 1.9, '#eef1f3');
+    { const [x, z] = at(0.76, 4.1); const p = new THREE.PlaneGeometry(0.58, 1.5); p.rotateY(facing(inn)); put(stall, p, x, 1.0, z, '#bfe3ff'); }
+    for (let row = 0; row < 3; row++) for (let k = 0; k < 4; k++) { const [x, z] = at(0.74, 3.9 + k * 0.13); put(stall, new THREE.CylinderGeometry(0.03, 0.03, 0.18, 8), x, 0.45 + row * 0.45, z, ['#c0392b', '#2e7d32', '#f39c12', '#1565c0'][k]); }
+    const signTex = canvasTexture(512, 128, (g, W, H) => {
+      g.fillStyle = '#1d2a44'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#f2c14e'; g.fillRect(0, H - 10, W, 10);
+      g.fillStyle = '#ffffff'; g.font = 'bold 64px system-ui, sans-serif'; g.textBaseline = 'middle'; g.fillText('PITSTOP', 24, 52);
+      g.fillStyle = '#f2c14e'; g.font = '28px system-ui, sans-serif'; g.fillText('extras · maggi · omelette · lassi', 24, 98);
+    }, false);
+    { const [x, z] = at(0.3, 2.55); const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.5), new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.8, emissive: '#ffffff', emissiveMap: signTex, emissiveIntensity: 0.35 })); sign.rotation.y = facing(inn); sign.position.set(x, 2.25, z); this.scene.add(sign); }
+    { const [x, z] = at(1.5, 2.55); this.interactable('pitstop', x, z, 'Buy extras at Pitstop', { radius: 1.5 }); }
+    this.label('Pitstop · extras', ...(() => { const [x, z] = at(0.4, 2.55); return [x, 2.85, z]; })(), { height: 0.34 });
+    // the menu board outside, beside the door (r.exit is 1.6 m out from the facade)
+    {
+      const x = r.exit.x - out[0] * 0.9 + along[0] * 2.6; const z = r.exit.z - out[1] * 0.9 + along[1] * 2.6;
+      const board = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), boardMat);
+      board.rotation.y = facing(out);
+      board.position.set(x + out[0] * 0.03, 1.65, z + out[1] * 0.03);
+      this.scene.add(board);
+      const ux = Math.abs(along[0]) > 0.5;
+      this.box(x, 0.85, z, ux ? 1.32 : 0.05, 1.62, ux ? 0.05 : 1.32, '#5b3d24', { collide: false });
+      for (const d of [-0.62, 0.62]) this.box(x + along[0] * d, 0, z + along[1] * d, 0.08, 2.5, 0.08, '#4a3020');
+      this.interactable('messmenu', x + out[0] * 1.0, z + out[1] * 1.0, 'Read the mess menu', { radius: 1.6 });
+    }
+    this.messSteel = merged(steel, mat('#c9ced3', { metalness: 0.7, roughness: 0.3 }));
+    this.messLids = merged(lids, mat('#c9ced3', { metalness: 0.7, roughness: 0.3 }));
+    const vc = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
+    this.messFood = merged(food, vc);
+    merged(stall, vc);
+    this.setMessFood(null);
+  }
+
+  // The meal being served ('breakfast' | 'lunch' | 'dinner'), or null: lids on, no thalis on the tables.
+  setMessFood(meal) {
+    if (!this.messTubs) return;
+    this.messLids.visible = !meal;
+    this.messFood.visible = !!meal;
+    this.messTubs.forEach((top, i) => { top.visible = !!meal; if (meal) top.material.color.set(COUNTER_FOOD[meal][i]); });
+  }
+
+  // Redraw the menu board (inside and outside): { day, menu: { breakfast, lunch, dinner }, times, now }.
+  setMessBoard({ day, menu, times, now }) {
+    const tex = this.messMenuTex;
+    if (!tex) return;
+    const c = tex.image; const g = c.getContext('2d'); const W = c.width; const H = c.height;
+    g.fillStyle = '#21402f'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = '#8a6a3c'; g.lineWidth = 14; g.strokeRect(7, 7, W - 14, H - 14);
+    g.fillStyle = '#ffffff'; g.textBaseline = 'top';
+    g.font = 'bold 40px system-ui, sans-serif'; g.fillText('VKB MESS', 32, 30);
+    g.font = '24px system-ui, sans-serif'; g.fillStyle = '#d7e6da'; g.fillText(`Today's menu · day ${day + 1}`, 32, 80);
+    const wrap = (text, x, y, width, lh) => {
+      let line = '';
+      for (const w of text.split(' ')) { const t = line ? `${line} ${w}` : w; if (g.measureText(t).width > width && line) { g.fillText(line, x, y); y += lh; line = w; } else line = t; }
+      g.fillText(line, x, y); return y + lh;
+    };
+    let y = 130;
+    for (const meal of ['breakfast', 'lunch', 'dinner']) {
+      const on = now === meal;
+      if (on) { g.fillStyle = 'rgba(242,193,78,0.22)'; g.fillRect(20, y - 10, W - 40, 150); }
+      g.fillStyle = on ? '#f2c14e' : '#ffffff'; g.font = 'bold 30px system-ui, sans-serif';
+      g.fillText(`${meal[0].toUpperCase()}${meal.slice(1)}${on ? ' · NOW' : ''}`, 32, y);
+      g.fillStyle = '#cfe0d2'; g.font = '22px system-ui, sans-serif'; g.fillText(times[meal] || '', W - 190, y + 6);
+      g.fillStyle = '#ffffff'; g.font = '26px system-ui, sans-serif';
+      wrap(menu[meal], 32, y + 44, W - 64, 32);
+      y += 160;
+    }
+    g.fillStyle = '#f2c14e'; g.font = '22px system-ui, sans-serif'; g.fillText('Extras at Pitstop, by the door', 32, H - 44);
+    tex.needsUpdate = true;
   }
 
   // Run school-coordinate building code, then shift everything it created by (dx, dz).
