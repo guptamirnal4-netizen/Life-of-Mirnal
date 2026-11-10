@@ -140,6 +140,22 @@ export const CANTEEN_MENU = [
 // Visual looks for the 3D characters, keyed by display name (or first name for seniors).
 // gender: 'f' | 'm' (only used to pick clothing/hair models); outfit: uniform | casual | saree | kurta | formal | labcoat | tracksuit | guard
 // hair: short | spiky | long | ponytail | braids | bun | grey | turban; extras: glasses, mustache
+// Krishna Bhawan hostel-mates (fictional). Krishna is a boys' Bhawan.
+export const HOSTELMATES = [
+  { id: 'aditya', name: 'Aditya', color: '#c62828', pants: '#263238', lines: ['Bro, TT tonight? The common room table is free after dinner.', 'Mess had paneer today. Paneer! Celebrate.'] },
+  { id: 'varun', name: 'Varun', color: '#1565c0', pants: '#3e2723', lines: ['I have a quiz tomorrow and I have not opened the book. Classic.', 'Did you see the notice? Room inspection on Saturday.'] },
+  { id: 'nikhil', name: 'Nikhil', color: '#2e7d32', pants: '#212121', lines: ['The vending machine ate my ₹20 again.', 'Wi-Fi is better near the lobby, trust me.'] },
+  { id: 'harsh', name: 'Harsh', color: '#6a1b9a', pants: '#37474f', lines: ['Foosball rematch? I was not ready last time.', 'Hostel life is 50% Maggi, 50% deadlines.'] },
+  { id: 'pranav', name: 'Pranav', color: '#ef6c00', pants: '#263238', lines: ['Shh, I am studying. Okay, five minutes of talking.', 'If you need notes for Thermo, I have them.'] },
+  { id: 'siddharth', name: 'Siddharth', color: '#00838f', pants: '#1b1b1b', lines: ['The match is in the last over! Sit, sit.', 'Who switched the channel?'] },
+  { id: 'aman', name: 'Aman', color: '#ad1457', pants: '#3e2723', lines: ['Badminton in the QT at six. Bring your own shuttle.', 'The courtyard is the best part of this Bhawan.'] },
+  { id: 'rohan', name: 'Rohan', color: '#455a64', pants: '#212121', lines: ['First floor gets all the breeze. Come up sometime.', 'My roommate snores like a generator.'] },
+  { id: 'yash', name: 'Yash', color: '#f9a825', pants: '#263238', lines: ['Carrom is a serious sport here. Respect the striker.', 'Queen is mine. Always.'] },
+  { id: 'kunal', name: 'Kunal', color: '#4e342e', pants: '#37474f', lines: ['Senior tip: never skip the first lab.', 'Oasis prep has already started. Join a club!'] },
+  { id: 'tejas', name: 'Tejas', color: '#283593', pants: '#1b1b1b', lines: ['Going to ANC, want anything?', 'The geyser on the first floor is the only reliable one.'] },
+  { id: 'ishaan', name: 'Ishaan', color: '#558b2f', pants: '#3e2723', lines: ['I just came back from the gym corner. Never again.', 'Laundry day. Again.'] },
+];
+
 export const LOOKS = {
   Aarav: { gender: 'm', hair: 'short' },
   Diya: { gender: 'f', hair: 'braids' },
@@ -195,4 +211,16 @@ export const LOOKS = {
   'Prof. Neha Bhardwaj': { gender: 'f', outfit: 'formal', hair: 'ponytail', glasses: true },
   'Dr. Imran Qadri': { gender: 'm', outfit: 'labcoat', hair: 'short' },
   'Prof. Lata Deshpande': { gender: 'f', outfit: 'saree', hair: 'bun' },
+  Aditya: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Varun: { gender: 'm', hair: 'spiky', outfit: 'casual', glasses: true },
+  Nikhil: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Harsh: { gender: 'm', hair: 'spiky', outfit: 'casual' },
+  Pranav: { gender: 'm', hair: 'short', outfit: 'casual', glasses: true },
+  Siddharth: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Aman: { gender: 'm', hair: 'spiky', outfit: 'casual' },
+  Rohan: { gender: 'm', hair: 'short', outfit: 'casual', mustache: true },
+  Yash: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Kunal: { gender: 'm', hair: 'short', outfit: 'casual', glasses: true },
+  Tejas: { gender: 'm', hair: 'spiky', outfit: 'casual' },
+  Ishaan: { gender: 'm', hair: 'short', outfit: 'casual' },
 };

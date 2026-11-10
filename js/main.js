@@ -15,7 +15,7 @@ import { COLLEGE, COLLEGE_STAFF, COLLEGE_INTRO, ROADMAP } from '../data/college.
 import { saveGame, loadGame, hasSave } from './core/save.js';
 import { streamGroup } from './core/streams.js';
 import { getClassSubjects, getPracticals, getProject, getLabCourses, stageOf, STAGES, isCollege } from '../data/curriculum.js';
-import { CLASSMATES, teacherFor, PRINCIPAL, GUARD, CANTEEN, LIBRARIAN, PARENTS } from '../data/people.js';
+import { CLASSMATES, teacherFor, PRINCIPAL, GUARD, CANTEEN, LIBRARIAN, PARENTS, HOSTELMATES } from '../data/people.js';
 import { STREAMS, COUNSELLOR, SCHOOL } from '../data/streams.js';
 import { h, initUI, openPanel, isOpen, closeTop, toast, onOverlayChange, topPanel, closeAll, setMicHandler } from './ui/dom.js';
 import { runLesson, runPractical, runProject, runExam, showReportCard, showYearSummary, runMakeUp } from './ui/academic.js';
@@ -200,7 +200,8 @@ function addNPC(id, meta, opts, at) {
 function spawnStaff() {
   if (isCollege(state.classNum)) {
     const S = COLLEGE_STAFF;
-    addNPC('guard', { kind: 'staff', who: S.guard, role: 'guard' }, { name: S.guard.name, title: S.guard.role, role: 'staff', color: '#4b5d7a', pants: '#2b3445', height: 1.7, skinIndex: 1, outfit: 'guard' }, campus.spots.guard);
+    const guard = addNPC('guard', { kind: 'staff', who: S.guard, role: 'guard' }, { name: S.guard.name, title: S.guard.role, role: 'staff', color: '#4b5d7a', pants: '#2b3445', height: 1.7, skinIndex: 1, outfit: 'guard' }, campus.spots.guard);
+    if (campus.hostel) guard.group.rotation.y = campus.hostel.npcSpots.guardYaw;
     addNPC('canteen', { kind: 'staff', who: S.canteen, role: 'canteen' }, { name: S.canteen.name, title: S.canteen.role, role: 'staff', color: '#e8e2d0', pants: '#4a3b2a', height: 1.68, skinIndex: 3 }, campus.spots.canteenStaff || new THREE.Vector3(-36, 0, 6.2));
     addNPC('librarian', { kind: 'staff', who: S.librarian, role: 'librarian' }, { name: S.librarian.name, title: S.librarian.role, role: 'staff', color: '#5a6a7a', pants: '#2a2a2a', height: 1.68, skinIndex: 2, outfit: 'formal', gender: 'm' }, campus.spots.librarian);
     addNPC('principal', { kind: 'staff', who: S.principal, role: 'principal' }, { name: S.principal.name, title: S.principal.role, role: 'staff', color: '#3a3a4a', pants: '#2a2a2a', height: 1.7, skinIndex: 4, outfit: 'formal', gender: 'm' }, campus.spots.principal);
@@ -263,7 +264,8 @@ function loadYear({ intro = true } = {}) {
   if (state.classNum === 11) {
     addNPC('counsellor', { kind: 'counsellor' }, { name: COUNSELLOR.name, title: 'Counsellor', role: 'teacher', color: '#2d6a6a', pants: '#333', height: 1.62, skinIndex: 2 }, campus.spots.counsellor);
   }
-  if (!state.player) player.place(campus.spots.spawn, isCollege(state.classNum) ? Math.PI / 2 : 0); // college: in your room, facing the door
+  if (isCollege(state.classNum)) spawnHostelmates();
+  if (!state.player) player.place(campus.spots.spawn, campus.spawnYaw ?? 0); // college: in your room, facing the door
   if (intro) showYearIntro();
 }
 
@@ -399,6 +401,7 @@ function setupGraduated() {
 
 // ---------- NPC scheduling ----------
 function scheduleNPCs(slot) {
+  if (isCollege(state.classNum)) placeHostelmates();
   const cms = [...npcMeta.entries()].filter(([, m]) => m.kind === 'classmate');
   const seats = campus.seats.filter((_, i) => i !== campus.playerSeatIndex);
   let seatI = 0;
@@ -691,7 +694,8 @@ function assemblyLabel() {
 
 function interactTarget() {
   const pos = player.pos;
-  const npc = npcs.nearest(pos, 2.3);
+  let npc = npcs.nearest(pos, 2.3);
+  if (npc && Math.abs(npc.pos.y - pos.y) > 1.6) npc = null; // someone on the floor above or below
   const f = player.forward();
   let best = null;
   let bestD = Infinity;
@@ -699,6 +703,7 @@ function interactTarget() {
     if (it.id === 'mydesk' && (state.phase !== 'day' || player.seated)) continue;
     if (it.id === 'registration' && !isCollege(state.classNum)) continue;
     if (it.id === 'assemblyLine' && isCollege(state.classNum)) continue;
+    if (it.pos.y > pos.y + 2.7 || it.pos.y < pos.y - 0.6) continue; // another floor
     const d = Math.hypot(it.pos.x - pos.x, it.pos.z - pos.z);
     if (d > it.radius) continue;
     const dir = new THREE.Vector3(it.pos.x - pos.x, 0, it.pos.z - pos.z).normalize();
@@ -719,7 +724,7 @@ function interactTarget() {
 function interact() {
   if (player.seated) {
     const slot = currentSlot(slots, state.day.clock);
-    if (slot.type === 'lesson' && !state.day.lessonsDone[slot.subject]) {
+    if (atDesk() && slot.type === 'lesson' && !state.day.lessonsDone[slot.subject]) {
       toast('Class is about to start. Stay seated!');
       return;
     }
@@ -803,6 +808,12 @@ function talkTo(npc, firstText = null) {
     }, { firstText });
   }
   if (m.kind === 'counsellor') return counsellorTalk();
+  if (m.kind === 'hostelmate') {
+    const hm = m.hm;
+    const opts = [{ label: 'Catch you later!', go: (close) => { close(); requestLock(); } }];
+    if (m.activity === 'tt') opts.unshift({ label: 'Play a game of TT', go: (close) => { close(); playTT(hm.name); } });
+    return openSimpleDialogue(ctx, `${hm.name} · Krishna Bhawan`, [hm.lines[(state.sem?.day || 0) % hm.lines.length]], opts);
+  }
   if (m.kind === 'senior') {
     if (!state.orientation.seniorsMet.includes(m.stream.senior.id)) state.orientation.seniorsMet.push(m.stream.senior.id);
     const st = STREAMS.filter((s) => s.senior.id === m.stream.senior.id);
@@ -969,6 +980,26 @@ function handleInteractable(id) {
       break;
     case 'canteen': openCanteen(ctx); break;
     case 'mess': eatAtMess(slot); break;
+    case 'tt': playTT(npcs.get('hm:aditya')?.group.visible ? 'Aditya' : 'your wingie'); break;
+    case 'foosball':
+    case 'carrom': quickGame(id); break;
+    case 'tv': toast(campus.hostel.setTV(!campus.hostel.tvOn) ? '📺 TV on. A cricket match, of course.' : 'TV off.'); campus.hostel.tvManual = true; requestLock(); break;
+    case 'sofa': {
+      const taken = (x) => [...npcs.npcs.values()].some((n) => n.group.visible && Math.hypot(n.pos.x - x.at.x, n.pos.z - x.at.z) < 0.3);
+      const seat = campus.hostel.sofaSeats.find((x) => !taken(x)) || campus.hostel.sofaSeats.at(-1);
+      player.sit(seat.at, seat.yaw + Math.PI, seat.stand);
+      toast('You sink into the sofa. (E to stand up)');
+      requestLock();
+      break;
+    }
+    case 'vending': openVending(); break;
+    case 'cooler': toast('💧 Ice-cold water. That beats the Pilani heat for now.'); requestLock(); break;
+    case 'washbasin': toast('You splash cold water on your face. Fresh!'); requestLock(); break;
+    case 'laundry': toast('🧺 Clothes in the machine. Hang them on the roof to dry.'); requestLock(); break;
+    case 'hnotice': openHostelNotices(); break;
+    case 'almirah': toast(campus.hostel.toggleAlmirah() ? 'Your almirah: clothes, a lock and a stash of snacks.' : 'Almirah closed.'); requestLock(); break;
+    case 'hlight': toast(campus.hostel.setMyLight(!campus.hostel.lightOn) ? '💡 Light on.' : 'Light off.'); requestLock(); break;
+    case 'studydesk': studyAtDesk(); break;
     case 'principalDesk': talkTo(npcs.get('principal') || { id: 'principal' }); break;
     case 'registration': {
       if (!isCollege(c)) { toast('The reception desk. Nothing to do here today.'); requestLock(); break; }
@@ -1018,7 +1049,134 @@ function handleInteractable(id) {
       else { toast(isCollege(c) ? `Not bedtime yet: lights out from ${fmt(slots.at(-1).start)}. To sleep early, press T → End the day.` : `School isn't over yet! Dismissal is at ${fmt(slots.at(-1).start)}.`); requestLock(); }
       break;
     default:
+      if (id.startsWith('hdoor:')) { toast(campus.hostel.toggleDoor(Number(id.slice(6))) ? 'Door open.' : 'Door closed.'); requestLock(); }
   }
+}
+
+// ---------- Krishna Bhawan: hostel-mates, the common room and your room ----------
+const atDesk = () => !!player.seated && player.seated.index === campus.playerSeatIndex;
+let hostelWalkers = [];
+
+function spawnHostelmates() {
+  if (!campus.hostel) return;
+  HOSTELMATES.forEach((hm, i) => {
+    const n = npcs.add(`hm:${hm.id}`, { name: hm.name, role: 'student', color: hm.color, pants: hm.pants, height: 1.7 + (i % 3) * 0.03, skinIndex: i, outfit: 'casual', gender: 'm' });
+    n.placeFilter = null; // they live inside the Bhawan
+    n.speed = 1.4;
+    npcMeta.set(`hm:${hm.id}`, { kind: 'hostelmate', hm });
+  });
+  placeHostelmates();
+}
+
+// Evenings, holidays and early mornings the Bhawan is full; during class hours most people are out.
+function placeHostelmates() {
+  const H = campus.hostel;
+  if (!H || !npcs.get('hm:aditya')) return;
+  const clock = state.day.clock;
+  const busy = clock >= 17 * 60 || clock < 8 * 60 || today()?.kind !== 'class';
+  const S = H.npcSpots;
+  const plan = busy
+    ? { aditya: ['tt', S.tt[0]], harsh: ['tt', S.tt[1]], siddharth: ['tv', S.tv[0]], nikhil: ['tv', S.tv[1]], yash: ['carrom', S.carrom[0]], ishaan: ['carrom', S.carrom[1]], pranav: ['study', S.study[0]], rohan: ['room', S.double[0]], kunal: ['room', S.senior[0]], aman: ['badminton', S.badminton[0]], varun: ['badminton', S.badminton[1]], tejas: ['walk', 0] }
+    : { pranav: ['study', S.study[0]], siddharth: ['tv', S.tv[0]], tejas: ['walk', 0], rohan: ['walk', 1] };
+  hostelWalkers = [];
+  for (const hm of HOSTELMATES) {
+    const id = `hm:${hm.id}`;
+    const n = npcs.get(id);
+    const p = plan[hm.id];
+    npcMeta.get(id).activity = p?.[0];
+    n.group.visible = !!p;
+    if (!p) { n.teleport(H.world(2, 2, -20)); continue; }
+    if (p[0] === 'walk') {
+      const y = p[1] * 3.3;
+      const a = H.world(6.15, H.ve - 22, y); const b = H.world(6.15, H.ve + 22, y);
+      n.teleport(p[1] ? b : a);
+      hostelWalkers.push({ n, a, b });
+      continue;
+    }
+    n.teleport(p[1].at);
+    n.seated = !!p[1].sit;
+    n.group.rotation.y = p[1].yaw;
+  }
+  H.ttBall.visible = busy;
+  if (!H.tvManual) H.setTV(busy);
+}
+
+// Corridor walkers pace up and down.
+function tickHostel() {
+  for (const w of hostelWalkers) if (!w.n.path.length) w.n.walkTo([(w.n.pos.distanceTo(w.a) < 1 ? w.b : w.a).clone()]);
+}
+
+// Table tennis: the ball comes to your forehand or backhand; say (or click) the side to return it. First to 5.
+function playTT(opponent) {
+  let me = 0;
+  let them = 0;
+  const side = () => (Math.random() < 0.5 ? 'forehand' : 'backhand');
+  let ball = side();
+  const body = h('div', {});
+  const finish = () => {
+    state.day.optional.tt = true;
+    state.reputation += me > them ? 2 : 1;
+    close();
+    toast(me > them ? `🏓 You beat ${opponent} ${me}–${them}!` : `🏓 ${opponent} wins ${them}–${me}. Rematch tomorrow.`, 4000);
+    requestLock();
+  };
+  const render = (msg) => body.replaceChildren(
+    h('p', {}, msg),
+    h('p', {}, h('b', {}, `You ${me} – ${them} ${opponent}`)),
+    me >= 5 || them >= 5 ? h('button', { class: 'primary', 'data-voice': 'done ok', onclick: finish }, 'Done')
+      : h('div', { class: 'row' }, ['forehand', 'backhand'].map((x) => h('button', { 'data-voice': x, onclick: () => hit(x) }, `🎤 ${x[0].toUpperCase()}${x.slice(1)}`))));
+  const hit = (x) => {
+    const right = x === ball;
+    const win = right ? Math.random() < 0.7 : Math.random() < 0.12;
+    if (win) me += 1; else them += 1;
+    ball = side();
+    render(`${right ? (win ? 'Clean return. Point to you!' : `Good read, but ${opponent} smashes it back.`) : `Wrong side! ${opponent} wins the point.`} Next ball: to your ${ball.toUpperCase()}.`);
+  };
+  const close = openPanel(body, { title: 'Table tennis · Common Room', closable: true });
+  render(`${opponent} serves. The ball is coming to your ${ball.toUpperCase()}. Say “forehand” or “backhand”.`);
+}
+
+function quickGame(kind) {
+  const a = 3 + Math.floor(Math.random() * 6);
+  const b = 3 + Math.floor(Math.random() * 6);
+  toast(kind === 'carrom' ? `Carrom with Yash: you pocket ${a} coins to his ${b}${a > b ? '. You win!' : '.'}` : `Foosball with Harsh: ${a}–${b}${a > b ? '. You win!' : '. So close.'}`, 4000);
+  state.reputation += 1;
+  requestLock();
+}
+
+function openVending() {
+  const items = [['Chips', 20], ['Cold drink', 40], ['Chocolate', 30], ['Biscuits', 10]];
+  const close = openPanel(h('div', {},
+    h('p', {}, 'Pick a snack and pay by UPI on the screen.'),
+    h('div', { class: 'row wrap' }, items.map(([name, price]) => h('button', { 'data-voice': name.toLowerCase(), onclick: () => {
+      state.stats.snacks += 1;
+      state.day.optional.vending = true;
+      close();
+      toast(`🥤 ${name} (₹${price}) drops into the tray.`);
+      requestLock();
+    } }, `🎤 ${name} · ₹${price}`))),
+    h('p', { class: 'muted small' }, 'Prices are illustrative.')), { title: 'Vending machine · Krishna Bhawan lobby', closable: true });
+}
+
+function openHostelNotices() {
+  openPanel(h('div', {},
+    h('ul', { class: 'clean' },
+      h('li', {}, '📌 Room inspection this Saturday, 10:00. Keep your room tidy.'),
+      h('li', {}, '📌 Inter-Bhawan TT tournament: sign up in the common room.'),
+      h('li', {}, '📌 Keep the noise down in the corridors after 23:00.'),
+      h('li', {}, '📌 Lost: blue steel water bottle near the first-floor washroom.'),
+      h('li', {}, '📌 Water tanks are cleaned on Sunday morning. Store water the night before.')),
+    h('p', { class: 'muted small' }, 'Sample notices for the game.')), { title: 'Krishna Bhawan · Notice board', closable: true });
+}
+
+// Half an hour of revision, stopping in time for the next lecture, lab or paper.
+function studyAtDesk() {
+  const d = state.day;
+  const next = slots.find((x) => x.start > d.clock && !['break', 'lunch'].includes(x.type));
+  d.clock = Math.min(d.clock + 30, next ? next.start : d.clock + 30);
+  state.reputation += 1;
+  toast(`📚 You revise at your desk until ${fmt(d.clock)}.${next && d.clock >= next.start ? ` ${next.label} is starting!` : ''}`, 4000);
+  requestLock();
 }
 
 // ---------- The mess (college) ----------
@@ -1154,6 +1312,8 @@ function missionList() {
         ['Help a batchmate with a lecture', d.optional.helped],
         ['Grab something at ANC', d.optional.canteen],
         ['Read in the Central Library', d.optional.library],
+        ['Play TT in the Krishna Bhawan common room', !!d.optional.tt],
+        ['Get a snack from the Bhawan vending machine', !!d.optional.vending],
         [`Meals at the mess this semester: ${state.sem.meals || 0}`, false],
       ],
     };
@@ -1436,7 +1596,9 @@ function updateView(dt) {
   const cp = Math.cos(player.pitch);
   const dir = new THREE.Vector3(-Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp);
   const maxDist = player.seated ? 2.2 : player.bike ? 4.4 : 3.4;
-  const cols = campus.allColliders();
+  // colliders around the camera boom only
+  const reach = maxDist + 0.5;
+  const cols = campus.allColliders().filter((c) => c.enabled && c.maxX > head.x - reach && c.minX < head.x + reach && c.maxZ > head.z - reach && c.minZ < head.z + reach && c.maxY > head.y - 1 && c.minY < head.y + 1.6);
   const at = (t) => {
     const p = head.clone().addScaledVector(dir, -t);
     p.y += 0.4 * (t / maxDist);
@@ -1451,8 +1613,8 @@ function updateView(dt) {
     }
   }
   const cam = at(dist);
-  if (campus.roomAt(cam.x, cam.z) || campus.roomAt(player.pos.x, player.pos.z)) cam.y = Math.min(cam.y, 2.9);
-  cam.y = Math.max(cam.y, 0.3);
+  if (campus.roomAt(cam.x, cam.z, cam.y) || campus.roomAt(player.pos.x, player.pos.z, player.pos.y)) cam.y = Math.min(cam.y, player.pos.y + 2.75);
+  cam.y = Math.max(cam.y, player.pos.y + 0.3);
   camera.position.copy(cam);
   camera.lookAt(head.clone().addScaledVector(dir, 3));
 }
@@ -1595,11 +1757,11 @@ function objective(slot) {
       const pending = getPracticals(state.classNum).some((p) => p.subject === slot.lab && d.practicalsDone[p.subject] === undefined);
       return pending ? { text: 'Lab session: go to the lab bench in FD-II (E)', loc: 'sciencelab' } : { text: 'Lab done for today!', loc: null };
     }
-    if (slot.type === 'exam') return d.examDone ? { text: 'Paper done. Free for the rest of the day', loc: null } : { text: `${slot.label}: sit at your desk in the NAB lecture theatre`, loc: player.seated ? null : 'classroom' };
+    if (slot.type === 'exam') return d.examDone ? { text: 'Paper done. Free for the rest of the day', loc: null } : { text: `${slot.label}: sit at your desk in the NAB lecture theatre`, loc: atDesk() ? null : 'classroom' };
     if (slot.type === 'fest') return d.eventDone ? { text: 'Enjoy the fest, then head back to the Bhawan', loc: null } : { text: `${today().fest} is on! Go to the Auditorium stage (E)`, loc: 'auditorium' };
     if (slot.type === 'sports') return { text: 'BOSM is on: watch or play at the Gymkhana Grounds', loc: 'playground' };
     if (slot.type === 'departure') return { text: 'Night: go to your room in Krishna Bhawan and sleep (E at the bed)', loc: 'gate' };
-    if (slot.type === 'lesson' && !d.lessonsDone[slot.subject]) return { text: `${slot.label}: take your seat (yellow mark)`, loc: player.seated ? null : 'classroom' };
+    if (slot.type === 'lesson' && !d.lessonsDone[slot.subject]) return { text: `${slot.label}: take your seat (yellow mark)`, loc: atDesk() ? null : 'classroom' };
     if (slot.type === 'lesson') return { text: 'Lecture done. Next: check the timetable (T)', loc: null };
     if (slot.type === 'break' || slot.type === 'lunch') {
       const next = nextSlot(slots, d.clock);
@@ -1613,7 +1775,7 @@ function objective(slot) {
   switch (slot.type) {
     case 'arrival': return { text: 'Walk to the Assembly Ground', loc: 'assembly' };
     case 'assembly': return d.assemblyDone ? { text: 'Head to the classroom for Period 1', loc: 'classroom' } : { text: 'Join the morning assembly (E)', loc: 'assembly' };
-    case 'lesson': return d.lessonsDone[slot.subject] ? { text: 'Lesson done. Stay seated for the next period', loc: null } : { text: `${slot.label}: sit at your desk (yellow mark)`, loc: player.seated ? null : 'classroom' };
+    case 'lesson': return d.lessonsDone[slot.subject] ? { text: 'Lesson done. Stay seated for the next period', loc: null } : { text: `${slot.label}: sit at your desk (yellow mark)`, loc: atDesk() ? null : 'classroom' };
     case 'break':
     case 'lunch': {
       const p = getProject(state.classNum, state.stream);
@@ -1707,6 +1869,7 @@ function frame() {
       if (anthem) tickAnthem(dt);
       player.update(dt, campus.allColliders());
       updateView(dt);
+      if (isCollege(state.classNum)) tickHostel();
       npcs.update(dt, ball);
       if (Math.hypot(ball.pos.x - player.pos.x, ball.pos.z - player.pos.z) < 0.75 && player.moving) {
         const dir = player.lastMove.clone().setY(0).normalize();

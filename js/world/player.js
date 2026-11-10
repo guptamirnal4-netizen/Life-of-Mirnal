@@ -75,8 +75,8 @@ export class Player {
     this.seated = null;
   }
 
-  sit(seatPos, yaw = 0) {
-    this.seated = { pos: seatPos.clone(), yaw };
+  sit(seatPos, yaw = 0, standAt = null) {
+    this.seated = { pos: seatPos.clone(), yaw, standAt: standAt && standAt.clone() };
     this.pos.copy(seatPos);
     this.yaw = yaw;
     this.pitch = 0.06;
@@ -84,6 +84,7 @@ export class Player {
 
   stand() {
     if (!this.seated) return;
+    if (this.seated.standAt) { this.pos.copy(this.seated.standAt); this.seated = null; return; }
     this.pos.z += 0.55;
     this.seated = null;
   }
@@ -127,8 +128,11 @@ export class Player {
     return this.forward().multiplyScalar(this.bikeSpeed * dt);
   }
 
-  update(dt, colliders) {
+  update(dt, all) {
     this.moving = false;
+    // only what is within reach this frame
+    const x = this.pos.x; const z = this.pos.z; const r = 2;
+    const colliders = all.filter((c) => c.maxX > x - r && c.minX < x + r && c.maxZ > z - r && c.minZ < z + r);
     if (this.enabled && !this.seated && !this.frozen) {
       const move = this._bike ? this.bikeStep(dt) : this.footStep(dt);
       if (move.lengthSq() > 1e-10) {
@@ -178,6 +182,7 @@ export class Player {
     for (const c of colliders) {
       if (!c.enabled) continue;
       if (this.pos.y >= c.maxY - 0.05) continue;
+      if (c.minY > this.pos.y + 1.7) continue; // above your head (an upper floor)
       if (c.walkable && this.pos.y + 0.7 >= c.maxY) continue;
       const nx = Math.max(c.minX, Math.min(this.pos.x, c.maxX));
       const nz = Math.max(c.minZ, Math.min(this.pos.z, c.maxZ));
@@ -185,6 +190,14 @@ export class Player {
       const dz = this.pos.z - nz;
       const d2 = dx * dx + dz * dz;
       if (d2 >= RADIUS * RADIUS) continue;
+      if (d2 > 1e-10) {
+        // Touching from outside: push out along the contact normal, so you slide past corners
+        // (walls of rotated buildings are rows of small boxes) instead of catching on them.
+        const d = Math.sqrt(d2);
+        this.pos.x += (dx / d) * (RADIUS - d);
+        this.pos.z += (dz / d) * (RADIUS - d);
+        continue;
+      }
       if (axis === 'x') {
         if (dx !== 0) this.pos.x = nx + Math.sign(dx) * Math.sqrt(RADIUS * RADIUS - dz * dz);
         else if (dz === 0) this.pos.x = this.pos.x < (c.minX + c.maxX) / 2 ? c.minX - RADIUS : c.maxX + RADIUS;

@@ -1467,8 +1467,8 @@ export class Campus {
     if (this.globe) this.globe.rotation.y += dt * 0.3;
     if (playerPos) {
       const room = this.roomAt(playerPos.x, playerPos.z);
-      if (room) {
-        const r = this.rooms[room];
+      const r = room && this.rooms[room];
+      if (r) {
         this.indoorLight.position.set((r.x0 + r.x1) / 2, WALL_H - 0.4, (r.z0 + r.z1) / 2);
         this.indoorLight.intensity = 14;
         this.indoorLight.distance = Math.max(r.x1 - r.x0, r.z1 - r.z0) * 1.1;

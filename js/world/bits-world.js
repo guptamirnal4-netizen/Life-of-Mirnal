@@ -8,6 +8,7 @@ import { makeLabel } from './labels.js';
 import { texture, TEX_SIZE } from './textures.js';
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
 import { NavGraph } from './nav.js';
+import { Hostel } from './hostel.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -170,14 +171,12 @@ const ROOM_HOSTS = {
   reception: { host: 'Main Building (West Wing)', name: 'Academic Registration (AUGSD)' },
   complab: { host: 'Main Building (West Wing)', name: 'Computer Lab (CP)' },
   auditorium: { host: 'Student Activities Center (SAC)', name: 'SAC · Auditorium' },
-  hostelroom: { host: 'Krishna Bhawan', name: 'Krishna Bhawan · Your Room' },
   mess: { host: 'VKB mess', name: 'VKB Mess · Dining Hall' },
 };
 
 // Rooms that exist only at BITS (local coordinates; placeRooms moves them into their hosts).
 // VKB mess is the OSM name of the mess building beside Krishna Bhawan.
 const BITS_ROOMS = [
-  { id: 'hostelroom', name: 'Your Room', x0: 0, x1: 4.6, z0: 0, z1: 3.8, door: { side: 'west', at: 1.9 }, wall: '#efe9dc', floor: 'terrazzo' },
   { id: 'mess', name: 'Mess', x0: 0, x1: 14, z0: 0, z1: 9, door: { side: 'west', at: 4.5 }, wall: '#f3ead6', floor: 'terrazzo' },
 ];
 
@@ -205,6 +204,10 @@ export class BitsCampus extends Campus {
     this.buckets = new Map();
     this.shapeGeos = new Map();
     this.buildings = D.buildings.map((b) => ({ ...b, bb: bbox(b.outer) }));
+    // Krishna Bhawan (your Bhawan) is walk-in; its outline is squared up to fit the interior.
+    const kb = this.buildings.find((b) => b.name === 'Krishna Bhawan');
+    this.hostel = new Hostel(this, kb);
+    kb.bb = bbox(kb.outer);
     this.buildingGrid = new Map();
     for (const b of this.buildings) this.gridInsert(this.buildingGrid, b.bb, b, 40);
     this.roadSegs = [];
@@ -217,6 +220,7 @@ export class BitsCampus extends Campus {
     this.buildRoads();
     this.placeRooms();
     this.planPassages();
+    this.hostel.build();
     this.buildBuildings();
     this.buildPassages();
     this.buildRotunda();
@@ -530,28 +534,8 @@ export class BitsCampus extends Campus {
         this[fn]();
       });
     }
-    this.interiorHostelRoom(this.rooms.hostelroom);
     this.interiorMess(this.rooms.mess);
     this.roomRefs = this.rooms;
-  }
-
-  // A first-year single: bed under the window, study table, steel cupboard. E at the bed sleeps.
-  interiorHostelRoom(r) {
-    const cx = (r.x0 + r.x1) / 2; const cz = (r.z0 + r.z1) / 2;
-    this.box(r.x1 - 0.55, 0, r.z0 + 1.15, 0.95, 0.42, 2.0, null, { tex: 'wood', tint: '#8a6040' });
-    this.box(r.x1 - 0.55, 0.42, r.z0 + 1.15, 0.9, 0.14, 1.95, '#e9ecf2', { collide: false });
-    this.box(r.x1 - 0.55, 0.56, r.z0 + 0.4, 0.6, 0.1, 0.35, '#ffffff', { collide: false });
-    this.box(r.x1 - 0.55, 0.57, r.z0 + 1.5, 0.92, 0.04, 1.2, '#3d5a8a', { collide: false }); // blanket
-    this.box(r.x1 - 0.12, 1.1, r.z0 + 1.15, 0.03, 1.1, 1.5, '#9fc3e0', { collide: false }); // window
-    this.box(r.x0 + 2.4, 0, r.z1 - 0.38, 1.3, 0.75, 0.6, null, { tex: 'wood' });
-    this.box(r.x0 + 2.4, 0, r.z1 - 1.0, 0.45, 0.46, 0.45, '#6b4a2e');
-    this.box(r.x0 + 2.4, 0.76, r.z1 - 0.3, 0.3, 0.22, 0.22, '#c0392b', { collide: false }); // books
-    this.box(r.x0 + 2.1, 0, r.z0 + 0.3, 1.0, 1.9, 0.5, '#7c8a96', { metalness: 0.5, roughness: 0.5 });
-    this.tubeLight(cx, r.z0 + 0.3);
-    this.ceilingFan(cx, cz);
-    this.interactable('gate', r.x1 - 1.4, r.z0 + 1.15, 'Sleep (end the day)', { radius: 1.5 });
-    this.bedSpot = new THREE.Vector3(r.x1 - 1.4, 0, r.z0 + 1.15);
-    this.spots.spawn = new THREE.Vector3(r.x0 + 2.6, 0, cz);
   }
 
   // Long tables with benches and a serving counter at the back. E at the counter eats the current meal.
@@ -640,9 +624,9 @@ export class BitsCampus extends Campus {
       const h = b.inCampus ? b.h : Math.min(b.h, 7);
       const [cx, cz] = centroid(b.outer);
       const cuts = this.hostCuts.get(b) || [];
-      for (const ring of [b.outer, ...b.holes]) this.buildWallRing(ring, h, `facade:${kind}`, fac, cx, cz, cuts, b.inCampus);
+      for (const ring of b.hostel ? [b.outer] : [b.outer, ...b.holes]) this.buildWallRing(ring, h, `facade:${kind}`, fac, cx, cz, cuts, b.inCampus);
       const roof = roofOf(b);
-      this.addShape(roof, cx, cz, this.flatShape(b.outer, b.holes, h, roof === 'roofSolar' ? 16 : roof === 'roofGreen' ? TEX_SIZE.grass : 4));
+      this.addShape(roof, cx, cz, this.flatShape(b.outer, [...b.holes, ...(b.roofHoles || [])], h, roof === 'roofSolar' ? 16 : roof === 'roofGreen' ? TEX_SIZE.grass : 4));
       for (const hole of b.holes) this.addShape('grass', cx, cz, this.flatShape(hole, [], 0.03, TEX_SIZE.grass));
       for (const cut of cuts) if (cut.room) this.buildJambs(cut, h);
       // domed corner kiosks on the Main Building wings
@@ -1078,20 +1062,19 @@ export class BitsCampus extends Campus {
     this.label('ANC · All Night Canteen', X, 4.6, Z - 6.4, { height: 0.7, bg: 'rgba(192,57,43,0.92)' });
   }
 
-  // "Your Bhawan": the porch in front of your room's doorway in Krishna Bhawan (arrival and "back to the hostel").
+  // "Your Bhawan": the Krishna Bhawan entrance (arrival, where batchmates gather at night) and your room inside.
   buildHostelGate() {
-    const room = this.rooms.hostelroom;
-    const zc = room.door.at;
-    const xEdge = room.exit.x + 1.6;
-    const X = xEdge - 2.5;
-    for (const s of [-1, 1]) this.box(xEdge - 1.2, 0, zc + s * 1.75, 0.45, 3, 0.45, null, { tex: 'plasterWhite', tint: '#ecd8b8' });
-    this.box(xEdge - 1.2, 3, zc, 2.2, 0.35, 3.95, null, { tex: 'plasterWhite', tint: '#ecd8b8', collide: false });
-    this.label('Your Bhawan · Krishna Bhawan', xEdge - 2.4, 4.2, zc, { height: 0.75, bg: 'rgba(30,60,110,0.92)' });
+    const H = this.hostel;
+    const lbl = H.world(-2.4, H.ve);
+    this.label('Your Bhawan · Krishna Bhawan', lbl.x, 4.2, lbl.z, { height: 0.75, bg: 'rgba(30,60,110,0.92)' });
     this.spots.gate = [];
-    for (let i = 0; i < 7; i++) this.spots.gate.push(new THREE.Vector3(X - 2 - (i % 3) * 1.4, 0, zc - 3 + Math.floor(i / 3) * 2.2));
-    this.spots.guard = new THREE.Vector3(X + 0.2, 0, zc + 2.4);
-    this.spots.parents = new THREE.Vector3(X - 3, 0, zc + 4);
-    this.hostelEntrance = this.bedSpot;
+    for (let i = 0; i < 7; i++) this.spots.gate.push(H.world(-4.5 - (i % 3) * 1.4, H.ve - 3 + Math.floor(i / 3) * 2.2));
+    this.spots.guard = H.npcSpots.guard;
+    this.spots.parents = H.world(-6.5, H.ve + 2);
+    this.spots.spawn = H.spawn;
+    this.spawnYaw = H.spawnYaw + Math.PI; // the player faces -z at yaw 0, characters +z
+    this.bedSpot = H.bedSpot;
+    this.hostelEntrance = H.bedSpot;
   }
 
   // Main Gate on the eastern town road: carved pink-sandstone pillars, a WELCOME banner and wooden gates.
@@ -1193,6 +1176,7 @@ export class BitsCampus extends Campus {
     const fb = this.fieldBounds;
     const add = (x, z, s) => {
       if (this.isBuilt(x, z, 1.5) || this.nearRoad(x, z, 0.8)) return;
+      if (!this.hostel.treeOk(x, z)) return;
       if (fb && x > fb.minX - 3 && x < fb.maxX + 3 && z > fb.minZ - 3 && z < fb.maxZ + 3) return;
       if (this.keepClear(x, z)) return;
       if (Math.hypot(x, z) < 30) return;
@@ -1231,6 +1215,7 @@ export class BitsCampus extends Campus {
         const n = Math.floor(((hb.maxX - hb.minX) * (hb.maxZ - hb.minZ)) / 140);
         for (let i = 0; i < n * 3 && n > 0; i++) {
           const x = hb.minX + rnd() * (hb.maxX - hb.minX); const z = hb.minZ + rnd() * (hb.maxZ - hb.minZ);
+          if (b.hostel && !b.hostel.treeOk(x, z)) continue;
           if (inPoly(x, z, hole) && hole.every((p, j) => segDist(x, z, p, hole[(j + 1) % hole.length]) > 4.5)) pts.push([x, z, 0.8 + rnd() * 0.5]);
         }
       }
@@ -1423,6 +1408,14 @@ export class BitsCampus extends Campus {
       s.visible = o > 0.02;
     }
     this.nearPos = playerPos;
+    this.hostel.update(dt);
+    // inside the Bhawan a ceiling light follows you (your own room's light has a switch)
+    const hs = this.hostel.roomAt(playerPos.x, playerPos.z, playerPos.y);
+    if (hs) {
+      this.indoorLight.position.set(playerPos.x, playerPos.y + 2.6, playerPos.z);
+      this.indoorLight.intensity = hs === 'hostelroom' && !this.hostel.lightOn ? 1.2 : 10;
+      this.indoorLight.distance = 9;
+    }
   }
 
   allColliders() {
@@ -1444,9 +1437,10 @@ export class BitsCampus extends Campus {
     return this.classroomColliders ? G.list.concat(this.classroomColliders) : G.list;
   }
 
-  roomAt(x, z) {
+  // Pass y to tell the Bhawan's floors apart.
+  roomAt(x, z, y = null) {
     for (const r of this.roomList) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return r.id;
-    return null;
+    return this.hostel?.roomAt(x, z, y) || null;
   }
 
   // Out of the current room by its door, along the roads (and NAB passages), in by the target's door.
@@ -1455,7 +1449,12 @@ export class BitsCampus extends Campus {
     if (fromRoom && fromRoom === targetRoomId) return [point.clone()];
     const pts = [];
     let start = [from.x, from.z];
-    if (fromRoom) {
+    if (fromRoom && !this.rooms[fromRoom]) {
+      // inside Krishna Bhawan: out through the lobby
+      const e = this.hostel.entrance;
+      pts.push(e.inside.clone(), e.out.clone());
+      start = [e.out.x, e.out.z];
+    } else if (fromRoom) {
       const r = this.rooms[fromRoom];
       pts.push(r.inside.clone(), r.outside.clone(), r.exit.clone());
       start = [r.exit.x, r.exit.z];
