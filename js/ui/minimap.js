@@ -1,5 +1,6 @@
 // Minimap (top-right) and full labelled map (N) for the real-scale BITS campus, drawn from the campus data.
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
+import { WALK_IN } from '../world/hostel.js';
 
 const MPP = 1.25; // metres per base-image pixel
 
@@ -40,7 +41,7 @@ function drawBase() {
   g.lineWidth = 0.6;
   for (const b of D.buildings) {
     poly(b.outer, b.inCampus ? '#c9a77a' : '#d8cfc0', '#7a5a3a');
-    for (const h of b.holes) poly(h, b.name === 'Krishna Bhawan' ? '#d6d1c6' : '#b5d99f', null); // Krishna's courtyards are concrete playgrounds
+    for (const h of b.holes) poly(h, WALK_IN.includes(b.name) ? '#d6d1c6' : '#b5d99f', null); // walk-in Bhawans' courtyards are concrete playgrounds
   }
   g.lineWidth = 2;
   poly(D.boundary, null, 'rgba(180,30,30,0.6)');

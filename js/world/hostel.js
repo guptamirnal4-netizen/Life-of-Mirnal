@@ -1,6 +1,7 @@
-// Krishna Bhawan, walk-in. Two floors of corridors round two courtyards, stairs, your room, a few lived-in
-// rooms, the common room, washrooms, a laundry, the entrance lobby (security desk, vending machine, water cooler,
-// notice board) and a roof terrace.
+// A walk-in Bhawan (Krishna, Gandhi, Budh, Ram, Shankar, Vyas, Vishwakarma). Two floors of corridors round one
+// or two courtyards, stairs, a few lived-in rooms, the common room, washrooms, a laundry, the entrance lobby
+// (security desk, vending machine, water cooler, notice board) and a roof terrace. Your own Bhawan (Krishna)
+// also has your room. Each Bhawan's interior is only drawn while you are near it.
 //
 // The building is laid out in its own frame: u runs across the building, v along its length (the OSM outline,
 // squared up). Rooms line the outer walls; a corridor runs along the courtyard side behind cusped arches,
@@ -14,7 +15,36 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { texturedMaterial, worldBoxGeometry, TEX_SIZE } from './textures.js';
 import { mat } from './campus.js';
 
-export const FH = 3.3; // floor height, the same as the hostel facade texture
+// The courtyard Bhawans you can walk into (the newer comb-shaped ones are in comb-hostel.js).
+export const WALK_IN = ['Krishna Bhawan', 'Gandhi Bhawan', 'Budh Bhawan', 'Ram Bhawan', 'Shankar Bhawan', 'Vyas Bhawan', 'Vishwakarma Bhawan'];
+export const FH = 3.3;
+
+// A Bhawan outline's corners reordered so the entrance side (the first, A→D) is a long side, the building lies
+// on its +u side, and of the two long sides it is the one nearer a road.
+export function entranceOrder(o, roads) {
+  const dist = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
+  const segDist = (x, z, a, b) => {
+    const dx = b[0] - a[0]; const dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+    return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz);
+  };
+  const real = roads.filter((r) => !['footway', 'path', 'steps'].includes(r.kind));
+  let best = null;
+  for (let r = 0; r < 4; r++) {
+    for (const wind of [[0, 1, 2, 3], [0, 3, 2, 1]]) {
+      const order = wind.map((i) => o[(i + r) % 4]);
+      const [A, B, , Dp] = order;
+      if (dist(A, Dp) < dist(A, B)) continue;
+      const eu = [Dp[1] - A[1], -(Dp[0] - A[0])];
+      if ((B[0] - A[0]) * eu[0] + (B[1] - A[1]) * eu[1] <= 0) continue;
+      const mx = (A[0] + Dp[0]) / 2; const mz = (A[1] + Dp[1]) / 2;
+      let road = Infinity;
+      for (const rd of real) for (let i = 1; i < rd.pts.length; i++) road = Math.min(road, segDist(mx, mz, rd.pts[i - 1], rd.pts[i]));
+      if (!best || road < best.road) best = { order, road };
+    }
+  }
+  return best ? best.order : o;
+} // floor height, the same as the hostel facade texture
 export const FLOORS = 2; // BITS Pilani boys' Bhawans: ground floor, first floor and the roof
 const MOD = 3.4; // module for the shared spaces (stairs, washrooms, lobby, common room) and the courtyard arches
 const ROOM = 5.1; // a student room: wide rooms, so doors are well spaced down each corridor
@@ -123,7 +153,20 @@ function archTexture(grille) {
   });
 }
 
-// Room numbers for the door plates, all in one atlas.
+// Room numbers for the door plates, all in one atlas (shared by every Bhawan: rooms 1001–1150 and 2001–2150).
+const PLATES_PER_FLOOR = 150;
+let sharedPlates = null;
+function plates() {
+  if (!sharedPlates) {
+    const numbers = [];
+    for (let k = 1; k <= FLOORS; k++) for (let n = 1; n <= PLATES_PER_FLOOR; n++) numbers.push(k * 1000 + n);
+    sharedPlates = plateAtlas(numbers);
+  }
+  return sharedPlates;
+}
+// Materials are shared between Bhawans too, except the TV screen, which each common room switches on its own.
+const sharedMats = new Map();
+
 function plateAtlas(numbers) {
   const cols = 16; const cw = 128; const ch = 48;
   const rows = Math.ceil(numbers.length / cols);
@@ -218,9 +261,13 @@ const TEXTURES = {
 };
 
 export class Hostel {
-  constructor(campus, b) {
+  // mine: your own Bhawan (your room, your bed). outer: the outline's four corners in the order to use, so
+  // that the first side (A→D, the entrance side) is a long side facing a road; defaults to the OSM order.
+  constructor(campus, b, { mine = false, outer = b.outer } = {}) {
     this.campus = campus;
     this.b = b;
+    this.name = b.name;
+    this.mine = mine;
     this.parts = new Map();
     this.customMats = {};
     this.doors = [];
@@ -229,7 +276,7 @@ export class Hostel {
     this.time = 0;
     this.lightOn = true;
     // --- frame from the OSM outline (a four-sided quad), squared up ---
-    const [A, B, C, Dp] = b.outer;
+    const [A, B, C, Dp] = outer;
     let ev = [(Dp[0] - A[0]) + (C[0] - B[0]), (Dp[1] - A[1]) + (C[1] - B[1])];
     const el = Math.hypot(...ev); ev = [ev[0] / el, ev[1] / el];
     const eu = [ev[1], -ev[0]];
@@ -241,15 +288,16 @@ export class Hostel {
     const v0 = (pa[1] + pb[1]) / 2; const v1 = (pd[1] + pc[1]) / 2;
     this.O = [A[0] + u0 * eu[0] + v0 * ev[0], A[1] + u0 * eu[1] + v0 * ev[1]];
     this.W = u1 - u0; this.L = v1 - v0;
-    // The middle wing sits between the two OSM courtyards.
-    const hv = b.holes.map((h) => h.map((p) => proj(p)[1] - v0)).sort((a, c) => a[0] - c[0]);
-    this.vm = hv.length >= 2 ? (Math.max(...hv[0]) + Math.min(...hv[1])) / 2 : this.L / 2;
+    // Two OSM courtyards: a middle wing sits between them. One courtyard: no middle wing.
+    this.twoCourts = b.holes.length >= 2;
+    const hv = b.holes.map((h) => h.map((p) => proj(p)[1] - v0)).sort((a, c) => Math.min(...a) - Math.min(...c));
+    this.vm = this.twoCourts ? (Math.max(...hv[0]) + Math.min(...hv[1])) / 2 : this.L / 2;
     const { W, L, vm } = this;
     this.mc0 = vm - WD / 2; this.mc1 = this.mc0 + COR;
-    this.court = [
+    this.court = this.twoCourts ? [
       { u0: WD, u1: W - WD, v0: WD, v1: this.mc0 - SCREEN },
       { u0: WD, u1: W - WD, v0: vm + WD / 2, v1: L - WD },
-    ];
+    ] : [{ u0: WD, u1: W - WD, v0: WD, v1: L - WD }];
     const rect = (r) => [this.world(r.u0, r.v0), this.world(r.u1, r.v0), this.world(r.u1, r.v1), this.world(r.u0, r.v1)].map((p) => [p.x, p.z]);
     b.outer = rect({ u0: 0, u1: W, v0: 0, v1: L });
     b.holes = this.court.map(rect);
@@ -265,6 +313,7 @@ export class Hostel {
       S: { map: (s, t) => [t, L - 4.5 + s], depth: DEPTH, tw: [4.5, W - 4.5], tb: [4.75, W - 4.75] },
       M: { map: (s, t) => [t, mBand + s], depth: WD - COR - T - OUT, tw: [WD - SCREEN, W - WD + SCREEN], tb: [WD, W - WD] },
     };
+    if (!this.twoCourts) delete this.wings.M;
     for (const [name, w] of Object.entries(this.wings)) {
       w.name = name;
       const o = w.map(0, 0); const a = w.map(1, 0); const c = w.map(0, 1);
@@ -313,7 +362,7 @@ export class Hostel {
     for (let k = 0; k < FLOORS; k++) add('W', k, ve + MOD, MOD, 'stair', { roof: true, top: FLOORS });
     for (let k = 0; k < FLOORS; k++) add('W', k, ve + 2 * MOD, 3 * MOD, 'wash');
     add('W', 0, ve + 5 * MOD, MOD, 'laundry');
-    add('W', 0, ve - MOD - ROOM, ROOM, 'room', { variant: 'mine', id: 'hostelroom' });
+    add('W', 0, ve - MOD - ROOM, ROOM, 'room', this.mine ? { variant: 'mine', id: 'hostelroom' } : { variant: 'double', id: 'room-double0' });
     add('W', 0, ve - MOD - 2 * ROOM, ROOM, 'room', { variant: 'study', id: 'room-study' });
     add('W', 0, ve - MOD - 2 * ROOM - 4 * MOD, 4 * MOD, 'common');
     add('W', 1, ve - MOD - ROOM, ROOM, 'room', { variant: 'double', id: 'room-double' });
@@ -342,9 +391,10 @@ export class Hostel {
   }
 
   // Cricket in the first courtyard, football (and the basketball hoop) in the second. Both are bare concrete.
+  // A Bhawan with one courtyard plays football in it.
   planCourtyards() {
-    const [c1, c2] = this.court;
-    this.cricket = { u: (c1.u0 + c1.u1) / 2, v: (c1.v0 + c1.v1) / 2 };
+    const c1 = this.court[0]; const c2 = this.court.at(-1);
+    this.cricket = this.twoCourts ? { u: (c1.u0 + c1.u1) / 2, v: (c1.v0 + c1.v1) / 2 } : null;
     this.football = { u: (c2.u0 + c2.u1) / 2, v: (c2.v0 + c2.v1) / 2 };
   }
 
@@ -360,8 +410,16 @@ export class Hostel {
 
   // ---------- geometry helpers (local frame) ----------
   geo(key, g) {
-    if (!this.parts.has(key)) this.parts.set(key, []);
-    this.parts.get(key).push(g.index ? g.toNonIndexed() : g);
+    const parts = this.layer || this.parts;
+    if (!parts.has(key)) parts.set(key, []);
+    parts.get(key).push(g.index ? g.toNonIndexed() : g);
+  }
+
+  // Geometry built inside fn goes to the shell: what you can see from outside (arches, courtyards, roof).
+  onShell(fn) {
+    this.layer = this.shellParts;
+    fn();
+    this.layer = null;
   }
 
   // Axis-aligned box in the local frame; collide pushes world AABB pieces.
@@ -448,6 +506,7 @@ export class Hostel {
 
   material(key) {
     if (this.customMats[key]) return this.customMats[key];
+    if (key !== 'x:tvOn' && sharedMats.has(key)) return (this.customMats[key] = sharedMats.get(key));
     let m;
     if (key.startsWith('t:')) { const [, tex, tint = '#ffffff'] = key.split(':'); m = texturedMaterial(tex, { tint }); }
     else if (key.startsWith('m:')) m = mat(key.slice(2), { metalness: 0.6, roughness: 0.35 });
@@ -461,20 +520,23 @@ export class Hostel {
     } else if (key.startsWith('facade:')) m = this.campus.material(key);
     else m = mat(key.replace(/^c:/, ''));
     this.customMats[key] = m;
+    if (key !== 'x:tvOn') sharedMats.set(key, m);
     return m;
   }
 
   flush() {
-    for (const [key, list] of this.parts) {
-      const g = mergeGeometries(list);
-      if (!g) continue;
-      g.computeBoundingSphere();
-      const mesh = new THREE.Mesh(g, this.material(key));
-      mesh.receiveShadow = true;
-      mesh.castShadow = key.startsWith('t:plaster') || key.startsWith('t:concrete');
-      this.g.add(mesh);
+    for (const [parts, group] of [[this.parts, this.g], [this.shellParts, this.shellG]]) {
+      for (const [key, list] of parts) {
+        const g = mergeGeometries(list);
+        if (!g) continue;
+        g.computeBoundingSphere();
+        const mesh = new THREE.Mesh(g, this.material(key));
+        mesh.receiveShadow = true;
+        mesh.castShadow = key.startsWith('t:plaster') || key.startsWith('t:concrete');
+        group.add(mesh);
+      }
+      parts.clear();
     }
-    this.parts.clear();
   }
 
   fan(w, s, t, y) {
@@ -516,10 +578,14 @@ export class Hostel {
   // ---------- build ----------
   build() {
     const c = this.campus;
-    this.g = new THREE.Group();
-    this.g.position.set(this.O[0], 0, this.O[1]);
-    this.g.rotation.y = this.angle;
-    c.root.add(this.g);
+    // g: the interior, drawn only near the Bhawan; shellG: everything visible from outside
+    this.shellParts = new Map();
+    for (const k of ['g', 'shellG']) {
+      this[k] = new THREE.Group();
+      this[k].position.set(this.O[0], 0, this.O[1]);
+      this[k].rotation.y = this.angle;
+      c.root.add(this[k]);
+    }
     // room numbers, wing by wing, floor by floor (4 digits, like the plates in the walkthrough)
     const numbers = [];
     for (let k = 0; k < FLOORS; k++) {
@@ -532,15 +598,14 @@ export class Hostel {
         }
       }
     }
-    this.plates = plateAtlas(numbers);
+    this.plates = plates();
+    if (numbers.some((n) => n % 1000 > PLATES_PER_FLOOR)) throw new Error(`${this.name}: more rooms than room plates`);
     this.entranceCut();
     for (let k = 0; k < FLOORS; k++) for (const w of Object.values(this.wings)) this.buildBandWall(w, k);
     this.buildCorridors();
-    this.buildScreens();
-    this.buildRoof();
+    this.onShell(() => { this.buildScreens(); this.buildRoof(); });
     for (const sp of this.spaces) this[`space_${sp.type}`](sp);
-    this.buildCourtyards();
-    this.buildOutside();
+    this.onShell(() => { this.buildCourtyards(); this.buildOutside(); });
     this.flush();
   }
 
@@ -593,7 +658,7 @@ export class Hostel {
       { u0: 7.55, u1: W - 7.55, v0: 4.75, v1: 7.55, w: 'N' },
       { u0: 7.55, u1: W - 7.55, v0: L - 7.55, v1: L - 4.75, w: 'S' },
       { u0: 7.55, u1: W - 7.55, v0: this.mc0, v1: this.mc1, w: 'M' },
-    ];
+    ].filter((r) => this.wings[r.w]);
   }
 
   buildCorridors() {
@@ -633,10 +698,13 @@ export class Hostel {
   buildScreens() {
     const { W, L, mc0, mc1, vm } = this;
     // [fixed axis, value (screen centre line), from, to, wall?]
-    const runs = [
+    const runs = this.twoCourts ? [
       ['u', WD - SCREEN / 2, WD, mc0 - SCREEN], ['u', WD - SCREEN / 2, vm + WD / 2, L - WD],
       ['u', W - WD + SCREEN / 2, WD, mc0 - SCREEN], ['u', W - WD + SCREEN / 2, vm + WD / 2, L - WD],
       ['v', WD - SCREEN / 2, WD, W - WD], ['v', L - WD + SCREEN / 2, WD, W - WD], ['v', mc0 - SCREEN / 2, WD, W - WD],
+    ] : [
+      ['u', WD - SCREEN / 2, WD, L - WD], ['u', W - WD + SCREEN / 2, WD, L - WD],
+      ['v', WD - SCREEN / 2, WD, W - WD], ['v', L - WD + SCREEN / 2, WD, W - WD],
     ];
     for (let k = 0; k < FLOORS; k++) {
       const y0 = k * FH; const y1 = y0 + FH - SLAB;
@@ -658,8 +726,10 @@ export class Hostel {
         if (k === 0) { const pb = b; axis === 'u' ? this.box(at - SCREEN / 2, at + SCREEN / 2, pb - 0.4, pb, y0, y1, 'c:#ecdcb9') : this.box(pb - 0.4, pb, at - SCREEN / 2, at + SCREEN / 2, y0, y1, 'c:#ecdcb9'); }
       }
       // corner piers and the ends of the middle wing
-      for (const [u, v] of [[WD - SCREEN, WD - SCREEN], [W - WD, WD - SCREEN], [WD - SCREEN, mc0 - SCREEN], [W - WD, mc0 - SCREEN], [WD - SCREEN, L - WD], [W - WD, L - WD], [WD - SCREEN, vm + WD / 2 - SCREEN], [W - WD, vm + WD / 2 - SCREEN]]) this.box(u, u + SCREEN, v, v + SCREEN, y0, y1 + SLAB, 'c:#e1cda4');
-      for (const u of [WD - SCREEN, W - WD]) this.box(u, u + SCREEN, mc1, vm + WD / 2, y0, y1 + SLAB, 't:plaster:#f1ede4');
+      const corners = [[WD - SCREEN, WD - SCREEN], [W - WD, WD - SCREEN], [WD - SCREEN, L - WD], [W - WD, L - WD]];
+      if (this.twoCourts) corners.push([WD - SCREEN, mc0 - SCREEN], [W - WD, mc0 - SCREEN], [WD - SCREEN, vm + WD / 2 - SCREEN], [W - WD, vm + WD / 2 - SCREEN]);
+      for (const [u, v] of corners) this.box(u, u + SCREEN, v, v + SCREEN, y0, y1 + SLAB, 'c:#e1cda4');
+      if (this.twoCourts) for (const u of [WD - SCREEN, W - WD]) this.box(u, u + SCREEN, mc1, vm + WD / 2, y0, y1 + SLAB, 't:plaster:#f1ede4');
       // floor slab edges facing the courtyards
       if (k > 0) for (const r of this.court) {
         this.box(r.u0 - SCREEN, r.u1 + SCREEN, r.v0 - SCREEN, r.v0, y0 - SLAB, y0, 'c:#e8d9b8', { collide: false });
@@ -667,6 +737,7 @@ export class Hostel {
       }
     }
     // the middle wing's back wall onto the second courtyard (rooms with windows)
+    if (!this.twoCourts) return;
     const len = W - 2 * WD;
     const g = new THREE.PlaneGeometry(len, FLOORS * FH);
     const a = g.attributes.uv;
@@ -685,8 +756,9 @@ export class Hostel {
     const Wg = this.wings.W;
     const strips = [
       { u0: 0, u1: WD, v0: 0, v1: L }, { u0: W - WD, u1: W, v0: 0, v1: L },
-      { u0: WD, u1: W - WD, v0: 0, v1: WD }, { u0: WD, u1: W - WD, v0: L - WD, v1: L }, { u0: WD, u1: W - WD, v0: mc0 - SCREEN, v1: vm + WD / 2 },
+      { u0: WD, u1: W - WD, v0: 0, v1: WD }, { u0: WD, u1: W - WD, v0: L - WD, v1: L },
     ];
+    if (this.twoCourts) strips.push({ u0: WD, u1: W - WD, v0: mc0 - SCREEN, v1: vm + WD / 2 });
     // west strip, minus the stair opening
     const [hu0, hv0] = Wg.map(DEPTH, hole); const [hu1, hv1] = Wg.map(0.84, hole + MOD);
     for (const r of strips) {
@@ -809,7 +881,7 @@ export class Hostel {
     this.label('Drinking water', w, 1.25, t1 - 0.3, 1.75);
     this.tube(w, 1.2, t0 + 1.7, y0 + FH - SLAB); this.tube(w, 1.2, t1 - 1.7, y0 + FH - SLAB);
     this.fan(w, 2.0, tc, y0 + FH - SLAB);
-    this.label('Krishna Bhawan · Lobby', w, 0.6, tc, 2.55, { height: 0.38 });
+    this.label(`${this.name} · Lobby`, w, 0.6, tc, 2.55, { height: 0.38 });
     this.lobby = { w, t0, t1 };
     this.legend('🚪', 'Entrance', [0], 0.2, this.ve);
     this.legendBand('🥤', 'Vending machine', [0], w, 2.85, t1 - 1.0);
@@ -1110,7 +1182,8 @@ export class Hostel {
   }
 
   // ---------- courtyards and outside ----------
-  // Bare concrete courtyards (QT), big enough for a cricket game in one and football in the other.
+  // Bare concrete courtyards (QT), big enough for a cricket game in one and football in the other
+  // (or just football, in a Bhawan with one courtyard).
   buildCourtyards() {
     const ev = this.ev;
     const along = Math.atan2(ev[0], ev[1]); const back = Math.atan2(-ev[0], -ev[1]);
@@ -1119,29 +1192,31 @@ export class Hostel {
     const line = (u0, u1, v0, v1) => this.box(u0, u1, v0, v1, 0.035, 0.04, 'c:#f2f2ee', { collide: false });
 
     // cricket: a 22-yard pitch down the middle of the first courtyard, stumps at both ends
-    const { u: cu, v: cv } = this.cricket;
-    const half = 10.06;
-    this.box(cu - 1.5, cu + 1.5, cv - half - 1.3, cv + half + 1.3, 0.035, 0.045, 'c:#b8ab90', { collide: false });
-    for (const sgn of [-1, 1]) {
-      const sv = cv + sgn * half;
-      for (const du of [-0.11, 0, 0.11]) { this.cyl(cu + du, 0.045, sv, 0.018, 0.71, 'c:#f1e3c2', 6); }
-      this.col(cu - 0.16, cu + 0.16, sv - 0.05, sv + 0.05, 0, 0.75);
-      this.box(cu - 0.13, cu + 0.13, sv - 0.01, sv + 0.01, 0.755, 0.77, 'c:#f1e3c2', { collide: false });
-      line(cu - 1.32, cu + 1.32, sv - sgn * 1.22 - 0.025, sv - sgn * 1.22 + 0.025); // popping crease
-      line(cu - 1.32, cu + 1.32, sv - 0.025, sv + 0.025); // bowling crease
+    if (this.cricket) {
+      const { u: cu, v: cv } = this.cricket;
+      const half = 10.06;
+      this.box(cu - 1.5, cu + 1.5, cv - half - 1.3, cv + half + 1.3, 0.035, 0.045, 'c:#b8ab90', { collide: false });
+      for (const sgn of [-1, 1]) {
+        const sv = cv + sgn * half;
+        for (const du of [-0.11, 0, 0.11]) { this.cyl(cu + du, 0.045, sv, 0.018, 0.71, 'c:#f1e3c2', 6); }
+        this.col(cu - 0.16, cu + 0.16, sv - 0.05, sv + 0.05, 0, 0.75);
+        this.box(cu - 0.13, cu + 0.13, sv - 0.01, sv + 0.01, 0.755, 0.77, 'c:#f1e3c2', { collide: false });
+        line(cu - 1.32, cu + 1.32, sv - sgn * 1.22 - 0.025, sv - sgn * 1.22 + 0.025); // popping crease
+        line(cu - 1.32, cu + 1.32, sv - 0.025, sv + 0.025); // bowling crease
+      }
+      this.npcSpots.cricket = {
+        bat: { at: this.world(cu + 0.25, cv - half + 1.3), yaw: along },
+        bowl: { a: this.world(cu, cv + half + 7), b: this.world(cu - 0.3, cv + half - 0.5), speed: 2.6 },
+        field: [{ at: this.world(cu - 9, cv - 2), yaw: across(1) }, { at: this.world(cu + 10, cv + 4), yaw: across(-1) }, { at: this.world(cu + 0.2, cv - half - 2.4), yaw: along }],
+      };
+      this.legend('🏏', 'Cricket (courtyard)', [0], cu, cv);
+      const lc = this.world(cu, this.court[0].v0 + 2);
+      this.campus.label('Courtyard · cricket', lc.x, 3.0, lc.z, { height: 0.42 });
     }
-    this.npcSpots.cricket = {
-      bat: { at: this.world(cu + 0.25, cv - half + 1.3), yaw: along },
-      bowl: { a: this.world(cu, cv + half + 7), b: this.world(cu - 0.3, cv + half - 0.5), speed: 2.6 },
-      field: [{ at: this.world(cu - 9, cv - 2), yaw: across(1) }, { at: this.world(cu + 10, cv + 4), yaw: across(-1) }, { at: this.world(cu + 0.2, cv - half - 2.4), yaw: along }],
-    };
-    this.legend('🏏', 'Cricket (courtyard)', [0], cu, cv);
-    const lc = this.world(cu, this.court[0].v0 + 2);
-    this.campus.label('Courtyard · cricket', lc.x, 3.0, lc.z, { height: 0.42 });
 
     // football: halfway line, centre circle and two small goals at the ends of the second courtyard
     const { u: fu, v: fv } = this.football;
-    const c2 = this.court[1];
+    const c2 = this.court.at(-1);
     const fw = 16; const fl = c2.v1 - c2.v0 - 6;
     line(fu - fw, fu + fw, fv - 0.04, fv + 0.04);
     const ring = new THREE.RingGeometry(4.0, 4.09, 48); ring.rotateX(-Math.PI / 2); ring.translate(fu, 0.041, fv); this.geo('c:#f2f2ee', ring);
@@ -1182,8 +1257,8 @@ export class Hostel {
     }
     // one shade tree in a far corner of each playground, clear of the pitch, the goals and the players;
     // the campus tree builder plants them as [x, z, scale]
-    const [c1] = this.court;
-    this.shadeTrees = [this.world(c1.u1 - 5.5, c1.v0 + 5.5), this.world(c2.u0 + 5.5, c2.v1 - 5.5)].map((p) => [p.x, p.z, 1.0]);
+    const c1 = this.court[0];
+    this.shadeTrees = (this.twoCourts ? [this.world(c1.u1 - 5.5, c1.v0 + 5.5), this.world(c2.u0 + 5.5, c2.v1 - 5.5)] : [this.world(c2.u0 + 5.5, c2.v1 - 5.5)]).map((p) => [p.x, p.z, 1.0]);
   }
 
   // Porch at the entrance and the cycle stand beside it.
@@ -1210,6 +1285,7 @@ export class Hostel {
     }
     const p = this.world(-2.8, ve + 9);
     this.campus.label('Cycle parking', p.x, 2.9, p.z, { height: 0.38 });
+    if (!this.mine) { const e = this.world(-2.4, ve); this.campus.label(this.name, e.x, 4.2, e.z, { height: 0.7, bg: 'rgba(60,50,40,0.9)' }); }
     // the guard's spot and where batchmates gather in the evening
     this.npcSpots.lobbyChat = [{ at: this.world(1.2, ve - 1.2), yaw: this.entrance.yaw + Math.PI / 2 }, { at: this.world(1.2, ve + 0.1), yaw: this.entrance.yaw - Math.PI / 2 }];
   }
@@ -1242,8 +1318,17 @@ export class Hostel {
     return [du * w.ds[0] + dv * w.ds[1], du * w.dt[0] + dv * w.dt[1]];
   }
 
-  update(dt) {
+  // How far (x, z) is outside the building's footprint, in metres (0 inside).
+  distance(x, z) {
+    const [u, v] = this.local(x, z);
+    return Math.hypot(Math.max(0, -u, u - this.W), Math.max(0, -v, v - this.L));
+  }
+
+  update(dt, playerPos = null) {
     this.time += dt;
+    if (playerPos) {
+      this.g.visible = this.distance(playerPos.x, playerPos.z) < 45 && playerPos.y < 30;
+    }
     if (this.ttBall && this.ttBall.visible) {
       const [a, b] = this.ttEnds;
       const p = (this.time % 1.4) / 1.4; const f = p < 0.5 ? p * 2 : 2 - p * 2;

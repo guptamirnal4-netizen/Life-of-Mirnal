@@ -982,10 +982,11 @@ function handleInteractable(id) {
     case 'tt': playTT(npcs.get('hm:aditya')?.group.visible ? 'Aditya' : 'your wingie'); break;
     case 'foosball':
     case 'carrom': quickGame(id); break;
-    case 'tv': toast(campus.hostel.setTV(!campus.hostel.tvOn) ? '📺 TV on. A cricket match, of course.' : 'TV off.'); campus.hostel.tvManual = true; requestLock(); break;
+    case 'tv': { const H = hereHostel(); toast(H.setTV(!H.tvOn) ? '📺 TV on. A cricket match, of course.' : 'TV off.'); H.tvManual = true; requestLock(); break; }
     case 'sofa': {
       const taken = (x) => [...npcs.npcs.values()].some((n) => n.group.visible && Math.hypot(n.pos.x - x.at.x, n.pos.z - x.at.z) < 0.3);
-      const seat = campus.hostel.sofaSeats.find((x) => !taken(x)) || campus.hostel.sofaSeats.at(-1);
+      const seats = hereHostel().sofaSeats;
+      const seat = seats.find((x) => !taken(x)) || seats.at(-1);
       player.sit(seat.at, seat.yaw + Math.PI, seat.stand);
       toast('You sink into the sofa. (E to stand up)');
       requestLock();
@@ -1048,9 +1049,12 @@ function handleInteractable(id) {
       else { toast(isCollege(c) ? `Not bedtime yet: lights out from ${fmt(slots.at(-1).start)}. To sleep early, press T → End the day.` : `School isn't over yet! Dismissal is at ${fmt(slots.at(-1).start)}.`); requestLock(); }
       break;
     default:
-      if (id.startsWith('hdoor:')) { toast(campus.hostel.toggleDoor(Number(id.slice(6))) ? 'Door open.' : 'Door closed.'); requestLock(); }
+      if (id.startsWith('hdoor:')) { toast(hereHostel().toggleDoor(Number(id.slice(6))) ? 'Door open.' : 'Door closed.'); requestLock(); }
   }
 }
+
+// The Bhawan you are in (its TV, sofas and doors), or your own.
+const hereHostel = () => campus.hostelAt?.(player.pos.x, player.pos.z) || campus.hostel;
 
 // ---------- Krishna Bhawan: hostel-mates, the common room and your room ----------
 const atDesk = () => !!player.seated && player.seated.index === campus.playerSeatIndex;
@@ -1167,7 +1171,7 @@ function openVending() {
       toast(`🥤 ${name} (₹${price}) drops into the tray.`);
       requestLock();
     } }, `🎤 ${name} · ₹${price}`))),
-    h('p', { class: 'muted small' }, 'Prices are illustrative.')), { title: 'Vending machine · Krishna Bhawan lobby', closable: true });
+    h('p', { class: 'muted small' }, 'Prices are illustrative.')), { title: `Vending machine · ${hereHostel().name} lobby`, closable: true });
 }
 
 function openHostelNotices() {
@@ -1178,7 +1182,7 @@ function openHostelNotices() {
       h('li', {}, '📌 Keep the noise down in the corridors after 23:00.'),
       h('li', {}, '📌 Lost: blue steel water bottle near the first-floor washroom.'),
       h('li', {}, '📌 Water tanks are cleaned on Sunday morning. Store water the night before.')),
-    h('p', { class: 'muted small' }, 'Sample notices for the game.')), { title: 'Krishna Bhawan · Notice board', closable: true });
+    h('p', { class: 'muted small' }, 'Sample notices for the game.')), { title: `${hereHostel().name} · Notice board`, closable: true });
 }
 
 // Half an hour of revision, stopping in time for the next lecture, lab or paper.
@@ -1370,7 +1374,7 @@ function openHelp() {
     ] : [
       ['W A S D', 'Walk'], ['Mouse', 'Look around'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
       ['F', 'Voice: speak to choose options or talk (Chrome)'], ['T', 'Timetable'], ['M', 'Missions'], ['J', 'Learning Journey'],
-      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['L', 'Krishna Bhawan guide: floor plan and where things are'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
+      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['L', 'Bhawan guide: floor plan and where things are'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
     ]).map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
     h('p', {}, 'Lessons start automatically when you sit at your desk (yellow mark) in the classroom during a lesson period. Sitting early makes time skip to the bell.'),
     h('p', {}, 'Voice: press F and say an option (“option two”, “raise hand”, “bye”), or near a classmate say “hello Diya”. Say “timetable” or “journey” to open them.')), { title: 'How to play', closable: true });
@@ -1893,7 +1897,8 @@ function frame() {
       player.update(dt, campus.allColliders());
       updateView(dt);
       if (isCollege(state.classNum)) tickHostel();
-      if (isCollege(state.classNum) && campus.hostel) bhawanGuide.update(dt, { hostel: campus.hostel, player, visible: !isOpen() });
+      const nearHostel = isCollege(state.classNum) && campus.hostelAt?.(player.pos.x, player.pos.z, 14);
+      if (nearHostel) bhawanGuide.update(dt, { hostel: nearHostel, player, visible: !isOpen() });
       else bhawanGuide.hide();
       npcs.update(dt, ball);
       if (Math.hypot(ball.pos.x - player.pos.x, ball.pos.z - player.pos.z) < 0.75 && player.moving) {

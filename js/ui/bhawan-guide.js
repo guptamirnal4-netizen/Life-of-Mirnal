@@ -1,4 +1,4 @@
-// A small guide to Krishna Bhawan: a floor plan of the floor you are on, and a legend of the important
+// A small guide to the Bhawan you are in or next to: a floor plan of the floor you are on, and a legend of the important
 // places with their direction and distance. It shows while you are in or next to the Bhawan; L hides it.
 import { FH } from '../world/hostel.js';
 
@@ -21,7 +21,7 @@ export function createBhawanGuide() {
   const draw = (H, floor, lu, lv, heading, items) => {
     const sc = W / H.W; const ht = Math.round(H.L * sc);
     const dpr = window.devicePixelRatio || 1;
-    if (plan.width !== W * dpr) { plan.width = W * dpr; plan.height = ht * dpr; plan.style.width = `${W}px`; plan.style.height = `${ht}px`; }
+    if (plan.width !== W * dpr || plan.height !== ht * dpr) { plan.width = W * dpr; plan.height = ht * dpr; plan.style.width = `${W}px`; plan.style.height = `${ht}px`; }
     const g = plan.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, ht);
@@ -76,7 +76,7 @@ export function createBhawanGuide() {
       side.innerHTML = '';
       const head = document.createElement('div');
       head.style.cssText = 'font-weight:700;margin-bottom:3px';
-      head.textContent = `Krishna Bhawan · ${FLOORS[floor]}`;
+      head.textContent = `${H.name} · ${FLOORS[floor]}`;
       side.appendChild(head);
       for (const r of rows.slice(0, 9)) {
         const row = document.createElement('div');

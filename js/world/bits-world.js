@@ -8,7 +8,7 @@ import { makeLabel } from './labels.js';
 import { texture, TEX_SIZE } from './textures.js';
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
 import { NavGraph } from './nav.js';
-import { Hostel } from './hostel.js';
+import { Hostel, WALK_IN, entranceOrder } from './hostel.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -204,10 +204,16 @@ export class BitsCampus extends Campus {
     this.buckets = new Map();
     this.shapeGeos = new Map();
     this.buildings = D.buildings.map((b) => ({ ...b, bb: bbox(b.outer) }));
-    // Krishna Bhawan (your Bhawan) is walk-in; its outline is squared up to fit the interior.
-    const kb = this.buildings.find((b) => b.name === 'Krishna Bhawan');
-    this.hostel = new Hostel(this, kb);
-    kb.bb = bbox(kb.outer);
+    // The courtyard Bhawans are walk-in; their outlines are squared up to fit the interiors. Krishna is yours.
+    this.hostels = [];
+    for (const name of WALK_IN) {
+      const b = this.buildings.find((x) => x.name === name);
+      if (!b) continue;
+      const mine = name === 'Krishna Bhawan';
+      this.hostels.push(new Hostel(this, b, { mine, outer: mine ? b.outer : entranceOrder(b.outer, D.roads) }));
+      b.bb = bbox(b.outer);
+    }
+    this.hostel = this.hostels.find((H) => H.mine);
     this.buildingGrid = new Map();
     for (const b of this.buildings) this.gridInsert(this.buildingGrid, b.bb, b, 40);
     this.roadSegs = [];
@@ -220,7 +226,7 @@ export class BitsCampus extends Campus {
     this.buildRoads();
     this.placeRooms();
     this.planPassages();
-    this.hostel.build();
+    for (const H of this.hostels) H.build();
     this.buildBuildings();
     this.buildPassages();
     this.buildRotunda();
@@ -1176,7 +1182,7 @@ export class BitsCampus extends Campus {
     const fb = this.fieldBounds;
     const add = (x, z, s) => {
       if (this.isBuilt(x, z, 1.5) || this.nearRoad(x, z, 0.8)) return;
-      if (!this.hostel.treeOk(x, z)) return;
+      if (this.hostels.some((H) => !H.treeOk(x, z))) return;
       if (fb && x > fb.minX - 3 && x < fb.maxX + 3 && z > fb.minZ - 3 && z < fb.maxZ + 3) return;
       if (this.keepClear(x, z)) return;
       if (Math.hypot(x, z) < 30) return;
@@ -1220,7 +1226,7 @@ export class BitsCampus extends Campus {
         }
       }
     }
-    pts.push(...(this.hostel.shadeTrees || []));
+    for (const H of this.hostels) pts.push(...(H.shadeTrees || []));
     const byChunk = new Map();
     for (const p of pts) {
       const k = chunkKey(p[0], p[1]);
@@ -1409,9 +1415,9 @@ export class BitsCampus extends Campus {
       s.visible = o > 0.02;
     }
     this.nearPos = playerPos;
-    this.hostel.update(dt);
-    // inside the Bhawan a ceiling light follows you (your own room's light has a switch)
-    const hs = this.hostel.roomAt(playerPos.x, playerPos.z, playerPos.y);
+    for (const H of this.hostels) H.update(dt, playerPos);
+    // inside a Bhawan a ceiling light follows you (your own room's light has a switch)
+    const hs = this.hostelAt(playerPos.x, playerPos.z)?.roomAt(playerPos.x, playerPos.z, playerPos.y);
     if (hs) {
       this.indoorLight.position.set(playerPos.x, playerPos.y + 2.6, playerPos.z);
       this.indoorLight.intensity = hs === 'hostelroom' && !this.hostel.lightOn ? 1.2 : 10;
@@ -1441,7 +1447,12 @@ export class BitsCampus extends Campus {
   // Pass y to tell the Bhawan's floors apart.
   roomAt(x, z, y = null) {
     for (const r of this.roomList) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return r.id;
-    return this.hostel?.roomAt(x, z, y) || null;
+    return this.hostelAt(x, z)?.roomAt(x, z, y) || null;
+  }
+
+  // The walk-in Bhawan whose footprint (grown by pad metres) contains (x, z).
+  hostelAt(x, z, pad = 0) {
+    return (this.hostels || []).find((H) => H.distance(x, z) <= pad) || null;
   }
 
   // Out of the current room by its door, along the roads (and NAB passages), in by the target's door.
@@ -1451,8 +1462,8 @@ export class BitsCampus extends Campus {
     const pts = [];
     let start = [from.x, from.z];
     if (fromRoom && !this.rooms[fromRoom]) {
-      // inside Krishna Bhawan: out through the lobby
-      const e = this.hostel.entrance;
+      // inside a Bhawan: out through its lobby
+      const e = (this.hostelAt(from.x, from.z) || this.hostel).entrance;
       pts.push(e.inside.clone(), e.out.clone());
       start = [e.out.x, e.out.z];
     } else if (fromRoom) {

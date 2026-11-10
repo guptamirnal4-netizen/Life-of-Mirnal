@@ -4,13 +4,13 @@ import { BITS_CAMPUS as D } from '../data/bits-campus.js';
 
 globalThis.document ??= { addEventListener() {}, createElement: () => ({ getContext: () => null }) };
 globalThis.window ??= { addEventListener() {} };
-const { Hostel, FH, FLOORS } = await import('../js/world/hostel.js');
+const { Hostel, FH, FLOORS, WALK_IN, entranceOrder } = await import('../js/world/hostel.js');
 
 const krishna = () => {
   const b = D.buildings.find((x) => x.name === 'Krishna Bhawan');
   return { ...b, outer: b.outer.map((p) => [...p]), holes: b.holes.map((h) => h.map((p) => [...p])) };
 };
-const make = () => new Hostel({ colliders: [], interactables: [] }, krishna());
+const make = () => new Hostel({ colliders: [], interactables: [] }, krishna(), { mine: true });
 
 test('Krishna Bhawan has a ground floor and a first floor under a walkable roof', () => {
   const H = make();
@@ -106,4 +106,27 @@ test('inside, courtyard and outside are told apart; no scattered trees in the bu
   assert.equal(H.treeOk(corridor.x, corridor.z), false);
   assert.equal(H.treeOk(court.x, court.z), false, 'the courtyards are concrete playgrounds: only the two planted shade trees');
   assert.equal(H.treeOk(outside.x - 30, outside.z), true, 'trees are fine away from the Bhawan');
+});
+
+test('every courtyard Bhawan can be laid out: entrance on a long side facing a road, rooms fill every corridor', () => {
+  assert.equal(WALK_IN.length, 7);
+  for (const name of WALK_IN) {
+    const b0 = D.buildings.find((x) => x.name === name);
+    assert.ok(b0, name);
+    const b = { ...b0, outer: b0.outer.map((p) => [...p]), holes: b0.holes.map((h) => h.map((p) => [...p])) };
+    const mine = name === 'Krishna Bhawan';
+    const H = new Hostel({ colliders: [], interactables: [] }, b, { mine, outer: mine ? b.outer : entranceOrder(b.outer, D.roads) });
+    assert.ok(H.W > 40 && H.L >= H.W - 1e-6, `${name}: ${H.W.toFixed(1)} × ${H.L.toFixed(1)}`);
+    assert.equal(H.court.length, b0.holes.length >= 2 ? 2 : 1, name);
+    for (const r of H.court) assert.ok(r.u1 - r.u0 > 20 && r.v1 - r.v0 > 20, `${name}: courtyard big enough`);
+    assert.equal(!!H.spaces.find((s) => s.id === 'hostelroom'), mine, `${name}: your room only in your Bhawan`);
+    for (const [key, segs] of Object.entries(H.segs)) {
+      const w = H.wings[key[0]];
+      for (let i = 1; i < segs.length; i++) assert.ok(segs[i].t0 >= segs[i - 1].t1 - 1e-6, `${name} ${key}: overlap`);
+      assert.ok(segs.at(-1).t1 <= w.tb[1] + 1e-6, `${name} ${key}: past the end`);
+      for (const x of segs) if (x.type === 'locked') assert.ok(x.t1 - x.t0 > 3, `${name} ${key}: room too narrow`);
+    }
+    // the squared-up outline stays within 4 m of every OSM corner
+    for (const p of b0.outer) assert.ok(b.outer.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 4), `${name}: corner moved`);
+  }
 });
