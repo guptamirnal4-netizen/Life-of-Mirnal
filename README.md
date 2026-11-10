@@ -15,6 +15,11 @@ The Claude key stays on your machine: only `dev/server.mjs` (locally) and `api/`
 
 Open http://localhost:8080 in Chrome. Click the game to capture the mouse.
 
+On a phone or tablet it switches to touch controls: put your left thumb down anywhere on the left half for a
+joystick (push it to the edge to run; on the cycle, up pedals and sideways steers) and drag on the right half to
+look around. Buttons: ✋ interact, ⤒ jump, 🎤 voice, 🚲 cycle, ⏩ hold to fast-forward, 👁 view, 🗺 map, ☰ menu.
+New games on a phone start on Medium graphics. Hold the phone sideways for the best view.
+
 | Key | Action |
 |---|---|
 | W A S D / Mouse | Walk / look |

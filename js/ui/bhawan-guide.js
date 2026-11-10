@@ -90,7 +90,7 @@ export function createBhawanGuide() {
       }
       const foot = document.createElement('div');
       foot.style.cssText = 'margin-top:4px;opacity:0.6;font-size:11px';
-      foot.textContent = 'L hides this guide';
+      foot.textContent = document.body.classList.contains('touch') ? '☰ menu hides this guide' : 'L hides this guide';
       side.appendChild(foot);
     },
   };

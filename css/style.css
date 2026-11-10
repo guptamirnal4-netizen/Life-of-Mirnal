@@ -205,3 +205,51 @@ details summary { cursor: pointer; padding: 3px 0; }
   .hud-mission { top: 84px; font-size: 13px; }
   .panel-body { padding: 12px; }
 }
+
+/* Touch controls (phones and tablets): body.touch is set by js/ui/touch.js */
+html, body { overscroll-behavior: none; }
+#game { touch-action: none; }
+button { touch-action: manipulation; }
+#touch { position: fixed; inset: 0; z-index: 36; pointer-events: none; -webkit-user-select: none; user-select: none; }
+#touch .stick { position: absolute; width: 104px; height: 104px; border-radius: 50%; background: rgba(255,255,255,0.14); border: 2px solid rgba(255,255,255,0.45); }
+#touch .knob { position: absolute; left: 30px; top: 30px; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.75); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+.tbtn { position: absolute; pointer-events: auto; display: grid; place-items: center; padding: 0; width: 46px; height: 46px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); background: rgba(12,16,32,0.55); color: #fff; font-size: 20px; line-height: 1; backdrop-filter: blur(3px); -webkit-tap-highlight-color: transparent; }
+.tbtn:hover:not(:disabled) { transform: none; box-shadow: none; }
+.tbtn:active, .tbtn.down { background: rgba(232,93,42,0.85); }
+.t-use { right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); width: 72px; height: 72px; font-size: 30px; }
+.t-use.ready { background: rgba(232,93,42,0.9); border-color: #ffd27a; }
+.t-jump { right: calc(100px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); }
+.t-ff { right: calc(156px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); }
+.t-voice { right: calc(28px + env(safe-area-inset-right)); bottom: calc(100px + env(safe-area-inset-bottom)); }
+.t-cycle { right: calc(92px + env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom)); }
+.t-view { right: calc(28px + env(safe-area-inset-right)); bottom: calc(156px + env(safe-area-inset-bottom)); width: 40px; height: 40px; font-size: 17px; }
+.t-map { right: calc(80px + env(safe-area-inset-right)); bottom: calc(136px + env(safe-area-inset-bottom)); width: 40px; height: 40px; font-size: 17px; }
+.t-menu { left: calc(12px + env(safe-area-inset-left)); bottom: calc(12px + env(safe-area-inset-bottom)); width: 40px; height: 40px; font-size: 18px; }
+body.touch .hud-keys, body.touch #crosshair { display: none; }
+body.touch #minimap { width: 116px; height: 116px; }
+body.touch #prompt { bottom: 30%; }
+body.touch #mic { right: auto; left: 50%; transform: translateX(-50%); bottom: auto; top: 12px; }
+body.touch #bhawan-guide { left: calc(12px + env(safe-area-inset-left)) !important; bottom: calc(60px + env(safe-area-inset-bottom)) !important; transform: scale(0.78); transform-origin: bottom left; }
+@media (max-height: 500px) {
+  body.touch .hud-top { padding: 8px calc(10px + env(safe-area-inset-right)) 0 calc(10px + env(safe-area-inset-left)); }
+  body.touch .hud-box { padding: 5px 9px; }
+  body.touch #hud-class { font-size: 12px; }
+  body.touch .hud-line { font-size: 11px; }
+  body.touch .hud-mission { top: 62px; font-size: 12px; padding: 4px 9px; max-width: 46vw; }
+  body.touch #minimap { top: 58px; width: 96px; height: 96px; }
+  body.touch #toast { bottom: 24px; font-size: 13px; max-width: 50vw; }
+  body.touch #bhawan-guide { transform: scale(0.62); }
+  .panel { max-height: calc(100vh - 16px); }
+  #overlay { padding: 8px; }
+}
+@media (orientation: portrait) and (max-width: 640px) {
+  body.touch .hud-top { padding: 8px 10px 0; gap: 8px; }
+  body.touch .hud-box { padding: 5px 9px; }
+  body.touch #hud-class { font-size: 12px; }
+  body.touch .hud-line, body.touch #hud-progress { font-size: 11px; }
+  body.touch .hud-box.right { max-width: 34vw; }
+  body.touch .hud-mission { position: static; display: block; width: fit-content; max-width: calc(100vw - 20px); margin: 6px 10px 0; font-size: 12px; padding: 5px 9px; }
+  body.touch .objective { top: 34%; }
+  body.touch #minimap { top: auto; bottom: calc(214px + env(safe-area-inset-bottom)); width: 96px; height: 96px; }
+  body.touch #bhawan-guide { transform: scale(0.66); }
+}

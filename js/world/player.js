@@ -23,6 +23,7 @@ export class Player {
     this.yaw = 0;
     this.pitch = 0;
     this.keys = new Set();
+    this.stick = { x: 0, y: 0 }; // touch joystick, -1..1 (y forward)
     this.seated = null;
     this.eye = 1.0;
     this.sensitivity = 1;
@@ -97,7 +98,7 @@ export class Player {
     return codes.some((c) => this.keys.has(c));
   }
 
-  // On foot: WASD sets a direction, Shift raises the target speed; velocity eases towards it.
+  // On foot: WASD (or the touch joystick) sets a direction, Shift raises the target speed; velocity eases towards it.
   footStep(dt) {
     const f = this.forward();
     const r = new THREE.Vector3(-f.z, 0, f.x);
@@ -106,7 +107,9 @@ export class Player {
     if (this.key('KeyS', 'ArrowDown')) want.sub(f);
     if (this.key('KeyD', 'ArrowRight')) want.add(r);
     if (this.key('KeyA', 'ArrowLeft')) want.sub(r);
-    this.running = want.lengthSq() > 0 && this.key('ShiftLeft', 'ShiftRight');
+    const sm = Math.hypot(this.stick.x, this.stick.y);
+    if (sm > 0.15) want.addScaledVector(f, this.stick.y / sm).addScaledVector(r, this.stick.x / sm);
+    this.running = want.lengthSq() > 0 && (this.key('ShiftLeft', 'ShiftRight') || sm > 0.9);
     if (want.lengthSq() > 0) want.normalize().multiplyScalar(this.running ? MOVE.run : MOVE.walk);
     const diff = want.sub(this.vel);
     const rate = (want.lengthSq() >= this.vel.lengthSq() ? MOVE.footAccel : MOVE.footDecel) * dt;
@@ -118,9 +121,9 @@ export class Player {
   // On the cycle: W pedals, S brakes, A/D steer the handlebar. No running, no jumping.
   bikeStep(dt) {
     this.running = false;
-    const pedal = this.key('KeyW', 'ArrowUp');
-    const brake = this.key('KeyS', 'ArrowDown');
-    this.steer = (this.key('KeyA', 'ArrowLeft') ? 1 : 0) - (this.key('KeyD', 'ArrowRight') ? 1 : 0);
+    const pedal = this.key('KeyW', 'ArrowUp') || this.stick.y > 0.3;
+    const brake = this.key('KeyS', 'ArrowDown') || this.stick.y < -0.3;
+    this.steer = Math.max(-1, Math.min(1, (this.key('KeyA', 'ArrowLeft') ? 1 : 0) - (this.key('KeyD', 'ArrowRight') ? 1 : 0) - this.stick.x));
     if (brake) this.bikeSpeed = Math.max(0, this.bikeSpeed - MOVE.bikeBrake * dt);
     else if (pedal) this.bikeSpeed = Math.min(MOVE.bikeMax, this.bikeSpeed + MOVE.bikeAccel * dt);
     else this.bikeSpeed = Math.max(0, this.bikeSpeed - MOVE.bikeCoast * dt);

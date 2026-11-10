@@ -3,6 +3,7 @@ import { Campus } from './world/campus.js';
 import { BitsCampus } from './world/bits-world.js';
 import { createMinimap } from './ui/minimap.js';
 import { createBhawanGuide } from './ui/bhawan-guide.js';
+import { createTouchControls } from './ui/touch.js';
 import { GraphicsEngine } from './graphics/GraphicsEngine.js';
 import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
@@ -57,6 +58,7 @@ addMainInteractables(schoolCampus, { x: 15.5, z: 38 });
 let deskInteract = schoolCampus.deskInteract;
 const minimap = createMinimap();
 const bhawanGuide = createBhawanGuide();
+const touch = createTouchControls({ canvas, player, onMenu: () => openPause() });
 const bike = (() => {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: '#2a2f38', roughness: 0.4, metalness: 0.6 });
@@ -1361,11 +1363,15 @@ function openMissions() {
 
 function openHelp() {
   openPanel(h('div', { class: 'help' },
-    h('table', {}, h('tbody', {}, [
+    h('table', {}, h('tbody', {}, (touch.on ? [
+      ['Left thumb', 'Joystick: walk (push to the edge to run); on the cycle, up pedals and sideways steers'], ['Right thumb', 'Drag to look around'],
+      ['✋', 'Interact / sit / stand (lights up when there is something to do)'], ['⤒', 'Jump'], ['🎤', 'Voice: speak to choose options or talk'],
+      ['🚲', 'College: hop on / off your cycle'], ['⏩', 'Hold to fast-forward time'], ['👁', 'First-person / third-person view'], ['🗺', 'College: full campus map'], ['☰', 'Menu: timetable, missions, journey, settings'],
+    ] : [
       ['W A S D', 'Walk'], ['Mouse', 'Look around'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
       ['F', 'Voice: speak to choose options or talk (Chrome)'], ['T', 'Timetable'], ['M', 'Missions'], ['J', 'Learning Journey'],
       ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['L', 'Krishna Bhawan guide: floor plan and where things are'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
-    ].map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
+    ]).map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
     h('p', {}, 'Lessons start automatically when you sit at your desk (yellow mark) in the classroom during a lesson period. Sitting early makes time skip to the bell.'),
     h('p', {}, 'Voice: press F and say an option (“option two”, “raise hand”, “bye”), or near a classmate say “hello Diya”. Say “timetable” or “journey” to open them.')), { title: 'How to play', closable: true });
 }
@@ -1376,7 +1382,7 @@ function openSettings() {
   const range = (label, key, min, max, step) => h('label', { class: 'setting' }, label,
     h('input', { type: 'range', min, max, step, value: s[key], oninput: (e) => { s[key] = Number(e.target.value); player.sensitivity = s.sensitivity; } }));
   openPanel(h('div', { class: 'settings' },
-    range('Mouse sensitivity', 'sensitivity', 0.3, 2.5, 0.1),
+    range(touch.on ? 'Look sensitivity' : 'Mouse sensitivity', 'sensitivity', 0.3, 2.5, 0.1),
     h('label', { class: 'setting' }, 'Game time speed',
       h('select', { onchange: (e) => { s.timeScale = Number(e.target.value); } },
         [[TIME_SPEEDS.slow, 'Slow'], [TIME_SPEEDS.normal, 'Normal'], [TIME_SPEEDS.fast, 'Fast'], [TIME_SPEEDS.veryFast, 'Very fast'], ...(Object.values(TIME_SPEEDS).includes(s.timeScale) ? [] : [[s.timeScale, 'Custom']])]
@@ -1406,6 +1412,7 @@ function openPause() {
     h('button', { 'data-voice': 'timetable', onclick: () => openTimetable() }, 'Timetable'),
     h('button', { 'data-voice': 'missions', onclick: () => openMissions() }, 'Missions'),
     h('button', { 'data-voice': 'view camera person', onclick: () => { toggleView(); closeAll(); requestLock(); } }, state.settings.view === 'third' ? 'Switch to first-person view' : 'Switch to third-person view'),
+    isCollege(state.classNum) && h('button', { 'data-voice': 'bhawan guide', onclick: () => { toast(bhawanGuide.toggle() ? 'Bhawan guide on' : 'Bhawan guide off'); closeAll(); requestLock(); } }, 'Bhawan guide on / off'),
     h('button', { 'data-voice': 'settings', onclick: () => openSettings() }, 'Settings'),
     h('button', { 'data-voice': 'help controls', onclick: () => openHelp() }, 'How to play'),
     h('button', { 'data-voice': 'quit title', onclick: () => { save(true); closeAll(); showTitle(); } }, 'Save & quit to title')),
@@ -1431,6 +1438,7 @@ function showTitle() {
   const startNew = (college) => {
     if (saved && !confirm(`Start ${college ? 'Mirnal’s College Life' : 'Mirnal’s School Life'} from the beginning? Your saved game (${saveInfo}) will be replaced.`)) return;
     const s = createState();
+    if (touch.on) s.settings.graphics = 'medium';
     if (college) startCollege(s);
     startGame(s);
   };
@@ -1463,6 +1471,7 @@ function startGame(s, resumed = false) {
   if (savedPos) player.place(new THREE.Vector3(savedPos.x, 0, savedPos.z), savedPos.yaw);
   if (resumed) toast(`Welcome back! Class ${state.classNum}, ${fmt(state.day.clock)}.`);
   if (!resumed) showVoiceOnboarding();
+  if (touch.on && innerHeight > innerWidth) toast('📱 Turn your phone sideways for the best view.', 4000);
   state.player = null;
 }
 
@@ -1487,7 +1496,7 @@ function showVoiceOnboarding() {
 
 // ---------- Pointer lock & input ----------
 function requestLock() {
-  if (mode !== 'playing' || isOpen()) return;
+  if (mode !== 'playing' || isOpen() || touch.on) return;
   canvas.requestPointerLock?.();
 }
 function exitLock() {
@@ -1836,8 +1845,9 @@ function updateHUD(slot) {
   } else hud.arrow.parentElement.classList.add('hidden');
   const t = !isOpen() && !player.seated ? interactTarget() : null;
   hud.prompt.textContent = player.seated ? (state.phase === 'day' && ['lesson', 'exam'].includes(nextSlot(slots, state.day.clock)?.type) && !fastForward ? `E · stand up · hold Z to fast-forward to the ${nextSlot(slots, state.day.clock).type === 'exam' ? 'paper' : 'lecture'}` : 'E · stand up') : t ? `E · ${t.label}` : '';
+  if (touch.on) hud.prompt.textContent = hud.prompt.textContent.replace(/^E · /, '✋ · ').replace('hold Z', 'hold ⏩');
   hud.prompt.classList.toggle('hidden', !hud.prompt.textContent || isOpen() || !!anthem);
-  hud.resume.classList.toggle('hidden', !!document.pointerLockElement || isOpen() || mode !== 'playing');
+  hud.resume.classList.toggle('hidden', !!document.pointerLockElement || touch.on || isOpen() || mode !== 'playing');
 }
 
 // ---------- Main loop ----------
@@ -1849,7 +1859,7 @@ function frame() {
   elapsed += dt;
   if (mode === 'playing' && state) {
     const paused = isOpen();
-    player.enabled = !paused && document.pointerLockElement === canvas;
+    player.enabled = !paused && (document.pointerLockElement === canvas || touch.on);
     if (!paused) {
       // The clock runs only while you're actually playing: not behind a menu, not on the "click to play" screen.
       fastForward = player.enabled && player.keys.has('KeyZ');
@@ -1910,6 +1920,7 @@ function frame() {
       if (isCollege(state.classNum)) campus.setClock?.(state.day.clock);
     }
   }
+  touch.update({ playing: mode === 'playing' && !!state && !isOpen(), college: !!state && isCollege(state.classNum), prompt: !hud.prompt.classList.contains('hidden'), seated: !!player.seated });
   if (state) graphics.setQuality(state.settings.graphics);
   graphics.update(dt, { clock: state?.day?.clock ?? 600, focus: player.pos, view: state?.settings.view || 'first', riding: player.bike });
   graphics.render();
