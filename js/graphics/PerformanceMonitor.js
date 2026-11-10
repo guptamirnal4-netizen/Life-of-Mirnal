@@ -6,6 +6,8 @@ const N = 240;
 export class PerformanceMonitor {
   constructor(renderer) {
     this.renderer = renderer;
+    // count draw calls over the whole frame, not just the last pass of the post-processing chain
+    renderer.info.autoReset = false;
     this.frame = new Float32Array(N); // ms between frames
     this.cpu = new Float32Array(N); // ms spent in render()
     this.i = 0;
@@ -18,7 +20,7 @@ export class PerformanceMonitor {
     this.lastStats = null;
   }
 
-  beginRender() { this.t0 = performance.now(); }
+  beginRender() { this.renderer.info.reset(); this.t0 = performance.now(); }
 
   endRender() {
     const now = performance.now();

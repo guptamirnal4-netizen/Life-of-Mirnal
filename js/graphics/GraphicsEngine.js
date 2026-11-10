@@ -2,6 +2,7 @@ import { setupGraphics } from '../world/environment.js';
 import { RendererManager } from './RendererManager.js';
 import { QualityManager } from './QualityManager.js';
 import { PerformanceMonitor } from './PerformanceMonitor.js';
+import { PostProcessing } from './PostProcessing.js';
 import { DEFAULT_PROFILE } from './GraphicsConfig.js';
 
 // Coordinates the graphics modules around the game's existing renderer, scene and camera. It owns no loop:
@@ -19,7 +20,9 @@ export class GraphicsEngine {
     this.rendererManager = new RendererManager(renderer, camera);
     // Sky, sun, fog and image-based lighting follow the game clock (js/world/environment.js).
     this.env = setupGraphics({ renderer, scene, campus });
-    this.quality = new QualityManager({ rendererManager: this.rendererManager, scene, sun: this.env.sun });
+    this.post = new PostProcessing(renderer, scene, camera);
+    this.rendererManager.onResize.push(() => this.post.resize());
+    this.quality = new QualityManager({ rendererManager: this.rendererManager, scene, sun: this.env.sun, post: this.post });
     this.perf = new PerformanceMonitor(renderer);
     this.view = 'first';
     this.quality.set(DEFAULT_PROFILE);
@@ -36,12 +39,14 @@ export class GraphicsEngine {
   update(dt, { clock, focus, view = 'first', riding = false }) {
     this.view = riding ? `${view} · cycle` : view;
     this.env.update(dt, { clock, focus });
+    this.post.update(clock);
     this.perf.tick(dt, { quality: this.quality.profile.label, view: this.view });
   }
 
   render() {
     this.perf.beginRender();
-    this.renderer.render(this.scene, this.camera);
+    if (this.post.active) this.post.render();
+    else this.renderer.render(this.scene, this.camera);
     this.perf.endRender();
   }
 }

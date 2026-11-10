@@ -83,6 +83,8 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
   - the pixel ratio, capped both by the preset and by a pixel budget, so a full-screen Retina window isn't rendered at full 2×
   - the sun's shadows (off on Low, then soft shadows up to 4096 px)
   - texture filtering
+  - the look (Medium and up): a warm, saturated colour grade with a soft vignette, warmer at sunrise and sunset; High and Ultra add a soft glow on the sky and lights. Low renders without it.
+- **Light through the day:** the sun, sky, haze and bounce light turn golden in the early morning and evening.
 - **Performance stats:** press `` ` `` in the game to show frame rate, frame time, draw calls and resolution.
 - **Code and assets:** the code is in `js/graphics/` (see the comments at the top of each file). Third-party files and their licences are listed in `ASSETS.md`.
 
@@ -91,7 +93,7 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 ```
 data/            curriculum-primary.js (1–5), curriculum-middle.js (6–10), senior-a/b.js (11–12),
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
-js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PerformanceMonitor
+js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade + bloom), PerformanceMonitor
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM
 js/world/        campus (3D school), bits-world (real-scale BITS campus), player, npcs (characters, ball), labels
 data/bits-campus.js  BITS Pilani footprints, roads and areas from OpenStreetMap, in metres from the Rotunda

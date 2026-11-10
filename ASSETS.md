@@ -18,6 +18,7 @@ that adds, replaces or removes an asset.
 | `vendor/three/three.module.js` | Three.js r160 | https://github.com/mrdoob/three.js (npm `three@0.160.0`) | MIT (`vendor/three/LICENSE`) | 1.27 MB | n/a | unminified ES module, served gzipped by Vercel |
 | `vendor/three/addons/objects/Sky.js` | Sky shader | Three.js r160 examples | MIT | 6.8 KB | n/a | none needed |
 | `vendor/three/addons/utils/BufferGeometryUtils.js` | `mergeGeometries` | Three.js r160 examples | MIT | 31.9 KB | n/a | none needed |
+| `vendor/three/addons/postprocessing/` (EffectComposer, Pass, RenderPass, ShaderPass, UnrealBloomPass, MaskPass, OutputPass) and `vendor/three/addons/shaders/` (CopyShader, LuminosityHighPassShader, OutputShader) | Post-processing chain: colour grade and bloom | Three.js r160 examples (npm `three@0.160.0`, `examples/jsm/`) | MIT | 30 KB together | n/a | copied unchanged |
 | `audio/jana-gana-mana.ogg` | National Anthem, instrumental (U.S. Navy Band) | https://commons.wikimedia.org/wiki/File:Jana_Gana_Mana_instrumental.ogg | Public domain (see `audio/ATTRIBUTION.md`) | 1.08 MB | n/a | Ogg Vorbis as published |
 | `data/bits-campus.js` | Campus roads, paths and building footprints | © OpenStreetMap contributors, plus footprints traced from aerial imagery | ODbL 1.0 (OSM data) | 146 KB | n/a | coordinates rounded to 0.1 m |
 

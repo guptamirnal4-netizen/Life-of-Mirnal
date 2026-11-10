@@ -1,10 +1,11 @@
 import { PROFILES, profileOf } from './GraphicsConfig.js';
 
 // Switches quality profiles at runtime, without a reload: pixel ratio and shadow map type (via the
-// RendererManager), the sun's shadow map size and area, and texture anisotropy.
+// RendererManager), the sun's shadow map size and area, texture anisotropy, and the post-processing chain.
 export class QualityManager {
-  constructor({ rendererManager, scene, sun }) {
+  constructor({ rendererManager, scene, sun, post }) {
     this.rm = rendererManager;
+    this.post = post;
     this.scene = scene;
     this.sun = sun;
     this.name = null;
@@ -19,6 +20,7 @@ export class QualityManager {
     this.name = key;
     const p = this.profile;
     this.rm.setProfile(p);
+    this.post.setProfile(p);
     const sun = this.sun;
     sun.castShadow = p.shadows;
     if (sun.shadow.mapSize.x !== p.shadowMapSize) {

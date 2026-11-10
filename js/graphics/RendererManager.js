@@ -8,6 +8,7 @@ export class RendererManager {
     this.camera = camera;
     this.profile = null;
     this.pending = false;
+    this.onResize = []; // called after every resize (the post-processing chain resizes with the canvas)
     Object.assign(renderer, RENDERER_DEFAULTS);
     // Resizes are applied once per animation frame, however many resize events arrive.
     window.addEventListener('resize', () => {
@@ -33,6 +34,7 @@ export class RendererManager {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    for (const f of this.onResize) f();
   }
 
   get maxAnisotropy() { return this.renderer.capabilities.getMaxAnisotropy(); }

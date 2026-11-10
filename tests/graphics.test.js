@@ -28,3 +28,17 @@ test('unknown profile names fall back to High', () => {
   assert.equal(profileOf('potato'), PROFILES.high);
   assert.equal(profileOf(undefined), PROFILES.high);
 });
+
+test('post-processing: Low renders straight to the screen, the others grade, High and Ultra add bloom', () => {
+  assert.equal(PROFILES.low.post, false);
+  for (const k of ['medium', 'high', 'ultra']) assert.equal(PROFILES[k].post, true, k);
+  assert.equal(PROFILES.medium.bloom, null);
+  for (const k of ['high', 'ultra']) assert.ok(PROFILES[k].bloom.threshold > 2, `${k}: only the sky and sun glow`);
+});
+
+test('the colour grade is warmer at golden hour than at midday', async () => {
+  const { gradeFor } = await import('../js/graphics/PostProcessing.js');
+  const noon = gradeFor(12 * 60).warmth;
+  assert.ok(gradeFor(7 * 60).warmth > noon + 0.04, 'morning');
+  assert.ok(gradeFor(18 * 60 + 30).warmth > noon + 0.04, 'evening');
+});

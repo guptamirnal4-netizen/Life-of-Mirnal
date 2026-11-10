@@ -15,7 +15,7 @@ export function setupGraphics({ renderer, scene, campus }) {
   scene.background = null;
   scene.fog = new THREE.Fog('#b9cfe0', 90, 270);
 
-  const hemi = new THREE.HemisphereLight('#cfe2ff', '#6d5a3c', 0.55);
+  const hemi = new THREE.HemisphereLight('#cfe2ff', '#7a6040', 0.6);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff0d4', 3.1);
   sun.castShadow = true;
@@ -43,6 +43,11 @@ export function setupGraphics({ renderer, scene, campus }) {
   };
 
   const dir = new THREE.Vector3();
+  // Warm haze near sunrise and sunset; a clear blue-grey haze in the middle of the day.
+  const fogDay = new THREE.Color('#b9cfe0');
+  const fogGold = new THREE.Color('#e3c39b');
+  const skyDay = new THREE.Color('#cfe2ff');
+  const skyGold = new THREE.Color('#f2d9b8');
 
   const sunDirection = (clockMinutes) => {
     const t = THREE.MathUtils.clamp((clockMinutes - 6 * 60) / (12 * 60), 0.02, 0.98);
@@ -69,8 +74,15 @@ export function setupGraphics({ renderer, scene, campus }) {
       envElevation = elevationDeg;
       refreshEnv(d);
     }
-    sun.intensity = 0.9 + 2.1 * Math.min(1, d.y * 1.6);
-    sun.color.setHSL(0.1, 0.6, 0.78 + 0.18 * Math.min(1, d.y * 1.5));
+    sun.intensity = 1.1 + 2.1 * Math.min(1, d.y * 1.6);
+    // golden hour: 1 with the sun on the horizon, 0 once it is ~30° up
+    const low = 1 - THREE.MathUtils.smoothstep(d.y, 0.12, 0.5);
+    u.turbidity.value = 3.2 + 3.5 * low;
+    u.rayleigh.value = 2.4 + 1.4 * low;
+    u.mieCoefficient.value = 0.003 + 0.004 * low;
+    sun.color.setHSL(0.075 + 0.035 * (1 - low), 0.5 + 0.4 * low, 0.8 + 0.14 * (1 - low));
+    scene.fog.color.copy(fogDay).lerp(fogGold, 0.55 * low);
+    hemi.color.copy(skyDay).lerp(skyGold, 0.5 * low);
     const f = focus || new THREE.Vector3();
     // Snap the shadow frustum to texels so shadows don't shimmer while walking.
     const step = (sc.right - sc.left) / sun.shadow.mapSize.x;
