@@ -1570,9 +1570,8 @@ document.addEventListener('keydown', (e) => {
     return toast(player.bike ? '🚲 On your cycle. Press C to get off.' : 'Cycle parked.');
   }
   if (e.code === 'KeyN' && isCollege(state.classNum)) {
-    const slot = currentSlot(slots, state.day.clock);
-    const o = objective(slot);
-    return minimap.toggleBig(player, o.loc && campus.objectivePoint(o.loc));
+    mapRoute.at = -99;
+    return minimap.toggleBig();
   }
   if (isOpen()) return;
   if (e.code === 'KeyE') interact();
@@ -1860,7 +1859,7 @@ function updateHUD(slot) {
   const practised = topics.filter((t) => (state.topics[t.id]?.level ?? 0) >= 3).length;
   hud.progress.textContent = topics.length ? `📘 ${practised}/${topics.length} topics practised · ⭐ ${state.reputation}` : `⭐ ${state.reputation}`;
   const target = obj.loc && campus.objectivePoint(obj.loc);
-  minimap.update(player, target);
+  minimap.update(player, target, isCollege(c) ? liveMap().route : null);
   if (target && state.settings.showObjectiveArrow && !isOpen()) {
     const dx = target.x - player.pos.x;
     const dz = target.z - player.pos.z;
@@ -1879,6 +1878,20 @@ function updateHUD(slot) {
   if (touch.on) hud.prompt.textContent = hud.prompt.textContent.replace(/^E · /, '✋ · ').replace('hold Z', 'hold ⏩');
   hud.prompt.classList.toggle('hidden', !hud.prompt.textContent || isOpen() || !!anthem);
   hud.resume.classList.toggle('hidden', !!document.pointerLockElement || touch.on || isOpen() || mode !== 'playing');
+}
+
+// ---------- Live map ----------
+// The route to the current objective along the roads (refreshed every second), for the minimap and the big map.
+let mapRoute = { at: -99, key: '', pts: null };
+function liveMap() {
+  const o = objective(currentSlot(slots, state.day.clock));
+  const target = o.loc && campus.objectivePoint(o.loc);
+  if (!target || !campus.pathTo) return { target, route: null };
+  if (elapsed - mapRoute.at > 1 || mapRoute.key !== o.loc) {
+    mapRoute = { at: elapsed, key: o.loc, pts: campus.pathTo(player.pos, campus.rooms?.[o.loc] ? o.loc : null, target) };
+  }
+  const place = o.loc === 'gate' ? 'Your room · Krishna Bhawan' : campus.rooms?.[o.loc]?.name || { assembly: 'Rotunda', playground: 'Gymkhana', canteen: 'ANC' }[o.loc] || o.loc;
+  return { target, route: mapRoute.pts, place, timeScale: state.settings.timeScale };
 }
 
 // ---------- Main loop ----------
@@ -1924,6 +1937,7 @@ function frame() {
       player.update(dt, campus.allColliders());
       updateView(dt);
       if (isCollege(state.classNum)) tickHostel();
+      if (minimap.bigOpen && isCollege(state.classNum)) minimap.drawBig(player, liveMap());
       const nearHostel = isCollege(state.classNum) && campus.hostelAt?.(player.pos.x, player.pos.z, 14);
       if (nearHostel) bhawanGuide.update(dt, { hostel: nearHostel, player, visible: !isOpen() });
       else bhawanGuide.hide();

@@ -62,6 +62,8 @@ export function createMinimap() {
   document.body.append(big);
   let shown = false;
   let bigOpen = false;
+  let bigBase = null; // the big map with its labels, drawn when it opens
+  let bigScale = 1;
 
   const ensure = () => { if (!base) base = drawBase(); };
   const toPx = (x, z) => [(x - base.B.minX) / MPP, (z - base.B.minZ) / MPP];
@@ -83,16 +85,20 @@ export function createMinimap() {
       if (!v) this.closeBig();
     },
     get bigOpen() { return bigOpen; },
-    toggleBig(player, target) {
+    // Opens the full campus map. It is drawn once (map and labels) and the live layer on top (drawBig) every frame.
+    toggleBig() {
       if (bigOpen) return this.closeBig();
       ensure();
       bigOpen = true;
       big.classList.add('open');
       const H = Math.min(window.innerHeight - 40, 1400);
-      const scale = H / base.canvas.height;
-      bigCanvas.width = Math.round(base.canvas.width * scale);
-      bigCanvas.height = Math.round(base.canvas.height * scale);
-      const g = bigCanvas.getContext('2d');
+      bigScale = H / base.canvas.height;
+      bigCanvas.width = Math.round(base.canvas.width * bigScale);
+      bigCanvas.height = Math.round(base.canvas.height * bigScale);
+      bigBase = document.createElement('canvas');
+      bigBase.width = bigCanvas.width; bigBase.height = bigCanvas.height;
+      const g = bigBase.getContext('2d');
+      const scale = bigScale;
       g.drawImage(base.canvas, 0, 0, bigCanvas.width, bigCanvas.height);
       // Labels: landmarks first, then anything else that has room. Overlapping labels are dropped.
       const KEY = /Rotunda|Clock Tower|Saraswati|Shiv Ganga|New Academic|BITS Library|Gymkhana|Student Activ|C'not|All night|Bhawan|Main Building \(|FD|Med-C|VFAST|Lawns|South Park|Workshop/;
@@ -105,7 +111,7 @@ export function createMinimap() {
         add(b.name, b.outer.reduce((a, q) => a + q[0], 0) / b.outer.length, b.outer.reduce((a, q) => a + q[1], 0) / b.outer.length, false);
       }
       cands.sort((a, b) => b.key - a.key);
-      const boxes = [];
+      const boxes = [[0, 0, 470, 76]]; // keep the header clear
       g.textBaseline = 'middle';
       for (const c of cands) {
         const [px, py] = toPx(c.x, c.z);
@@ -120,20 +126,59 @@ export function createMinimap() {
         g.lineWidth = 3; g.strokeStyle = 'rgba(255,250,240,0.85)'; g.strokeText(c.name, x + 5, y);
         g.fillStyle = c.key ? '#1d1a24' : '#4a3b2a'; g.fillText(c.name, x + 5, y);
       }
-      if (target) {
-        const [tx, ty] = toPx(target.x, target.z);
-        g.fillStyle = '#ff7a00'; g.beginPath(); g.arc(tx * scale, ty * scale, 7, 0, Math.PI * 2); g.fill();
+      return true;
+    },
+    // The live layer, like a phone map: your blue dot with its heading, the route to your objective along the
+    // roads, and how far and how long it is. info: { target, route, place, timeScale }.
+    drawBig(player, { target = null, route = null, place = '', timeScale = 1 } = {}) {
+      if (!bigOpen || !bigBase) return;
+      const g = bigCanvas.getContext('2d');
+      const sc = bigScale;
+      const P = (v) => { const [x, y] = toPx(v.x, v.z); return [x * sc, y * sc]; };
+      g.drawImage(bigBase, 0, 0);
+      const [x, y] = P(player.pos);
+      let dist = 0;
+      if (target && route?.length) {
+        const pts = [[x, y], ...route.map(P)];
+        for (let i = 1; i < route.length; i++) dist += Math.hypot(route[i].x - route[i - 1].x, route[i].z - route[i - 1].z);
+        dist += Math.hypot(route[0].x - player.pos.x, route[0].z - player.pos.z);
+        g.lineJoin = 'round'; g.lineCap = 'round';
+        for (const [w, c] of [[8, '#ffffff'], [5, '#1a73e8']]) {
+          g.lineWidth = w; g.strokeStyle = c;
+          g.beginPath(); pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
+        }
       }
-      const [x, y] = toPx(player.pos.x, player.pos.z);
-      arrow(g, x * scale, y * scale, player.yaw, 11, '#1f6feb');
-      g.fillStyle = 'rgba(20,24,40,0.85)'; g.fillRect(10, 10, 300, 28);
-      g.fillStyle = '#ffffff'; g.font = '600 14px system-ui'; g.fillText('BITS Pilani · press N to close · north is up', 18, 24);
+      if (target) {
+        const [tx, ty] = P(target);
+        g.fillStyle = '#ea4335'; g.strokeStyle = '#ffffff'; g.lineWidth = 2;
+        g.beginPath(); g.arc(tx, ty - 14, 8, Math.PI, 0); g.lineTo(tx, ty); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#ffffff'; g.beginPath(); g.arc(tx, ty - 14, 3, 0, Math.PI * 2); g.fill();
+      }
+      // heading cone, pulsing accuracy halo, blue dot
+      const t = performance.now() / 1000;
+      const fx = -Math.sin(player.yaw); const fz = -Math.cos(player.yaw);
+      const head = Math.atan2(fz, fx);
+      const cone = g.createRadialGradient(x, y, 4, x, y, 34);
+      cone.addColorStop(0, 'rgba(26,115,232,0.55)'); cone.addColorStop(1, 'rgba(26,115,232,0)');
+      g.fillStyle = cone; g.beginPath(); g.moveTo(x, y); g.arc(x, y, 34, head - 0.5, head + 0.5); g.closePath(); g.fill();
+      g.fillStyle = `rgba(26,115,232,${0.18 * (1 - ((t * 0.8) % 1))})`;
+      g.beginPath(); g.arc(x, y, 8 + 16 * ((t * 0.8) % 1), 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x, y, 8.5, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#1a73e8'; g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
+      // header: what this is, and where you're going
+      const mins = (speed) => Math.max(1, Math.round((dist / speed) * timeScale));
+      const lines = ['BITS Pilani · live · north is up · N closes'];
+      if (target) lines.push(`→ ${place} · ${dist < 1000 ? `${Math.round(dist / 10) * 10} m` : `${(dist / 1000).toFixed(1)} km`} · 🚶 ${mins(2)} min · 🚲 ${mins(7)} min`);
+      g.font = '600 14px system-ui'; g.textBaseline = 'middle';
+      const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 20;
+      g.fillStyle = 'rgba(20,24,40,0.88)'; g.fillRect(10, 10, w, 12 + lines.length * 22);
+      lines.forEach((l, i) => { g.fillStyle = i ? '#bcd6ff' : '#ffffff'; g.fillText(l, 20, 27 + i * 22); });
     },
     closeBig() {
       bigOpen = false;
       big.classList.remove('open');
     },
-    update(player, target) {
+    update(player, target, route = null) {
       if (!shown) return;
       ensure();
       const g = small.getContext('2d');
@@ -145,6 +190,11 @@ export function createMinimap() {
       g.beginPath(); g.arc(100, 100, 98, 0, Math.PI * 2); g.clip();
       g.fillStyle = '#e9dcc0'; g.fillRect(0, 0, 200, 200);
       g.drawImage(base.canvas, px - sw / 2, py - sw / 2, sw, sw, 0, 0, 200, 200);
+      if (route?.length) {
+        const k = 200 / sw; const at = (v) => { const [rx, ry] = toPx(v.x, v.z); return [100 + (rx - px) * k, 100 + (ry - py) * k]; };
+        g.lineJoin = 'round'; g.lineCap = 'round';
+        for (const [w, c] of [[6, '#ffffff'], [3.5, '#1a73e8']]) { g.lineWidth = w; g.strokeStyle = c; g.beginPath(); g.moveTo(100, 100); for (const v of route) g.lineTo(...at(v)); g.stroke(); }
+      }
       if (target) {
         const [tx, ty] = toPx(target.x, target.z);
         let dx = ((tx - px) / sw) * 200; let dy = ((ty - py) / sw) * 200;
