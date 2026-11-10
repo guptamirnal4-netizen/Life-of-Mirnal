@@ -627,7 +627,7 @@ export class BitsCampus extends Campus {
       for (const ring of b.hostel ? [b.outer] : [b.outer, ...b.holes]) this.buildWallRing(ring, h, `facade:${kind}`, fac, cx, cz, cuts, b.inCampus);
       const roof = roofOf(b);
       this.addShape(roof, cx, cz, this.flatShape(b.outer, [...b.holes, ...(b.roofHoles || [])], h, roof === 'roofSolar' ? 16 : roof === 'roofGreen' ? TEX_SIZE.grass : 4));
-      for (const hole of b.holes) this.addShape('grass', cx, cz, this.flatShape(hole, [], 0.03, TEX_SIZE.grass));
+      if (!b.hostel) for (const hole of b.holes) this.addShape('grass', cx, cz, this.flatShape(hole, [], 0.03, TEX_SIZE.grass)); // Krishna's courtyards are concrete
       for (const cut of cuts) if (cut.room) this.buildJambs(cut, h);
       // domed corner kiosks on the Main Building wings
       if (b.name?.startsWith('Main Building (')) for (const [x, z] of b.outer) this.chhatri(x, h + 0.9, z, 1.4, cx, cz);

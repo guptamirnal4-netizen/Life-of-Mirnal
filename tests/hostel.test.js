@@ -38,21 +38,39 @@ test('the entrance is on the west face, near the middle; lobby, stairs and washr
   assert.ok(Math.abs(H.ve - H.L / 2) < 3.5);
   const at = (type, k = 0) => H.spaces.find((s) => s.type === type && s.k === k);
   assert.equal(at('lobby').wing, 'W');
-  assert.equal(at('stair').i, at('lobby').i + 2);
-  assert.equal(at('wash').i, at('stair').i + 1);
-  assert.equal(H.spaces.find((s) => s.id === 'hostelroom').i, at('lobby').i - 1);
+  const same = (a, b) => assert.ok(Math.abs(a - b) < 1e-6, `${a} vs ${b}`);
+  same(at('stair').t0, at('lobby').t1);
+  same(at('wash').t0, at('stair').t1);
+  same(H.spaces.find((s) => s.id === 'hostelroom').t1, at('lobby').t0);
 });
 
-test('spaces fit their wing and never overlap', () => {
+test('every corridor is filled end to end with spaces and rooms that never overlap', () => {
   const H = make();
-  for (const s of H.spaces) {
-    const w = H.wings[s.wing];
-    assert.ok(s.i >= 0 && s.i + s.n <= w.nb, `${s.type} fits in wing ${s.wing}`);
-    assert.ok(s.k >= 0 && s.k < FLOORS);
+  for (const [key, segs] of Object.entries(H.segs)) {
+    const w = H.wings[key[0]];
+    for (const x of segs) assert.ok(x.t0 >= w.tb[0] - 1e-9 && x.t1 <= w.tb[1] + 1e-9, `${key} ${x.type} fits`);
+    for (let i = 1; i < segs.length; i++) assert.ok(segs[i].t0 >= segs[i - 1].t1 - 1e-9, `${key}: ${segs[i - 1].type} and ${segs[i].type} overlap`);
+    const used = segs.reduce((a, x) => a + (x.t1 - x.t0), 0);
+    assert.ok(used > w.tb[1] - w.tb[0] - 3.1, `${key}: no long blank walls`);
   }
-  for (const a of H.spaces) for (const b of H.spaces) {
-    if (a === b || a.wing !== b.wing || a.k !== b.k) continue;
-    assert.ok(a.i + a.n <= b.i || b.i + b.n <= a.i, `${a.type} and ${b.type} overlap`);
+});
+
+test('student rooms are wide (about 5 m), so there are fewer doors down each corridor', () => {
+  const H = make();
+  const rooms = Object.values(H.segs).flat().filter((x) => x.type === 'locked' || x.type === 'room');
+  const widths = rooms.map((x) => x.t1 - x.t0);
+  assert.ok(Math.min(...widths) >= 3.4, `narrowest ${Math.min(...widths)}`);
+  assert.ok(widths.reduce((a, b) => a + b, 0) / widths.length > 4.8);
+  assert.ok(rooms.length < 180, `${rooms.length} rooms`);
+});
+
+test('the guide knows where the important places are', () => {
+  const H = make();
+  // the legend fills in as the Bhawan is built; the plan already knows the stairs, lobby and washrooms
+  assert.ok(H.spaces.some((s) => s.type === 'stair' && s.roof));
+  for (const sp of H.spaces) {
+    const r = H.spaceRect(sp);
+    assert.ok(r.u0 >= 0 && r.u1 <= H.W && r.v0 >= 0 && r.v1 <= H.L, `${sp.type} inside the building`);
   }
 });
 
@@ -76,7 +94,7 @@ test('local ↔ world coordinates round-trip', () => {
   }
 });
 
-test('inside, courtyard and outside are told apart; no trees inside the building', () => {
+test('inside, courtyard and outside are told apart; no trees in the building or its courtyards', () => {
   const H = make();
   const pt = (u, v) => H.world(u, v);
   const corridor = pt(6.15, H.ve);
@@ -86,6 +104,6 @@ test('inside, courtyard and outside are told apart; no trees inside the building
   assert.equal(H.roomAt(court.x, court.z), null);
   assert.equal(H.roomAt(outside.x, outside.z), null);
   assert.equal(H.treeOk(corridor.x, corridor.z), false);
-  const edge = pt(H.court[0].u0 + 1.5, H.court[0].v0 + 20);
-  assert.equal(H.treeOk(edge.x, edge.z), false, 'arcade edges stay clear');
+  assert.equal(H.treeOk(court.x, court.z), false, 'the courtyards are concrete: no trees');
+  assert.equal(H.treeOk(outside.x - 30, outside.z), true, 'trees are fine away from the Bhawan');
 });

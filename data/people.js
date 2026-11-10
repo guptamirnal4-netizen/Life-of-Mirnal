@@ -154,6 +154,12 @@ export const HOSTELMATES = [
   { id: 'kunal', name: 'Kunal', color: '#4e342e', pants: '#37474f', lines: ['Senior tip: never skip the first lab.', 'Oasis prep has already started. Join a club!'] },
   { id: 'tejas', name: 'Tejas', color: '#283593', pants: '#1b1b1b', lines: ['Going to ANC, want anything?', 'The geyser on the first floor is the only reliable one.'] },
   { id: 'ishaan', name: 'Ishaan', color: '#558b2f', pants: '#3e2723', lines: ['I just came back from the gym corner. Never again.', 'Laundry day. Again.'] },
+  { id: 'dhruv', name: 'Dhruv', color: '#0277bd', pants: '#212121', lines: ['Tennis-ball cricket in the QT, one tip one hand. Join in!', 'Hit it over the arcade and you are out. Hostel rules.'] },
+  { id: 'ankit', name: 'Ankit', color: '#bf360c', pants: '#263238', lines: ['I field at point. Nothing gets past me. Mostly.', 'Last over, six needed. Easy.'] },
+  { id: 'mohit', name: 'Mohit', color: '#1b5e20', pants: '#1b1b1b', lines: ['Football after dinner, every day. Five a side.', 'Concrete is hard on the knees. Worth it.'] },
+  { id: 'sahil', name: 'Sahil', color: '#4a148c', pants: '#37474f', lines: ['Pass the ball, bro! I was open!', 'Inter-Bhawan football is next month.'] },
+  { id: 'parth', name: 'Parth', color: '#e65100', pants: '#212121', lines: ['That goal does not count, it hit the arcade first.', 'Who left the ball on the roof again?'] },
+  { id: 'vivek', name: 'Vivek', color: '#37474f', pants: '#3e2723', lines: ['I am in goal. Shoot low, I dare you.', 'The floodlight in the corner is our stadium light.'] },
 ];
 
 export const LOOKS = {
@@ -223,4 +229,10 @@ export const LOOKS = {
   Kunal: { gender: 'm', hair: 'short', outfit: 'casual', glasses: true },
   Tejas: { gender: 'm', hair: 'spiky', outfit: 'casual' },
   Ishaan: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Dhruv: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Ankit: { gender: 'm', hair: 'spiky', outfit: 'casual', glasses: true },
+  Mohit: { gender: 'm', hair: 'short', outfit: 'casual' },
+  Sahil: { gender: 'm', hair: 'spiky', outfit: 'casual' },
+  Parth: { gender: 'm', hair: 'short', outfit: 'casual', glasses: true },
+  Vivek: { gender: 'm', hair: 'short', outfit: 'casual', mustache: true },
 };

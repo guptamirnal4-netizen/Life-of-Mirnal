@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Campus } from './world/campus.js';
 import { BitsCampus } from './world/bits-world.js';
 import { createMinimap } from './ui/minimap.js';
+import { createBhawanGuide } from './ui/bhawan-guide.js';
 import { GraphicsEngine } from './graphics/GraphicsEngine.js';
 import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
@@ -55,6 +56,7 @@ function addMainInteractables(c, reg) {
 addMainInteractables(schoolCampus, { x: 15.5, z: 38 });
 let deskInteract = schoolCampus.deskInteract;
 const minimap = createMinimap();
+const bhawanGuide = createBhawanGuide();
 const bike = (() => {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: '#2a2f38', roughness: 0.4, metalness: 0.6 });
@@ -1070,8 +1072,14 @@ function placeHostelmates() {
   const clock = state.day.clock;
   const busy = clock >= 17 * 60 || clock < 8 * 60 || today()?.kind !== 'class';
   const S = H.npcSpots;
+  const C = S.cricket; const F = S.football;
   const plan = busy
-    ? { aditya: ['tt', S.tt[0]], harsh: ['tt', S.tt[1]], siddharth: ['tv', S.tv[0]], nikhil: ['tv', S.tv[1]], yash: ['carrom', S.carrom[0]], ishaan: ['carrom', S.carrom[1]], pranav: ['study', S.study[0]], rohan: ['room', S.double[0]], kunal: ['room', S.senior[0]], aman: ['badminton', S.badminton[0]], varun: ['badminton', S.badminton[1]], tejas: ['walk', 0] }
+    ? {
+      aditya: ['tt', S.tt[0]], harsh: ['tt', S.tt[1]], siddharth: ['tv', S.tv[0]], nikhil: ['tv', S.tv[1]], yash: ['carrom', S.carrom[0]], ishaan: ['carrom', S.carrom[1]],
+      pranav: ['study', S.study[0]], rohan: ['room', S.double[0]], kunal: ['room', S.senior[0]], tejas: ['walk', 0],
+      varun: ['cricket', C.bat], aman: ['pace', C.bowl], dhruv: ['cricket', C.field[0]], ankit: ['cricket', C.field[1]],
+      mohit: ['pace', F[0]], sahil: ['pace', F[1]], parth: ['pace', F[2]], vivek: ['pace', F[3]],
+    }
     : { pranav: ['study', S.study[0]], siddharth: ['tv', S.tv[0]], tejas: ['walk', 0], rohan: ['walk', 1] };
   hostelWalkers = [];
   for (const hm of HOSTELMATES) {
@@ -1081,11 +1089,18 @@ function placeHostelmates() {
     npcMeta.get(id).activity = p?.[0];
     n.group.visible = !!p;
     if (!p) { n.teleport(H.world(2, 2, -20)); continue; }
+    n.speed = 1.4;
     if (p[0] === 'walk') {
       const y = p[1] * 3.3;
       const a = H.world(6.15, H.ve - 22, y); const b = H.world(6.15, H.ve + 22, y);
       n.teleport(p[1] ? b : a);
       hostelWalkers.push({ n, a, b });
+      continue;
+    }
+    if (p[0] === 'pace') { // footballers and the bowler run between two points
+      n.speed = p[1].speed;
+      n.teleport(p[1].a);
+      hostelWalkers.push({ n, a: p[1].a, b: p[1].b });
       continue;
     }
     n.teleport(p[1].at);
@@ -1349,7 +1364,7 @@ function openHelp() {
     h('table', {}, h('tbody', {}, [
       ['W A S D', 'Walk'], ['Mouse', 'Look around'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
       ['F', 'Voice: speak to choose options or talk (Chrome)'], ['T', 'Timetable'], ['M', 'Missions'], ['J', 'Learning Journey'],
-      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
+      ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['L', 'Krishna Bhawan guide: floor plan and where things are'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
     ].map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
     h('p', {}, 'Lessons start automatically when you sit at your desk (yellow mark) in the classroom during a lesson period. Sitting early makes time skip to the bell.'),
     h('p', {}, 'Voice: press F and say an option (“option two”, “raise hand”, “bye”), or near a classmate say “hello Diya”. Say “timetable” or “journey” to open them.')), { title: 'How to play', closable: true });
@@ -1507,6 +1522,7 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && anthem) { anthem.skipped = true; return endAnthem(); }
   if (e.code === 'KeyV' && !isOpen()) return toggleView();
   if (e.code === 'Backquote') return graphics.perf.setVisible(!graphics.perf.visible);
+  if (e.code === 'KeyL' && state && isCollege(state.classNum)) return toast(bhawanGuide.toggle() ? 'Bhawan guide on (L)' : 'Bhawan guide off (L)');
   if (e.code === 'KeyC' && !isOpen() && isCollege(state.classNum) && state.phase !== 'graduated') {
     if (player.seated) return toast('Stand up first (E).');
     if (campus.roomAt(player.pos.x, player.pos.z)) return toast('No cycling indoors. Step outside first.');
@@ -1867,6 +1883,8 @@ function frame() {
       player.update(dt, campus.allColliders());
       updateView(dt);
       if (isCollege(state.classNum)) tickHostel();
+      if (isCollege(state.classNum) && campus.hostel) bhawanGuide.update(dt, { hostel: campus.hostel, player, visible: !isOpen() });
+      else bhawanGuide.hide();
       npcs.update(dt, ball);
       if (Math.hypot(ball.pos.x - player.pos.x, ball.pos.z - player.pos.z) < 0.75 && player.moving) {
         const dir = player.lastMove.clone().setY(0).normalize();
