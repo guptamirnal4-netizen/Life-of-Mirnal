@@ -26,7 +26,10 @@ export function createBhawanGuide() {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, ht);
     const rect = (r, c) => { g.fillStyle = c; g.fillRect(r.u0 * sc, r.v0 * sc, (r.u1 - r.u0) * sc, (r.v1 - r.v0) * sc); };
-    rect({ u0: 0, u1: H.W, v0: 0, v1: H.L }, floor === 2 ? '#8a8f99' : '#5b6170');
+    g.fillStyle = floor === 2 ? '#8a8f99' : '#5b6170';
+    g.beginPath();
+    H.outline.forEach(([u, v], i) => (i ? g.lineTo(u * sc, v * sc) : g.moveTo(u * sc, v * sc)));
+    g.fill();
     for (const c of H.court) rect(c, '#b9b4a8');
     if (floor < 2) {
       for (const c of H.corridorRects()) rect(c, '#e9e6de');

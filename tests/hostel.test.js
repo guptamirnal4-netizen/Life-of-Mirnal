@@ -130,3 +130,26 @@ test('every courtyard Bhawan can be laid out: entrance on a long side facing a r
     for (const p of b0.outer) assert.ok(b.outer.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 4), `${name}: corner moved`);
   }
 });
+
+test('the comb-shaped Bhawans: a spine one wing deep with four arms, laid out like the others', async () => {
+  const { combPlan, COMB, CombHostel } = await import('../js/world/comb-hostel.js');
+  assert.deepEqual(Object.values(COMB), ['Ashok Bhawan', 'Rana Pratap Bhawan', 'Malviya Bhawan']);
+  for (const name of Object.keys(COMB)) {
+    const b0 = D.buildings.find((x) => x.name === name);
+    const plan = combPlan(b0.outer);
+    assert.equal(plan.arms.length, 4, name);
+    for (const a of plan.arms) assert.ok(a.v1 - a.v0 > 6 && a.u1 > 40, `${name}: arm ${JSON.stringify(a)}`);
+    // every edge runs along u or v
+    plan.pts.forEach((p, i) => { const q = plan.pts[(i + 1) % plan.pts.length]; assert.ok(Math.abs(p[0] - q[0]) < 1e-6 || Math.abs(p[1] - q[1]) < 1e-6, `${name}: edge ${i}`); });
+    const b = { ...b0, outer: b0.outer.map((p) => [...p]), holes: [] };
+    const H = new CombHostel({ colliders: [], interactables: [] }, b);
+    assert.equal(H.name, COMB[name]);
+    for (const t of ['lobby', 'stair', 'wash', 'common']) assert.ok(H.spaces.some((s) => s.type === t), `${name}: ${t}`);
+    for (const [key, segs] of Object.entries(H.segs)) for (let i = 1; i < segs.length; i++) assert.ok(segs[i].t0 >= segs[i - 1].t1 - 1e-6, `${name} ${key}: overlap`);
+    // the squared-up outline stays close to the OSM one: every new corner is within 4 m of the OSM outline
+    // (as for Krishna; Malviya's spine is up to 11.5 m deep in places and becomes one wing, 7.85 m)
+    const near = (p) => b0.outer.some((a, i) => { const c = b0.outer[(i + 1) % b0.outer.length]; const dx = c[0] - a[0]; const dz = c[1] - a[1]; const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz) < 4; });
+    for (const p of b.outer) assert.ok(near(p), `${name}: corner ${p} moved`);
+    assert.equal(H.roomAt(...(() => { const p = H.world(6, H.ve); return [p.x, p.z]; })()), 'hostel');
+  }
+});

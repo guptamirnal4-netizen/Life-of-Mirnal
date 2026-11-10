@@ -1,7 +1,7 @@
 // A walk-in Bhawan (Krishna, Gandhi, Budh, Ram, Shankar, Vyas, Vishwakarma). Two floors of corridors round one
 // or two courtyards, stairs, a few lived-in rooms, the common room, washrooms, a laundry, the entrance lobby
 // (security desk, vending machine, water cooler, notice board) and a roof terrace. Your own Bhawan (Krishna)
-// also has your room. Each Bhawan's interior is only drawn while you are near it.
+// also has your room. Each Bhawan's interior is only drawn while you are in it or at its door.
 //
 // The building is laid out in its own frame: u runs across the building, v along its length (the OSM outline,
 // squared up). Rooms line the outer walls; a corridor runs along the courtyard side behind cusped arches,
@@ -55,6 +55,7 @@ const COR = 2.8; // corridor width
 const SCREEN = 0.3; // arch screen on the courtyard side
 const WD = OUT + DEPTH + T + COR + SCREEN; // wing depth, 7.85
 const SLAB = 0.2;
+export const DIMS = { DEPTH, T, OUT, COR, SCREEN, WD, SLAB };
 const RISE = FH / 16; // 8 + 8 steps per floor
 const TREAD = 0.27;
 // Colliders are axis-aligned, so walls in the rotated frame are split into short pieces (short enough that you
@@ -166,6 +167,38 @@ function plates() {
 }
 // Materials are shared between Bhawans too, except the TV screen, which each common room switches on its own.
 const sharedMats = new Map();
+// Plain single-colour pieces ('c:#rrggbb') are painted with vertex colours and merged into one mesh ('vc').
+const VC = 'vc';
+const plain = (key) => /^c:#[0-9a-f]{3,6}$/i.test(key);
+const castsShadow = (key) => key.startsWith('t:plaster') || key.startsWith('t:concrete');
+function paint(g, hex) {
+  const c = new THREE.Color(hex); const n = g.attributes.position.count;
+  const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+}
+
+// The outside of every Bhawan (arcades, roofs, courtyards, porches) shares materials, so after they are all
+// built their shells are merged into one mesh per material for the whole campus.
+export function mergeShells(hostels, root) {
+  const all = new Map();
+  for (const H of hostels) {
+    for (const [key, list] of H.shellOut) {
+      if (!all.has(key)) all.set(key, { H, list: [] });
+      all.get(key).list.push(...list);
+    }
+    H.shellOut = null;
+  }
+  for (const [key, { H, list }] of all) {
+    const g = mergeGeometries(list);
+    if (!g) continue;
+    g.computeBoundingSphere();
+    const mesh = new THREE.Mesh(g, H.material(key));
+    mesh.receiveShadow = true;
+    mesh.castShadow = castsShadow(key);
+    root.add(mesh);
+  }
+}
 
 function plateAtlas(numbers) {
   const cols = 16; const cw = 128; const ch = 48;
@@ -275,6 +308,27 @@ export class Hostel {
     this.npcSpots = {};
     this.time = 0;
     this.lightOn = true;
+    this.layout(b, outer);
+    for (const [name, w] of Object.entries(this.wings)) {
+      w.name = name;
+      const o = w.map(0, 0); const a = w.map(1, 0); const c = w.map(0, 1);
+      w.ds = [a[0] - o[0], a[1] - o[1]];
+      w.dt = [c[0] - o[0], c[1] - o[1]];
+    }
+    // The entrance: middle of the west face.
+    const Wg = this.wings.W;
+    this.ve = Wg.tb[0] + Math.round((this.L / 2 - Wg.tb[0]) / MOD) * MOD;
+    this.legendItems = [];
+    this.planSpaces();
+    this.planCourtyards();
+    // the roof opening over the main stair, so you can climb out onto the terrace
+    const st = this.spaces.find((x) => x.type === 'stair' && x.roof);
+    const t0 = st.t0;
+    b.roofHoles = [[this.band(Wg, 0.84, t0), this.band(Wg, DEPTH, t0), this.band(Wg, DEPTH, t0 + MOD), this.band(Wg, 0.84, t0 + MOD)].map(([u, v]) => { const p = this.world(u, v); return [p.x, p.z]; })];
+  }
+
+  // The building's frame (O, eu, ev, W, L), its outline, courtyards and wings; also squares up b's outline.
+  layout(b, outer) {
     // --- frame from the OSM outline (a four-sided quad), squared up ---
     const [A, B, C, Dp] = outer;
     let ev = [(Dp[0] - A[0]) + (C[0] - B[0]), (Dp[1] - A[1]) + (C[1] - B[1])];
@@ -301,6 +355,7 @@ export class Hostel {
     const rect = (r) => [this.world(r.u0, r.v0), this.world(r.u1, r.v0), this.world(r.u1, r.v1), this.world(r.u0, r.v1)].map((p) => [p.x, p.z]);
     b.outer = rect({ u0: 0, u1: W, v0: 0, v1: L });
     b.holes = this.court.map(rect);
+    this.outline = [[0, 0], [W, 0], [W, L], [0, L]];
     b.h = FLOORS * FH;
     b.hostel = this;
 
@@ -314,22 +369,6 @@ export class Hostel {
       M: { map: (s, t) => [t, mBand + s], depth: WD - COR - T - OUT, tw: [WD - SCREEN, W - WD + SCREEN], tb: [WD, W - WD] },
     };
     if (!this.twoCourts) delete this.wings.M;
-    for (const [name, w] of Object.entries(this.wings)) {
-      w.name = name;
-      const o = w.map(0, 0); const a = w.map(1, 0); const c = w.map(0, 1);
-      w.ds = [a[0] - o[0], a[1] - o[1]];
-      w.dt = [c[0] - o[0], c[1] - o[1]];
-    }
-    // The entrance: middle of the west face.
-    const Wg = this.wings.W;
-    this.ve = Wg.tb[0] + Math.round((L / 2 - Wg.tb[0]) / MOD) * MOD;
-    this.legendItems = [];
-    this.planSpaces();
-    this.planCourtyards();
-    // the roof opening over the main stair, so you can climb out onto the terrace
-    const st = this.spaces.find((s) => s.type === 'stair' && s.roof);
-    const t0 = st.t0;
-    b.roofHoles = [[this.band(Wg, 0.84, t0), this.band(Wg, DEPTH, t0), this.band(Wg, DEPTH, t0 + MOD), this.band(Wg, 0.84, t0 + MOD)].map(([u, v]) => { const p = this.world(u, v); return [p.x, p.z]; })];
   }
 
   // ---------- coordinates ----------
@@ -368,7 +407,7 @@ export class Hostel {
     add('W', 1, ve - MOD - ROOM, ROOM, 'room', { variant: 'double', id: 'room-double' });
     add('W', 1, ve - MOD - 2 * ROOM, ROOM, 'room', { variant: 'senior', id: 'room-senior' });
     const E = this.wings.E;
-    for (let k = 0; k < FLOORS; k++) add('E', k, E.tb[1] - 3 * MOD, MOD, 'stair', { top: FLOORS - 1 });
+    if (E) for (let k = 0; k < FLOORS; k++) add('E', k, E.tb[1] - 3 * MOD, MOD, 'stair', { top: FLOORS - 1 });
     // fill the rest of every corridor with student rooms
     this.segs = {};
     for (const w of Object.values(this.wings)) {
@@ -411,8 +450,10 @@ export class Hostel {
   // ---------- geometry helpers (local frame) ----------
   geo(key, g) {
     const parts = this.layer || this.parts;
+    const geom = g.index ? g.toNonIndexed() : g;
+    if (plain(key)) { paint(geom, key.slice(2)); key = VC; }
     if (!parts.has(key)) parts.set(key, []);
-    parts.get(key).push(g.index ? g.toNonIndexed() : g);
+    parts.get(key).push(geom);
   }
 
   // Geometry built inside fn goes to the shell: what you can see from outside (arches, courtyards, roof).
@@ -447,10 +488,14 @@ export class Hostel {
     const along = u1 - u0 > v1 - v0 ? 'u' : 'v';
     const len = along === 'u' ? u1 - u0 : v1 - v0;
     const n = Math.max(1, Math.ceil(len / (walkable ? FLOOR_CHUNK : CHUNK)));
+    // floors are split across as well, so a wide slab's box doesn't spill over a stair opening
+    const wid = along === 'u' ? v1 - v0 : u1 - u0;
+    const m = walkable ? Math.max(1, Math.ceil(wid / FLOOR_CHUNK)) : 1;
     const out = [];
-    for (let i = 0; i < n; i++) {
-      const a0 = (along === 'u' ? u0 : v0) + (len * i) / n; const a1 = a0 + len / n;
-      const [pu0, pu1, pv0, pv1] = along === 'u' ? [a0, a1, v0, v1] : [u0, u1, a0, a1];
+    for (let i = 0; i < n * m; i++) {
+      const a0 = (along === 'u' ? u0 : v0) + (len * (i % n)) / n; const a1 = a0 + len / n;
+      const b0 = (along === 'u' ? v0 : u0) + (wid * Math.floor(i / n)) / m; const b1 = b0 + wid / m;
+      const [pu0, pu1, pv0, pv1] = along === 'u' ? [a0, a1, b0, b1] : [b0, b1, a0, a1];
       const ps = [this.world(pu0, pv0), this.world(pu1, pv0), this.world(pu1, pv1), this.world(pu0, pv1)];
       const c = { minX: Math.min(...ps.map((p) => p.x)), maxX: Math.max(...ps.map((p) => p.x)), minZ: Math.min(...ps.map((p) => p.z)), maxZ: Math.max(...ps.map((p) => p.z)), minY: y0, maxY: y1, walkable, enabled: true, hostel: true };
       list.push(c);
@@ -518,6 +563,7 @@ export class Hostel {
       const cut = name === 'arch' || name === 'grille';
       m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: cut ? THREE.DoubleSide : THREE.FrontSide, alphaTest: cut ? 0.5 : 0 });
     } else if (key.startsWith('facade:')) m = this.campus.material(key);
+    else if (key === VC) m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
     else m = mat(key.replace(/^c:/, ''));
     this.customMats[key] = m;
     if (key !== 'x:tvOn') sharedMats.set(key, m);
@@ -525,18 +571,21 @@ export class Hostel {
   }
 
   flush() {
-    for (const [parts, group] of [[this.parts, this.g], [this.shellParts, this.shellG]]) {
-      for (const [key, list] of parts) {
-        const g = mergeGeometries(list);
-        if (!g) continue;
-        g.computeBoundingSphere();
-        const mesh = new THREE.Mesh(g, this.material(key));
-        mesh.receiveShadow = true;
-        mesh.castShadow = key.startsWith('t:plaster') || key.startsWith('t:concrete');
-        group.add(mesh);
-      }
-      parts.clear();
+    for (const [key, list] of this.parts) {
+      const g = mergeGeometries(list);
+      if (!g) continue;
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g, this.material(key));
+      mesh.receiveShadow = true;
+      mesh.castShadow = castsShadow(key);
+      this.g.add(mesh);
     }
+    this.parts.clear();
+    // the shell goes into mergeShells with every other Bhawan's, so bake this Bhawan's placement into it
+    const m = new THREE.Matrix4().makeRotationY(this.angle).setPosition(this.O[0], 0, this.O[1]);
+    this.shellOut = new Map();
+    for (const [key, list] of this.shellParts) this.shellOut.set(key, list.map((g) => g.applyMatrix4(m)));
+    this.shellParts.clear();
   }
 
   fan(w, s, t, y) {
@@ -578,14 +627,13 @@ export class Hostel {
   // ---------- build ----------
   build() {
     const c = this.campus;
-    // g: the interior, drawn only near the Bhawan; shellG: everything visible from outside
+    // g: the interior, drawn only near the Bhawan; the shell (everything visible from outside) is merged
+    // with the other Bhawans' (mergeShells)
     this.shellParts = new Map();
-    for (const k of ['g', 'shellG']) {
-      this[k] = new THREE.Group();
-      this[k].position.set(this.O[0], 0, this.O[1]);
-      this[k].rotation.y = this.angle;
-      c.root.add(this[k]);
-    }
+    this.g = new THREE.Group();
+    this.g.position.set(this.O[0], 0, this.O[1]);
+    this.g.rotation.y = this.angle;
+    c.root.add(this.g);
     // room numbers, wing by wing, floor by floor (4 digits, like the plates in the walkthrough)
     const numbers = [];
     for (let k = 0; k < FLOORS; k++) {
@@ -747,18 +795,31 @@ export class Hostel {
     this.box(WD, W - WD, vm + WD / 2 - OUT, vm + WD / 2, 0, FLOORS * FH, 't:plaster:#eee7d8');
   }
 
-  // Walkable roof over every wing, parapets all round, water tanks and washing lines on the west wing.
-  buildRoof() {
+  // The walkable roof: one strip per wing (the first, from u = 0, is the west wing with the stair opening).
+  roofStrips() {
     const { W, L, mc0, vm } = this;
-    const y = FLOORS * FH;
-    const st = this.spaces.find((s) => s.type === 'stair' && s.roof);
-    const hole = st.t0;
-    const Wg = this.wings.W;
     const strips = [
       { u0: 0, u1: WD, v0: 0, v1: L }, { u0: W - WD, u1: W, v0: 0, v1: L },
       { u0: WD, u1: W - WD, v0: 0, v1: WD }, { u0: WD, u1: W - WD, v0: L - WD, v1: L },
     ];
     if (this.twoCourts) strips.push({ u0: WD, u1: W - WD, v0: mc0 - SCREEN, v1: vm + WD / 2 });
+    return strips;
+  }
+
+  // Parapets along the outside and round the courtyards.
+  roofParapets(par) {
+    const { W, L } = this;
+    par(-0.05, 0.25, 0, L); par(W - 0.25, W + 0.05, 0, L); par(0, W, -0.05, 0.25); par(0, W, L - 0.25, L + 0.05);
+    for (const r of this.court) { par(r.u0 - 0.25, r.u0, r.v0, r.v1); par(r.u1, r.u1 + 0.25, r.v0, r.v1); par(r.u0, r.u1, r.v0 - 0.25, r.v0); par(r.u0, r.u1, r.v1, r.v1 + 0.25); }
+  }
+
+  // Walkable roof over every wing, parapets all round, water tanks and washing lines on the west wing.
+  buildRoof() {
+    const y = FLOORS * FH;
+    const st = this.spaces.find((s) => s.type === 'stair' && s.roof);
+    const hole = st.t0;
+    const Wg = this.wings.W;
+    const strips = this.roofStrips();
     // west strip, minus the stair opening
     const [hu0, hv0] = Wg.map(DEPTH, hole); const [hu1, hv1] = Wg.map(0.84, hole + MOD);
     for (const r of strips) {
@@ -769,9 +830,7 @@ export class Hostel {
       } else this.col(r.u0, r.u1, r.v0, r.v1, y - 0.3, y, true);
     }
     // parapets: outside edge and courtyard edges
-    const par = (u0, u1, v0, v1) => { this.box(u0, u1, v0, v1, y, y + 0.95, 't:plaster:#f1ece2'); };
-    par(-0.05, 0.25, 0, L); par(W - 0.25, W + 0.05, 0, L); par(0, W, -0.05, 0.25); par(0, W, L - 0.25, L + 0.05);
-    for (const r of this.court) { par(r.u0 - 0.25, r.u0, r.v0, r.v1); par(r.u1, r.u1 + 0.25, r.v0, r.v1); par(r.u0, r.u1, r.v0 - 0.25, r.v0); par(r.u0, r.u1, r.v1, r.v1 + 0.25); }
+    this.roofParapets((u0, u1, v0, v1) => { this.box(u0, u1, v0, v1, y, y + 0.95, 't:plaster:#f1ece2'); });
     // stair head room (mumty) over the main stair
     const t0 = hole; const t1 = hole + MOD;
     for (const t of [t0, t1]) this.bbox(Wg, 0.3, DEPTH + OUT, t - T / 2, t + T / 2, y, y + 2.6, 't:plaster:#ede6d6');
@@ -1327,7 +1386,8 @@ export class Hostel {
   update(dt, playerPos = null) {
     this.time += dt;
     if (playerPos) {
-      this.g.visible = this.distance(playerPos.x, playerPos.z) < 45 && playerPos.y < 30;
+      // from outside, the facade hides the interior except through the entrance
+      this.g.visible = this.distance(playerPos.x, playerPos.z) < 15 && playerPos.y < 30;
     }
     if (this.ttBall && this.ttBall.visible) {
       const [a, b] = this.ttEnds;

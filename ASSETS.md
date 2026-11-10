@@ -31,7 +31,7 @@ built from Three.js primitives in code:
 |---|---|---|
 | `js/world/textures.js` | plaster, brick, tiles, terrazzo, wood, grass, paving, concrete, boards and similar | 512 × 512 each |
 | `js/world/bits-world.js` | facades (hostel, academic, heritage, library, SAC, mess, …), roofs, Rotunda paving, signs | 64 × 8 to 1024 × 1024 |
-| `js/world/hostel.js` | corridor doors, arches and grilles, room plates (atlas), posters, notices, TV, vending machine, bed sheets, curtains | 64 × 36 to 2048 × 768 (atlas of 251 room plates) |
+| `js/world/hostel.js`, `js/world/comb-hostel.js` | corridor doors, arches and grilles, room plates (atlas), posters, notices, TV, vending machine, bed sheets, curtains | 64 × 36 to 2048 × 912 (one atlas of 300 room plates, shared by every Bhawan) |
 | `js/world/labels.js` | name tags and blackboard | per label |
 
 Anisotropic filtering is set by the graphics quality profile (`js/graphics/GraphicsConfig.js`): 2× on Low

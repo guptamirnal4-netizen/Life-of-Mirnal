@@ -8,7 +8,8 @@ import { makeLabel } from './labels.js';
 import { texture, TEX_SIZE } from './textures.js';
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
 import { NavGraph } from './nav.js';
-import { Hostel, WALK_IN, entranceOrder } from './hostel.js';
+import { Hostel, WALK_IN, entranceOrder, mergeShells } from './hostel.js';
+import { CombHostel, COMB } from './comb-hostel.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -204,13 +205,20 @@ export class BitsCampus extends Campus {
     this.buckets = new Map();
     this.shapeGeos = new Map();
     this.buildings = D.buildings.map((b) => ({ ...b, bb: bbox(b.outer) }));
-    // The courtyard Bhawans are walk-in; their outlines are squared up to fit the interiors. Krishna is yours.
+    // The Bhawans are walk-in; their outlines are squared up to fit the interiors. Krishna is yours.
     this.hostels = [];
     for (const name of WALK_IN) {
       const b = this.buildings.find((x) => x.name === name);
       if (!b) continue;
       const mine = name === 'Krishna Bhawan';
       this.hostels.push(new Hostel(this, b, { mine, outer: mine ? b.outer : entranceOrder(b.outer, D.roads) }));
+      b.bb = bbox(b.outer);
+    }
+    // the newer comb-shaped Bhawans (Bhagirath, a girls' hostel, stays closed to Mirnal)
+    for (const name of Object.keys(COMB)) {
+      const b = this.buildings.find((x) => x.name === name);
+      if (!b) continue;
+      this.hostels.push(new CombHostel(this, b));
       b.bb = bbox(b.outer);
     }
     this.hostel = this.hostels.find((H) => H.mine);
@@ -227,6 +235,7 @@ export class BitsCampus extends Campus {
     this.placeRooms();
     this.planPassages();
     for (const H of this.hostels) H.build();
+    mergeShells(this.hostels, this.root);
     this.buildBuildings();
     this.buildPassages();
     this.buildRotunda();
