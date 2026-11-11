@@ -103,7 +103,7 @@ title screen or in the pause menu, or open the game with `?film` in the address 
   cast and title, in `js/cinematic/cinematic.js`. It runs on its own cast and never touches the saved game.
 - **Music:** an original score synthesised by `dev/film-score.mjs` from the film's own timeline (no samples or
   third-party audio), shipped as `audio/film-score.m4a`; in the game the picture follows the music's clock.
-- **The video:** `node dev/render-film.mjs out.mp4` (with `npm start` running; needs Chrome, ffmpeg and
+- **The video:** a copy of the rendered film is kept in `film/` (not in git or on the site, because of its size). `node dev/render-film.mjs out.mp4` (with `npm start` running; needs Chrome, ffmpeg and
   playwright-core) draws every frame at 1.5× on Ultra with depth of field and encodes 1080p30 H.264 with the score.
 
 ## Code map
