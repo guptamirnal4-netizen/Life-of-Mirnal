@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 
 // The game's look: a warm, saturated, slightly soft "storybook campus" grade with a gentle vignette, and a
 // soft glow on bright sky and sunlit walls. It is applied in one final pass that also does the tone mapping
@@ -109,6 +110,22 @@ export class PostProcessing {
     u.toneMappingExposure.value = this.renderer.toneMappingExposure;
   }
 
+  // Depth of field, for the campus film's close shots (it renders the scene's depth a second time, so the game
+  // itself never uses it): { focus (metres from the camera), aperture, maxblur }, or null to switch it off.
+  setDof(dof) {
+    if (!this.composer) return;
+    if (!dof) { if (this.bokeh) this.bokeh.enabled = false; return; }
+    if (!this.bokeh) {
+      this.bokeh = new BokehPass(this.scene, this.camera, { focus: 5, aperture: 0.0004, maxblur: 0.005 });
+      this.composer.insertPass(this.bokeh, this.composer.passes.indexOf(this.grade));
+    }
+    const u = this.bokeh.uniforms;
+    this.bokeh.enabled = true;
+    u.focus.value = dof.focus;
+    u.aperture.value = dof.aperture;
+    u.maxblur.value = dof.maxblur;
+  }
+
   render() { this.composer.render(); }
 
   dispose() {
@@ -116,9 +133,11 @@ export class PostProcessing {
     this.composer.renderTarget1.dispose();
     this.composer.renderTarget2.dispose();
     this.bloom?.dispose();
+    this.bokeh?.dispose();
     this.grade?.material.dispose();
     this.composer = null;
     this.bloom = null;
+    this.bokeh = null;
     this.grade = null;
   }
 }

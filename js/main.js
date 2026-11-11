@@ -4,6 +4,7 @@ import { BitsCampus } from './world/bits-world.js';
 import { createMinimap } from './ui/minimap.js';
 import { createBhawanGuide } from './ui/bhawan-guide.js';
 import { createTouchControls } from './ui/touch.js';
+import { Cinematic } from './cinematic/cinematic.js';
 import { GraphicsEngine } from './graphics/GraphicsEngine.js';
 import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
@@ -92,6 +93,7 @@ const bike = (() => {
   return g;
 })();
 
+const COLLEGE_RANGE = { fogNear: 170, fogFar: 720, skyScale: 1900 };
 function useWorld(kind) {
   const college = kind === 'college';
   if (college && !bitsCampus) {
@@ -111,7 +113,7 @@ function useWorld(kind) {
   ball.reset();
   camera.far = college ? 1100 : 300;
   camera.updateProjectionMatrix();
-  graphics.worldChanged(college ? { fogNear: 170, fogFar: 720, skyScale: 1900 } : { fogNear: 90, fogFar: 270, skyScale: 280 });
+  graphics.worldChanged(college ? COLLEGE_RANGE : { fogNear: 90, fogFar: 270, skyScale: 280 });
   minimap.setVisible(college);
   if (!college) setBike(false);
 }
@@ -1446,6 +1448,7 @@ function openPause() {
     isCollege(state.classNum) && h('button', { 'data-voice': 'bhawan guide', onclick: () => { toast(bhawanGuide.toggle() ? 'Bhawan guide on' : 'Bhawan guide off'); closeAll(); requestLock(); } }, 'Bhawan guide on / off'),
     h('button', { 'data-voice': 'settings', onclick: () => openSettings() }, 'Settings'),
     h('button', { 'data-voice': 'help controls', onclick: () => openHelp() }, 'How to play'),
+    h('button', { 'data-voice': 'film campus tour watch', onclick: () => playFilm() }, '🎬 Watch the campus film'),
     h('button', { 'data-voice': 'quit title', onclick: () => { save(true); closeAll(); showTitle(); } }, 'Save & quit to title')),
   { title: 'Paused', closable: true });
 }
@@ -1482,6 +1485,7 @@ function showTitle() {
       choice('🎒', 'Mirnal’s School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
       choice('🎓', 'Mirnal’s College Life', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
     saveInfo && h('button', { class: 'primary', onclick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } }, `Continue · ${saveInfo}`),
+    h('button', { 'data-voice': 'film campus tour watch', onclick: () => playFilm() }, '🎬 Watch the campus film'),
     h('div', { class: 'title-row' },
       saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
       h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
@@ -1549,6 +1553,7 @@ onOverlayChange((open) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (mode === 'film' && e.code === 'Escape' && film && !film.capturing) return film.finish();
   if (mode !== 'playing') return;
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (e.code === 'Escape') {
@@ -1880,6 +1885,52 @@ function updateHUD(slot) {
   hud.resume.classList.toggle('hidden', !!document.pointerLockElement || touch.on || isOpen() || mode !== 'playing');
 }
 
+// ---------- The campus film ----------
+// A cinematic tour of BITS Pilani in the game engine (js/cinematic/cinematic.js). From the title screen or the
+// pause menu; ?film in the URL plays it on load. capture: driven frame by frame by dev/render-film.mjs.
+let film = null;
+function playFilm({ capture = false } = {}) {
+  if (film) return film;
+  closeAll();
+  exitLock();
+  minimap.closeBig();
+  bhawanGuide.hide();
+  const back = { mode, college: campus === bitsCampus && !!bitsCampus, quality: graphics.quality.name, hidden: [] };
+  for (const n of npcs.npcs.values()) if (n.group.visible) { n.group.visible = false; back.hidden.push(n); }
+  avatar.group.visible = false;
+  bike.visible = false;
+  titleEl.classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  useWorld('college');
+  minimap.setVisible(false);
+  graphics.setQuality(capture ? 'ultra' : state?.settings.graphics || (touch.on ? 'medium' : 'high'));
+  mode = 'film';
+  film = new Cinematic({ scene, camera, campus, graphics, bike, range: COLLEGE_RANGE });
+  film.capturing = capture;
+  film.start({ onEnd: () => endFilm(back), showSkip: !capture, music: capture ? null : 'audio/film-score.m4a' });
+  return film;
+}
+
+function endFilm(back) {
+  if (!film) return;
+  film.stop();
+  film = null;
+  for (const n of back.hidden) n.group.visible = true;
+  graphics.setQuality(back.quality);
+  if (back.mode === 'playing') {
+    useWorld(back.college ? 'college' : 'school');
+    mode = 'playing';
+    document.getElementById('hud').classList.remove('hidden');
+    if (back.college) campus.setMessBoard && (campus.messKey = null);
+    return;
+  }
+  useWorld('school');
+  player.place(new THREE.Vector3(0, 0, 58), 0);
+  camera.position.set(0, 6, 62);
+  camera.lookAt(0, 2, 0);
+  showTitle();
+}
+
 // ---------- Live map ----------
 // The route to the current objective along the roads (refreshed every second), for the minimap and the big map.
 let mapRoute = { at: -99, key: '', pts: null };
@@ -1901,6 +1952,7 @@ function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clockTimer.getDelta(), 0.05);
   elapsed += dt;
+  if (mode === 'film') { if (film && !film.capturing) film.update(dt); return; }
   if (mode === 'playing' && state) {
     const paused = isOpen();
     player.enabled = !paused && (document.pointerLockElement === canvas || touch.on);
@@ -1989,6 +2041,7 @@ camera.lookAt(0, 2, 0);
 detectLLM();
 showTitle();
 frame();
+if (new URLSearchParams(location.search).has('film')) playFilm();
 
 // Exposed for automated testing in the browser.
-window.__game = { graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };
+window.__game = { playFilm, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };

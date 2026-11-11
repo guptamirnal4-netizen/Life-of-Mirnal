@@ -90,12 +90,30 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 - **Performance stats:** press `` ` `` in the game to show frame rate, frame time, draw calls and resolution.
 - **Code and assets:** the code is in `js/graphics/` (see the comments at the top of each file). Third-party files and their licences are listed in `ASSETS.md`.
 
+## The campus film
+
+A 3 min 50 s cinematic tour of BITS Pilani, played in the game's own engine: **🎬 Watch the campus film** on the
+title screen or in the pause menu, or open the game with `?film` in the address (Esc skips).
+
+- **The story:** a sunrise flight over Pilani and down the main road; Mirnal walks in through the Main Gate on day
+  one; the Clock Tower, the Rotunda, NAB and a lecture in progress, the computer lab, the FD-II labs, the Library and
+  lunch at the VKB mess; the Bhawans from the air, into Krishna Bhawan and courtyard cricket at dusk; a cycle ride at
+  golden hour past the Saraswati Temple, Shiv Ganga, C'not and SAC; and a crane up from the Rotunda at sunset.
+- **How it is made:** every shot is a camera move (splines, or a follow rig around Mirnal) with its own time of day,
+  cast and title, in `js/cinematic/cinematic.js`. It runs on its own cast and never touches the saved game.
+- **Music:** an original score synthesised by `dev/film-score.mjs` from the film's own timeline (no samples or
+  third-party audio), shipped as `audio/film-score.m4a`; in the game the picture follows the music's clock.
+- **The video:** `node dev/render-film.mjs out.mp4` (with `npm start` running; needs Chrome, ffmpeg and
+  playwright-core) draws every frame at 1.5× on Ultra with depth of field and encodes 1080p30 H.264 with the score.
+
 ## Code map
 
 ```
 data/            mess.js (menu, Pitstop), curriculum-primary.js (1–5), curriculum-middle.js (6–10), senior-a/b.js (11–12),
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
-js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade + bloom), PerformanceMonitor
+js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade, bloom, depth of field), PerformanceMonitor
+js/cinematic/    the campus film: shot list, camera rigs, cast, titles
+dev/             dev server, film renderer and score generator
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM
 js/world/        campus (3D school), bits-world (real-scale BITS campus), hostel + comb-hostel (walk-in Bhawans), player, npcs (characters, ball), labels
 data/bits-campus.js  BITS Pilani footprints, roads and areas from OpenStreetMap, in metres from the Rotunda
