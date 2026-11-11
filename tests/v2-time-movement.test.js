@@ -77,14 +77,14 @@ function makePlayer() {
 }
 const run = (p, seconds, colliders = []) => { for (let i = 0; i < seconds * 60; i++) p.update(1 / 60, colliders); };
 
-test('walking reaches walking speed and eases in and out', () => {
+test('W runs by default and eases in and out', () => {
   const p = makePlayer();
   p.keys.add('KeyW');
   p.update(1 / 60, []);
   assert.ok(p.speedNow > 0 && p.speedNow < MOVE.walk, 'accelerates, not instant');
   run(p, 2);
-  assert.ok(Math.abs(p.speedNow - MOVE.walk) < 1e-6);
-  assert.equal(p.gait(), 'walk');
+  assert.ok(Math.abs(p.speedNow - MOVE.run) < 1e-6);
+  assert.equal(p.gait(), 'run');
   p.keys.delete('KeyW');
   p.update(1 / 60, []);
   assert.ok(p.speedNow > 0, 'slows down smoothly');
@@ -93,16 +93,16 @@ test('walking reaches walking speed and eases in and out', () => {
   assert.equal(p.gait(), 'idle');
 });
 
-test('Shift runs faster on foot', () => {
+test('Shift + W walks', () => {
   const p = makePlayer();
   p.keys.add('KeyW');
   p.keys.add('ShiftLeft');
   run(p, 2);
-  assert.ok(Math.abs(p.speedNow - MOVE.run) < 1e-6);
-  assert.equal(p.gait(), 'run');
+  assert.ok(Math.abs(p.speedNow - MOVE.walk) < 1e-6);
+  assert.equal(p.gait(), 'walk');
   const z0 = p.pos.z;
   run(p, 1);
-  assert.ok(Math.abs(z0 - p.pos.z - MOVE.run) < 0.01, 'covers MOVE.run metres in a second');
+  assert.ok(Math.abs(z0 - p.pos.z - MOVE.walk) < 0.01, 'covers MOVE.walk metres in a second');
   assert.ok(MOVE.run > MOVE.walk * 2);
 });
 
@@ -151,7 +151,7 @@ test('getting off the cycle starts you from a standstill on foot', () => {
   p.bike = false;
   assert.equal(p.speedNow, 0);
   run(p, 2);
-  assert.ok(Math.abs(p.speedNow - MOVE.walk) < 1e-6);
+  assert.ok(Math.abs(p.speedNow - MOVE.run) < 1e-6);
 });
 
 test('walls stop you on foot and on the cycle; the cycle is wider', () => {

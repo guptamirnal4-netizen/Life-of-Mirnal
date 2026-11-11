@@ -98,7 +98,8 @@ export class Player {
     return codes.some((c) => this.keys.has(c));
   }
 
-  // On foot: WASD (or the touch joystick) sets a direction, Shift raises the target speed; velocity eases towards it.
+  // On foot: WASD (or the touch joystick) sets a direction. You run by default; holding Shift slows you to a walk
+  // (on the joystick, a small push walks and a full push runs). Velocity eases towards the target.
   footStep(dt) {
     const f = this.forward();
     const r = new THREE.Vector3(-f.z, 0, f.x);
@@ -109,7 +110,7 @@ export class Player {
     if (this.key('KeyA', 'ArrowLeft')) want.sub(r);
     const sm = Math.hypot(this.stick.x, this.stick.y);
     if (sm > 0.15) want.addScaledVector(f, this.stick.y / sm).addScaledVector(r, this.stick.x / sm);
-    this.running = want.lengthSq() > 0 && (this.key('ShiftLeft', 'ShiftRight') || sm > 0.9);
+    this.running = want.lengthSq() > 0 && (sm > 0.15 ? sm > 0.9 : !this.key('ShiftLeft', 'ShiftRight'));
     if (want.lengthSq() > 0) want.normalize().multiplyScalar(this.running ? MOVE.run : MOVE.walk);
     const diff = want.sub(this.vel);
     const rate = (want.lengthSq() >= this.vel.lengthSq() ? MOVE.footAccel : MOVE.footDecel) * dt;

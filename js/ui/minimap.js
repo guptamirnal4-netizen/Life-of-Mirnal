@@ -168,7 +168,7 @@ export function createMinimap() {
       // header: what this is, and where you're going
       const mins = (speed) => Math.max(1, Math.round((dist / speed) * timeScale));
       const lines = ['BITS Pilani · live · north is up · N closes'];
-      if (target) lines.push(`→ ${place} · ${dist < 1000 ? `${Math.round(dist / 10) * 10} m` : `${(dist / 1000).toFixed(1)} km`} · 🚶 ${mins(2)} min · 🚲 ${mins(7)} min`);
+      if (target) lines.push(`→ ${place} · ${dist < 1000 ? `${Math.round(dist / 10) * 10} m` : `${(dist / 1000).toFixed(1)} km`} · 🏃 ${mins(4.5)} min · 🚲 ${mins(7)} min`);
       g.font = '600 14px system-ui'; g.textBaseline = 'middle';
       const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 20;
       g.fillStyle = 'rgba(20,24,40,0.88)'; g.fillRect(10, 10, w, 12 + lines.length * 22);

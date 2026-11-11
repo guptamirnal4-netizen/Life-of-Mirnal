@@ -1399,7 +1399,7 @@ function openHelp() {
       ['✋', 'Interact / sit / stand (lights up when there is something to do)'], ['⤒', 'Jump'], ['🎤', 'Voice: speak to choose options or talk'],
       ['🚲', 'College: hop on / off your cycle'], ['⏩', 'Hold to fast-forward time'], ['👁', 'First-person / third-person view'], ['🗺', 'College: full campus map'], ['☰', 'Menu: timetable, missions, journey, settings'],
     ] : [
-      ['W A S D', 'Walk'], ['Mouse', 'Look around'], ['Shift', 'Run'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
+      ['W A S D', 'Run'], ['Mouse', 'Look around'], ['Shift + W A S D', 'Walk'], ['Space', 'Jump'], ['E', 'Interact / sit / stand'],
       ['F', 'Voice: speak to choose options or talk (Chrome)'], ['T', 'Timetable'], ['M', 'Missions'], ['J', 'Learning Journey'],
       ['V', 'Switch first-person / third-person view'], ['C', 'College: hop on / off your cycle'], ['N', 'College: full campus map'], ['Hold Z', 'Fast-forward time'], ['L', 'Bhawan guide: floor plan and where things are'], ['`', 'Performance stats (frame rate, draw calls)'], ['Esc', 'Pause menu'],
     ]).map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v))))),
@@ -1944,7 +1944,7 @@ function frame() {
       npcs.update(dt, ball);
       if (Math.hypot(ball.pos.x - player.pos.x, ball.pos.z - player.pos.z) < 0.75 && player.moving) {
         const dir = player.lastMove.clone().setY(0).normalize();
-        ball.kick(dir.multiplyScalar(player.keys.has('ShiftLeft') ? 11 : 7));
+        ball.kick(dir.multiplyScalar(player.running ? 11 : 7));
         lastKick = elapsed;
       }
       const scored = ball.update(dt);
