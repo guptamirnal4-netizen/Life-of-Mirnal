@@ -1886,7 +1886,7 @@ function updateHUD(slot) {
 }
 
 // ---------- The campus film ----------
-// A cinematic tour of BITS Pilani in the game engine (js/cinematic/cinematic.js). From the title screen or the
+// Mirnal's journey from Class 1 to BITS Pilani, in the game engine (js/cinematic/cinematic.js). From the title screen or the
 // pause menu; ?film in the URL plays it on load. capture: driven frame by frame by dev/render-film.mjs.
 let film = null;
 function playFilm({ capture = false } = {}) {
@@ -1905,7 +1905,7 @@ function playFilm({ capture = false } = {}) {
   minimap.setVisible(false);
   graphics.setQuality(capture ? 'ultra' : state?.settings.graphics || (touch.on ? 'medium' : 'high'));
   mode = 'film';
-  film = new Cinematic({ scene, camera, campus, graphics, bike, range: COLLEGE_RANGE });
+  film = new Cinematic({ scene, camera, campus: bitsCampus, school: schoolCampus, setWorld: (kind) => useWorld(kind), graphics, bike, range: COLLEGE_RANGE });
   film.capturing = capture;
   film.start({ onEnd: () => endFilm(back), showSkip: !capture, music: capture ? null : 'audio/film-score.m4a' });
   return film;
@@ -1921,7 +1921,13 @@ function endFilm(back) {
     useWorld(back.college ? 'college' : 'school');
     mode = 'playing';
     document.getElementById('hud').classList.remove('hidden');
-    if (back.college) campus.setMessBoard && (campus.messKey = null);
+    if (back.college) campus.messKey = null;
+    // the film writes its own lessons on the classroom boards: put this year's back
+    if (state && state.phase === 'day') {
+      campus.rebuildClassroom(state.classNum, classroomTitle());
+      const seat = campus.seats[campus.playerSeatIndex];
+      deskInteract.pos.set(seat.desk.x, 1, seat.desk.z + 0.3);
+    }
     return;
   }
   useWorld('school');

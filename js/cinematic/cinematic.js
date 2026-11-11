@@ -1,4 +1,5 @@
-// The campus film: a ~3½-minute cinematic tour of BITS Pilani, played in the game's own engine.
+// The film: Mirnal's journey from the first day of Class 1 at Sunrise Public School to BITS Pilani, a ~4-minute
+// cinematic played in the game's own engine, in both worlds (school, then the real-scale BITS campus).
 //
 // Everything on screen is a function of time: the shot list below gives each shot a duration, a time of day,
 // a camera move (splines, or a follow rig around Mirnal), a cast and an on-screen title. update(dt) plays it in
@@ -20,7 +21,8 @@ const EASE = {
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const hm = (h, m = 0) => h * 60 + m;
-const FILM_RANGE = { fogNear: 420, fogFar: 1700, skyScale: 2400 };
+// a long, light haze over the real-scale campus; a short one round the small school, so its edge stays hidden
+const FILM_RANGE = { college: { fogNear: 420, fogFar: 1700, skyScale: 2400 }, school: { fogNear: 70, fogFar: 330, skyScale: 700 } };
 
 // A walk along a polyline at a steady speed; heading looks a little ahead so corners turn smoothly.
 class Walk {
@@ -68,7 +70,7 @@ const STYLE = `
 `;
 
 export class Cinematic {
-  // world: { scene, camera, campus, graphics, bike, range (the world's fog range, restored at the end) }
+  // world: { scene, camera, campus (BITS), school (the school campus), setWorld(kind), graphics, bike, range }
   constructor(world) {
     Object.assign(this, world);
     this.t = 0;
@@ -98,9 +100,9 @@ export class Cinematic {
     // no name labels in the film, and a long, light haze so the air shots see the whole campus
     this.sprites = [];
     this.scene.traverse((o) => { if (o.isSprite) this.sprites.push([o, o.visible]); });
-    this.graphics.env.setRange(FILM_RANGE);
     this.t = 0;
     this.index = -1;
+    this.worldNow = null;
     this.done = false;
   }
 
@@ -159,7 +161,19 @@ export class Cinematic {
       this.index = i;
       this.rig.ready = false;
       this.shotTime = 0;
-      for (const n of this.cast) { n.group.visible = false; n.path = []; n.seated = false; n.gait = 'walk'; }
+      for (const n of this.cast) { n.group.visible = false; n.path = []; n.seated = false; n.singing = false; n.gait = 'walk'; }
+      const w = s.world || 'college';
+      if (w !== this.worldNow) {
+        this.worldNow = w;
+        this.setWorld?.(w);
+        this.graphics.env.setRange(FILM_RANGE[w]);
+        this.camera.far = 3200;
+        this.camera.updateProjectionMatrix();
+      }
+      this.cur = w === 'school' ? this.school : this.campus;
+      this.guide.setHeight(s.guideHeight || 1.74);
+      this.guide.singing = false;
+      this.guide.seated = false;
       this.guide.group.visible = false;
       this.bike.visible = false;
       this.birds.group.visible = false;
@@ -201,7 +215,7 @@ export class Cinematic {
     const span = THREE.MathUtils.clamp(alt * 1.6, -this.savedShadow.left * 2, 520);
     if (Math.abs(sc.right - span / 2) > 1) { sc.left = -span / 2; sc.right = span / 2; sc.top = span / 2; sc.bottom = -span / 2; sc.updateProjectionMatrix(); }
     const focus = V(this.rig.look.x, alt, this.rig.look.z);
-    this.campus.setClock?.(clock);
+    (this.cur || this.campus).setClock?.(clock);
     // (this also runs the campus's own update: hostel interiors near the camera, label fading)
     this.graphics.update(dt, { clock, focus, view: 'cinematic' });
     for (const [o] of this.sprites) o.visible = false;
@@ -222,10 +236,26 @@ export class Cinematic {
       n.group.visible = false;
       return n;
     });
+    this.collegeCast = this.cast.length;
     this.prof = new NPC(this.scene, { id: 'film-prof', name: '', role: 'teacher', outfit: 'formal', gender: 'm', color: '#5d4e37', pants: '#2d2d2d', skinIndex: 2, height: 1.72 });
     this.prof.tag.visible = false;
     this.cast.push(this.prof);
+    // the school: children in uniform, and a teacher
+    this.kidBase = this.cast.length;
+    for (let i = 0; i < 24; i++) {
+      const [, , gender] = LOOKS[(i * 5) % LOOKS.length];
+      const n = new NPC(this.scene, { id: `film-kid-${i}`, name: '', role: 'student', gender, color: '#ffffff', pants: '#24345a', skinIndex: (i * 3) % 6, height: 1.1 + ((i * 7) % 9) / 100 });
+      n.tag.visible = false;
+      n.speed = 1.0 + ((i * 3) % 4) / 10;
+      n.group.visible = false;
+      this.cast.push(n);
+    }
+    this.teacher = new NPC(this.scene, { id: 'film-teacher', name: '', role: 'teacher', outfit: 'saree', gender: 'f', color: '#b5476b', pants: '#333', skinIndex: 1, height: 1.62 });
+    this.teacher.tag.visible = false;
+    this.cast.push(this.teacher);
   }
+
+  kid(i, p, opts) { return this.extra(this.kidBase + i, p, opts); }
 
   // Put cast member i at p (x, z) facing yaw; optionally walking to a point or seated.
   extra(i, p, { yaw = 0, to = null, sit = false, y = 0, speed = null } = {}) {
@@ -407,12 +437,70 @@ export class Cinematic {
     const rot = new Walk([[8, 21], [3, 6], [0, -8]]);
     const room = (id) => R[id] || { x0: 0, x1: 10, z0: 0, z1: 10 };
     const cr = room('classroom'); const cl = room('complab'); const fd = room('sciencelab'); const lib = room('library'); const mess = room('mess');
+    // the school: in through the gate on the first day, out of it on the last
+    const S = this.school;
+    const scr = S?.rooms?.classroom || { x0: -24, x1: -8, z0: -31, z1: -21 };
+    const schoolIn = new Walk([[0.6, 62], [0.6, 50.5], [0.5, 38], [0.2, 22]]);
+    const schoolOut = new Walk([[0.2, 20], [0.5, 36], [0.6, 50.5], [0.9, 66]]);
     this.dips = []; // filled below: dips to black between acts
     this.titles = [];
     const shots = [
+      // ===== Prologue: school, Class 1 to Class 12 =====
+      {
+        name: 'school-aerial', world: 'school', dur: 9, clock: [hm(7, 25), hm(7, 30)], ease: 'inOut', fov: [40, 44],
+        pos: curve([[70, 62, 110], [46, 42, 82], [22, 26, 60]]),
+        look: curve([[0, 0, -4], [0, 2, -8], [0, 4, -12]]),
+        setup: () => { self.flock(0, 40, 10); },
+      },
+      {
+        name: 'school-gate', world: 'school', dur: 9, clock: [hm(7, 40), hm(7, 43)], damp: 3, fov: 44, guideHeight: 1.12, dof: { on: 'guide', aperture: 0.0005 },
+        ...this.follow(2.6, 1.35, 0.5, 5, 1.0),
+        setup: () => {
+          for (let k = 0; k < 24; k++) self.cast[self.kidBase + k].setHeight(1.1 + ((k * 7) % 9) / 100);
+          [[-2.4, 58], [2.6, 61], [-1.2, 64], [3.4, 55], [-3.6, 52], [1.8, 67]].forEach(([x, z], k) => self.kid(k, [x, z], { to: [[x * 0.6, z - 34]] }));
+        },
+        tick: (ctx) => self.walkGuide(ctx, schoolIn, 1.1),
+        caption: { kicker: 'Class 1 · the first day', title: 'Sunrise Public School', at: 2.0, hold: 6 },
+      },
+      {
+        name: 'school-assembly', world: 'school', dur: 10, clock: [hm(8, 0), hm(8, 3)], ease: 'linear', fov: 42, guideHeight: 1.12, dof: { on: 'guide', aperture: 0.0006, maxblur: 0.004 },
+        pos: curve([[-8, 1.3, -12.6], [8, 1.3, -12.6]]),
+        look: curve([[-3, 1.0, -7], [3, 1.0, -7]]),
+        setup: () => {
+          (S?.spots.assembly || []).slice(0, 24).forEach((p, k) => { const n = self.kid(k, [p.x, p.z], { yaw: Math.PI }); n.singing = true; });
+          const g = self.guide; g.group.visible = true; g.pos.set(0, 0, -6); g.group.rotation.y = Math.PI; g.singing = true;
+          const st = S?.spots.stage || V(0, 0, -16.5);
+          self.extra(self.cast.indexOf(self.teacher), [st.x, st.z + 0.5], { yaw: 0 }).singing = true;
+        },
+        tick: (ctx) => { self.guide.animate(ctx.dt, false, 0); },
+        caption: { kicker: 'Every morning', title: 'Assembly · Jana Gana Mana', at: 1.2, hold: 7 },
+      },
+      {
+        name: 'school-class', world: 'school', dur: 9, clock: [hm(9, 0), hm(9, 2)], ease: 'inOut', fov: [46, 40], guideHeight: 1.12, dof: { on: [(scr.x0 + scr.x1) / 2 - 2, 1.3, scr.z0 + 1.2], aperture: 0.0009, maxblur: 0.004 },
+        pos: curve([[scr.x1 - 1.0, 2.2, scr.z1 - 0.9], [(scr.x0 + scr.x1) / 2 + 1.5, 1.9, (scr.z0 + scr.z1) / 2 + 1.5]]),
+        look: curve([[scr.x0 + 3, 0.9, scr.z0 + 0.6], [(scr.x0 + scr.x1) / 2 - 1, 1.3, scr.z0]]),
+        setup: () => {
+          S?.rebuildClassroom?.(1, 'English · Letters and their sounds');
+          const seats = S?.seats || [];
+          seats.forEach((st, k) => { if (k < 16 && k !== 6) self.kid(k, [st.pos.x, st.pos.z], { yaw: Math.PI, sit: true }); });
+          const g = self.guide; const st = seats[6];
+          if (st) { g.group.visible = true; g.pos.set(st.pos.x, 0, st.pos.z); g.group.rotation.y = Math.PI; g.seated = true; }
+          self.extra(self.cast.indexOf(self.teacher), [(scr.x0 + scr.x1) / 2 - 2, scr.z0 + 1.2], { yaw: 0 });
+        },
+        tick: (ctx) => { self.guide.animate(ctx.dt, false, 0); self.teacher.group.rotation.y = Math.sin(ctx.t * 0.7) * 0.5; },
+        caption: { kicker: 'Class 1', title: 'The classroom', at: 1.2, hold: 6 },
+      },
+      {
+        name: 'school-farewell', world: 'school', dur: 9, clock: [hm(17, 35), hm(17, 40)], damp: 3, fov: [42, 48], guideHeight: 1.67, dof: { on: 'guide', aperture: 0.0003 },
+        ...this.follow(4.2, 1.8, 0.7, 9, 1.6),
+        setup: () => { [[-2.2, 24], [2.6, 27], [-3.4, 30]].forEach(([x, z], k) => { const n = self.kid(k, [x, z], { to: [[x * 0.5, z + 40]] }); n.setHeight(1.62 + k * 0.04); }); },
+        tick: (ctx) => self.walkGuide(ctx, schoolOut, 1.25),
+        caption: { kicker: 'Class 12', title: 'The last day of school', at: 1.4, hold: 6 },
+      },
       // ===== Act 1: over Pilani at sunrise =====
       {
-        name: 'aerial-arrive', dur: 13, clock: [hm(6, 32), hm(6, 38)], ease: 'linear', fov: [36, 33],
+        name: 'aerial-arrive', dur: 10, clock: [hm(6, 32), hm(6, 38)], ease: 'linear', fov: [36, 33], dip: true,
+        caption: { kicker: 'Then, college', title: 'BITS Pilani', at: 1.8, hold: 7 },
         pos: curve([[640, 360, 900], [520, 320, 720], [400, 290, 540]]),
         look: curve([[160, 0, 300], [110, 0, 220], [60, 0, 140]]),
         setup: () => { self.flock(520, 230, 640); },
@@ -422,7 +510,6 @@ export class Cinematic {
         name: 'aerial-descend', dur: 13, clock: [hm(6, 40), hm(6, 48)], ease: 'inOut', fov: [36, 40],
         pos: curve([[300, 240, 260], [170, 160, 140], [70, 100, 60], [-6, 66, 34]]),
         look: curve([[-10, 0, -40], [-12, 8, -60], [-13, 16, -76], [-12, 22, -80]]),
-        caption: { kicker: 'Pilani · Rajasthan', title: 'BITS Pilani', at: 1.5, hold: 7 },
       },
       {
         name: 'aerial-to-gate', dur: 10, clock: [hm(6, 50), hm(6, 55)], ease: 'inOut', fov: [42, 46],
@@ -444,13 +531,6 @@ export class Cinematic {
         look: (ctx) => ctx.g.p.clone().setY(1.4 + ctx.u * 0.25),
         setup: () => { self.walkers(0, 4, [gate[0] - 30, gate[1]], 24, 3); },
         tick: (ctx) => self.walkGuide(ctx, gateWalk, 1.55, 5 + 1.55 * 10),
-      },
-      {
-        name: 'gate-crane', dof: { on: 'guide', aperture: 0.00025 }, dur: 9, clock: [hm(7, 7), hm(7, 10)], fov: [44, 50],
-        pos: (ctx) => { const { p, yaw } = ctx.g; const f = V(Math.sin(yaw), 0, Math.cos(yaw)); const e = EASE.inOut(ctx.u); return p.clone().addScaledVector(f, -5 - e * 7).setY(1.8 + e * 15); },
-        look: (ctx) => { const { p, yaw } = ctx.g; const f = V(Math.sin(yaw), 0, Math.cos(yaw)); return p.clone().addScaledVector(f, 14 + ctx.u * 30).setY(1.5); },
-        setup: () => { self.walkers(0, 6, [gate[0] - 55, gate[1]], 30, 4); },
-        tick: (ctx) => self.walkGuide(ctx, gateWalk, 1.55, 5 + 1.55 * 18 + 12), // a cut: he is through the gate
       },
       // ===== Act 3: the academic campus =====
       {
@@ -483,7 +563,7 @@ export class Cinematic {
           (C.seats || []).forEach((st, k) => { if (k < 15) self.extra(k, [st.pos.x, st.pos.z], { yaw: Math.PI, sit: true }); });
           const g = self.guide; g.group.visible = true; const st = C.seats?.[15];
           if (st) { g.pos.set(st.pos.x, 0, st.pos.z); g.group.rotation.y = Math.PI; g.seated = true; g.gait = 'walk'; }
-          self.extra(self.cast.length - 1, [(cr.x0 + cr.x1) / 2 - 2, cr.z0 + 1.2], { yaw: 0 });
+          self.extra(self.cast.indexOf(self.prof), [(cr.x0 + cr.x1) / 2 - 2, cr.z0 + 1.2], { yaw: 0 });
         },
         tick: (ctx) => { self.guide.animate(ctx.dt, false, 0); const p = self.prof; p.group.rotation.y = Math.sin(ctx.t * 0.6) * 0.5; },
         caption: { kicker: 'NAB', title: 'Lecture Theatre', at: 1.2, hold: 6 },
@@ -497,15 +577,8 @@ export class Cinematic {
         caption: { kicker: 'Main Building', title: 'Computer Lab', at: 0.8, hold: 5 },
       },
       {
-        name: 'fd2', dof: { on: [fd.x0 + 5, 1.0, fd.z0 + 3], aperture: 0.0009, maxblur: 0.004 }, dur: 7, clock: [hm(11, 30), hm(11, 32)], ease: 'linear', fov: 46,
-        pos: curve([[fd.x1 - 0.8, 2.7, fd.z1 - 0.7], [fd.x0 + 3.5, 2.7, fd.z1 - 0.7]]),
-        look: curve([[fd.x0 + 3, 0.9, fd.z0 + 1.5], [fd.x0 + 5, 0.9, fd.z0 + 1.0]]),
-        setup: () => { (C.spots.sciencelab || []).slice(0, 6).forEach((p, k) => self.extra(k, [p.x, p.z], { yaw: (k % 2) * Math.PI })); },
-        caption: { kicker: 'FD-II', title: 'The Labs', at: 0.8, hold: 5 },
-      },
-      {
         name: 'library', dur: 8, clock: [hm(12, 10), hm(12, 13)], ease: 'inOut', fov: [40, 36],
-        pos: curve([[300, 14, -196], [270, 6, -206]]),
+        pos: curve([[306, 15, -194], [288, 7, -203]]),
         look: curve([[212, 4, -222], [212, 5, -222]]),
         setup: () => { self.walkers(0, 8, [(lib.x0 + lib.x1) / 2, lib.z1 + 16], 20, 17); },
         caption: { kicker: 'Books, quiet, deadlines', title: 'BITS Library', at: 1.0, hold: 5.5 },
@@ -523,7 +596,7 @@ export class Cinematic {
       },
       // ===== Act 4: the Bhawans =====
       {
-        name: 'bhawans-aerial', dur: 11, clock: [hm(16, 40), hm(16, 48)], ease: 'linear', fov: 40, dip: true,
+        name: 'bhawans-aerial', dur: 9, clock: [hm(16, 40), hm(16, 48)], ease: 'linear', fov: 40, dip: true,
         pos: curve([[-40, 150, 30], [120, 120, 40], [300, 110, 110], [420, 120, 230]]),
         look: curve([[120, 0, 140], [180, 0, 170], [300, 0, 220], [380, 0, 260]]),
         setup: () => { self.flock(200, 90, 150); },
@@ -562,17 +635,11 @@ export class Cinematic {
         caption: { kicker: 'Golden hour', title: 'Across campus', at: 1.5, hold: 6 },
       },
       {
-        name: 'temple', dur: 10, clock: [hm(17, 40), hm(17, 44)], ease: 'linear', fov: [38, 34],
+        name: 'temple', dur: 8, clock: [hm(17, 40), hm(17, 44)], ease: 'linear', fov: [38, 34],
         pos: (ctx, e) => { const a = -0.55 + e * 0.5; return V(105 + Math.sin(a) * 92, 9 + e * 6, 661 + Math.cos(a) * 92); },
         look: () => V(105, 10, 661),
         setup: () => { self.walkers(0, 8, [105, 600], 30, 23); self.flock(105, 50, 661); },
         caption: { kicker: 'Marble and gardens', title: 'Saraswati Temple', at: 1.5, hold: 6 },
-      },
-      {
-        name: 'shivganga', dur: 8, clock: [hm(17, 48), hm(17, 51)], ease: 'linear', fov: 44,
-        pos: curve([[90, 40, 900], [130, 30, 870], [190, 26, 860]]),
-        look: curve([[166, 0, 822], [164, 0, 819], [160, 0, 815]]),
-        caption: { kicker: 'South campus', title: 'Shiv Ganga', at: 1.2, hold: 5 },
       },
       {
         name: 'cnot', dur: 8, clock: [hm(17, 54), hm(17, 56)], ease: 'inOut', fov: [40, 36],
@@ -581,16 +648,9 @@ export class Cinematic {
         setup: () => { self.walkers(0, 12, [430, 790], 26, 29); },
         caption: { kicker: 'Chai, maggi, friends', title: "C'not", at: 1.0, hold: 5.5 },
       },
-      {
-        name: 'sac', dur: 8, clock: [hm(17, 58), hm(18, 0)], ease: 'linear', fov: 40,
-        pos: curve([[-110, 30, 360], [-120, 18, 340]]),
-        look: curve([[-175, 4, 304], [-176, 5, 302]]),
-        setup: () => { self.walkers(0, 8, [-150, 330], 26, 31); },
-        caption: { kicker: 'Fests, clubs, the auditorium', title: 'Student Activities Centre', at: 1.0, hold: 5.5 },
-      },
       // ===== Finale: sunset over the Clock Tower =====
       {
-        name: 'finale', dur: 18, clock: [hm(18, 0), hm(18, 6)], ease: 'inOut', fov: [40, 40], dip: true,
+        name: 'finale', dur: 16, clock: [hm(18, 0), hm(18, 6)], ease: 'inOut', fov: [40, 40], dip: true,
         pos: (ctx, e) => V(9 + e * 90, 1.8 + e * 230, 27 + e * 230),
         look: (ctx, e) => V(-8 + e * 2, 14 - e * 10, -70 + e * 30),
         setup: () => { self.walkers(0, 10, [0, 10], 30, 37); self.flock(-20, 60, -40); },
@@ -600,8 +660,8 @@ export class Cinematic {
     // dips to black at act changes, and the title cards
     let at = 0;
     for (const s of shots) { if (s.dip) this.dips.push(at); at += s.dur; }
-    this.titles.push({ t0: 2.5, t1: 12.5, title: 'LIFE OF MIRNAL', sub: 'A day at BITS Pilani' });
-    this.titles.push({ t0: at - 13, t1: at - 3.4, title: 'LIFE OF MIRNAL', sub: 'Your college life · life-of-mirnal.vercel.app' });
+    this.titles.push({ t0: 2.2, t1: 9.6, title: 'LIFE OF MIRNAL', sub: 'From Class 1 to the Clock Tower' });
+    this.titles.push({ t0: at - 12, t1: at - 3.2, title: 'LIFE OF MIRNAL', sub: 'School · College · life-of-mirnal.vercel.app' });
     return shots;
   }
 

@@ -1,4 +1,4 @@
-// An original score for the campus film, synthesised from scratch (no samples, no third-party audio):
+// An original score for the film (school, then BITS Pilani), synthesised from scratch (no samples, no third-party audio):
 // a pad progression in D major, plucked arpeggios, bass, a soft pulse once Mirnal arrives, risers into each act,
 // a swell under the closing title, and wind and birdsong.
 //
@@ -21,10 +21,10 @@ const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647
 const hz = (m) => 440 * 2 ** ((m - 69) / 12);
 const BPM = 84; const BEAT = 60 / BPM; const BAR = 4 * BEAT; const CHORD = 2 * BAR;
 
-// acts: aerial, arrival, academics, hostels, landmarks, finale
+// acts: school, BITS from the air, arrival, academics, hostels, landmarks, finale
 const acts = [0, ...T.dips, T.duration];
 const actAt = (t) => { let a = 0; for (let i = 0; i < acts.length - 1; i++) if (t >= acts[i]) a = i; return a; };
-const INTENSITY = [0.5, 0.62, 0.78, 0.72, 0.86, 1.0];
+const INTENSITY = [0.5, 0.52, 0.62, 0.78, 0.72, 0.86, 1.0];
 const finaleTitle = T.titles.at(-1).t0;
 
 // wavetables
@@ -70,7 +70,7 @@ for (let c = 0; c * CHORD < DUR; c++) {
   let ph = 0;
   for (let i = Math.floor(t0 * SR); i < Math.min(N, Math.floor((t0 + CHORD + 0.3) * SR)); i++) {
     const t = i / SR; const u = t - t0; const a = actAt(t);
-    if (a === 0 && t < acts[1] - 6) continue;
+    if (t < 6) continue;
     const env = Math.min(1, u / 0.25) * Math.min(1, Math.max(0, (CHORD + 0.3 - u) / 0.4));
     ph += f / SR;
     const s = (Math.sin(2 * Math.PI * ph) + 0.25 * Math.sin(4 * Math.PI * ph)) * 0.07 * INTENSITY[a] * env;
@@ -82,8 +82,8 @@ for (let c = 0; c * CHORD < DUR; c++) {
 const PATTERN = [0, 2, 1, 3, 2, 1, 3, 2];
 for (let k = 0; k * BEAT / 2 < DUR; k++) {
   const t0 = k * BEAT / 2; const a = actAt(t0);
-  if (a === 0 || t0 > T.duration - 3) continue;
-  if (a === 5 && t0 > finaleTitle + 4) continue;
+  if (t0 < 8 || t0 > T.duration - 3) continue;
+  if (a === 6 && t0 > finaleTitle + 4) continue;
   const ch = chordAt(t0); const m = ch.notes[PATTERN[k % 8]] + 12;
   const f = hz(m); const vel = (k % 2 ? 0.7 : 1) * 0.055 * INTENSITY[a] * (k % 8 === 0 ? 1.15 : 1);
   const pan = Math.sin(k * 0.9) * 0.45;
@@ -99,7 +99,7 @@ for (let k = 0; k * BEAT / 2 < DUR; k++) {
 // ---- pulse: soft kick and hats through the campus acts ----
 for (let k = 0; k * BEAT < DUR; k++) {
   const t0 = k * BEAT; const a = actAt(t0);
-  if (a < 2 || a > 4) continue;
+  if (a < 3 || a > 5) continue;
   if (k % 2 === 0) {
     let ph = 0;
     for (let i = Math.floor(t0 * SR), j = 0; j < SR * 0.5 && i < N; i++, j++) {
@@ -155,7 +155,7 @@ for (const d of T.dips) {
     lp += 0.05 * (b - lp);
     low += 0.004 * (lp - low); // take the rumble out
     const air0 = lp - low;
-    const air = actAt(t) === 0 || actAt(t) === 5 ? 1 : 0.55;
+    const air = t < 10 || actAt(t) === 1 || actAt(t) === 6 ? 1 : 0.55;
     const gust = 0.6 + 0.4 * Math.sin(2 * Math.PI * t / 9.3) * Math.sin(2 * Math.PI * t / 4.1);
     const s = air0 * 0.12 * air * gust;
     add(i, s * (1 + 0.3 * Math.sin(t * 0.7)), s * (1 - 0.3 * Math.sin(t * 0.7)));
@@ -174,7 +174,7 @@ const chirp = (t0, pan) => {
 };
 for (let t = 1; t < DUR; t += 0.8 + rnd() * 2.2) {
   const a = actAt(t);
-  if (a <= 1 || (a === 4 && rnd() < 0.5) || (a === 3 && rnd() < 0.25)) chirp(t, rnd() * 1.4 - 0.7);
+  if (a <= 2 || (a === 5 && rnd() < 0.5) || (a === 4 && rnd() < 0.25)) chirp(t, rnd() * 1.4 - 0.7);
 }
 
 // ---- reverb on the send (Freeverb-style: parallel combs into allpasses) ----
