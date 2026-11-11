@@ -8,7 +8,7 @@ import { Cinematic } from './cinematic/cinematic.js';
 import { GraphicsEngine } from './graphics/GraphicsEngine.js';
 import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
-import { NPC, NPCManager, Ball, studentHeight } from './world/npcs.js';
+import { NPC, NPCManager, Ball, studentHeight, RIDE_LIFT } from './world/npcs.js';
 import { ANTHEM_LINES, ANTHEM_DURATION, ANTHEM_AUDIO_URL, LYRIC_WORDS } from '../data/anthem.js';
 import { openAnthemPractice } from './ui/anthempractice.js';
 import { createState, ensureYear, activeClassmates, adjustFriend, newDay, newSem, TIME_SPEEDS, FAST_FORWARD } from './core/state.js';
@@ -1640,6 +1640,7 @@ function updateView(dt) {
   if (bike.visible) {
     // Saddle (0.3 m behind the bike's centre) sits under the rider.
     bike.position.copy(player.pos).addScaledVector(player.forward(), 0.3);
+    bike.position.y += RIDE_LIFT;
     bike.rotation.y = player.yaw;
     for (const w of bike.userData.wheels) w.rotation.x -= (player.bikeSpeed * dt) / 0.34;
     bike.userData.handle.rotation.set(0, player.steer * 0.35, Math.PI / 2);

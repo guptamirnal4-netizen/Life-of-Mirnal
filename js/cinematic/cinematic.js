@@ -6,7 +6,8 @@
 // real time; with a fixed dt the same frames come out every run, which is how the video is rendered
 // (see dev/render-film.mjs). The film has its own cast and touches nothing in the saved game.
 import * as THREE from 'three';
-import { NPC } from '../world/npcs.js';
+import { NPC, RIDE_LIFT } from '../world/npcs.js';
+import { Cricket, Football } from '../world/sports.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const curve = (pts) => (pts.length === 2 ? new THREE.LineCurve3(V(...pts[0]), V(...pts[1])) : new THREE.CatmullRomCurve3(pts.map((p) => V(...p)), false, 'centripetal'));
@@ -61,7 +62,7 @@ const STYLE = `
 #film .fade { position: absolute; inset: 0; background: #000; }
 #film .title { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; text-shadow: 0 4px 30px rgba(0,0,0,0.45); }
 #film .title h1 { margin: 0; font-weight: 800; font-size: 9vh; letter-spacing: 0.32em; padding-left: 0.32em; }
-#film .title p { margin: 1.6vh 0 0; font-weight: 500; font-size: 2.3vh; letter-spacing: 0.55em; padding-left: 0.55em; text-transform: uppercase; opacity: 0.92; }
+#film .title p { margin: 3.4vh 0 0; text-shadow: 0 2px 14px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.6); font-weight: 500; font-size: 2.3vh; letter-spacing: 0.55em; padding-left: 0.55em; text-transform: uppercase; opacity: 0.92; }
 #film .cap { position: absolute; left: 6vw; bottom: 16vh; text-shadow: 0 2px 16px rgba(0,0,0,0.55); }
 #film .cap .k { font-size: 1.7vh; letter-spacing: 0.42em; text-transform: uppercase; font-weight: 600; color: #ffd27a; }
 #film .cap .n { font-size: 4.6vh; font-weight: 700; letter-spacing: 0.06em; margin-top: 0.6vh; }
@@ -94,6 +95,7 @@ export class Cinematic {
     this.saved = { far: this.camera.far, fov: this.camera.fov, near: this.camera.near };
     this.camera.far = 3200;
     this.camera.near = 0.1;
+    this.graphics.env.envStep = 1;
     this.buildOverlay(showSkip);
     this.buildCast();
     this.buildBirds();
@@ -102,6 +104,7 @@ export class Cinematic {
     this.scene.traverse((o) => { if (o.isSprite) this.sprites.push([o, o.visible]); });
     this.t = 0;
     this.index = -1;
+    this.games = [];
     this.worldNow = null;
     this.done = false;
   }
@@ -126,6 +129,8 @@ export class Cinematic {
     this.graphics.post.setDof(null);
     for (const [o, v] of this.sprites) o.visible = v;
     if (this.range) this.graphics.env.setRange(this.range);
+    for (const g of this.games || []) g.dispose();
+    this.graphics.env.envStep = 4;
     Object.assign(this.camera, this.saved);
     this.camera.updateProjectionMatrix();
     const sun = this.graphics.env.sun.shadow.camera;
@@ -161,7 +166,9 @@ export class Cinematic {
       this.index = i;
       this.rig.ready = false;
       this.shotTime = 0;
-      for (const n of this.cast) { n.group.visible = false; n.path = []; n.seated = false; n.singing = false; n.gait = 'walk'; }
+      for (const g of this.games || []) g.dispose();
+      this.games = [];
+      for (const n of this.cast) { n.group.visible = false; n.path = []; n.seated = false; n.singing = false; n.gait = 'walk'; n.driven = false; n.moveSpeed = undefined; n.lean(0); }
       const w = s.world || 'college';
       if (w !== this.worldNow) {
         this.worldNow = w;
@@ -186,6 +193,7 @@ export class Cinematic {
     const clock = s.clock[0] + (s.clock[1] - s.clock[0]) * u;
     this.clock = clock;
     s.tick?.(ctx, u, dt);
+    for (const g of this.games) g.update(ctx.t + (g.offset || 0), dt);
     for (const n of this.cast) if (n.group.visible && !n.driven) n.update(dt, null, null);
     // camera
     const e = (EASE[s.ease] || EASE.glide)(u);
@@ -200,7 +208,8 @@ export class Cinematic {
     this.camera.lookAt(this.rig.look);
     if (s.roll) this.camera.rotateZ(s.roll * Math.sin(Math.PI * u));
     const fov = Array.isArray(s.fov) ? s.fov[0] + (s.fov[1] - s.fov[0]) * e : s.fov || 42;
-    if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+    const near = THREE.MathUtils.clamp(this.rig.pos.y * 0.012, 0.1, 3);
+    if (this.camera.fov !== fov || Math.abs(this.camera.near - near) > 0.02) { this.camera.fov = fov; this.camera.near = near; this.camera.updateProjectionMatrix(); }
     this.birds.update(dt, this.rig.pos);
     // depth of field (rendered video only): focus on Mirnal or the shot's subject
     if (this.capturing) {
@@ -298,12 +307,14 @@ export class Cinematic {
     g.group.rotation.y = walk.heading(Math.min(s, walk.total - 0.01));
     g.gait = gait;
     g.rideSpeed = speed;
+    g.moveSpeed = speed;
     g.animate(ctx.dt, moving, 0);
     ctx.g = { p, yaw: g.group.rotation.y, s };
     if (gait === 'ride') {
       const dir = V(Math.sin(g.group.rotation.y), 0, Math.cos(g.group.rotation.y));
       this.bike.visible = true;
       this.bike.position.copy(p).addScaledVector(dir, 0.3);
+      this.bike.position.y = RIDE_LIFT;
       this.bike.rotation.y = g.group.rotation.y + Math.PI;
       for (const w of this.bike.userData.wheels) w.rotation.x -= (speed * ctx.dt) / 0.34;
       this.bike.userData.handle.rotation.set(0, 0, Math.PI / 2);
@@ -450,7 +461,7 @@ export class Cinematic {
         name: 'school-aerial', world: 'school', dur: 9, clock: [hm(7, 25), hm(7, 30)], ease: 'inOut', fov: [40, 44],
         pos: curve([[70, 62, 110], [46, 42, 82], [22, 26, 60]]),
         look: curve([[0, 0, -4], [0, 2, -8], [0, 4, -12]]),
-        setup: () => { self.flock(0, 40, 10); },
+        setup: () => { self.flock(0, 40, 10); self.football(0, [[31, 1], [45, 3], [43, 17], [30, 15]], { kids: true }); },
       },
       {
         name: 'school-gate', world: 'school', dur: 9, clock: [hm(7, 40), hm(7, 43)], damp: 3, fov: 44, guideHeight: 1.12, dof: { on: 'guide', aperture: 0.0005 },
@@ -464,7 +475,7 @@ export class Cinematic {
       },
       {
         name: 'school-assembly', world: 'school', dur: 10, clock: [hm(8, 0), hm(8, 3)], ease: 'linear', fov: 42, guideHeight: 1.12, dof: { on: 'guide', aperture: 0.0006, maxblur: 0.004 },
-        pos: curve([[-8, 1.3, -12.6], [8, 1.3, -12.6]]),
+        pos: curve([[-7, 1.3, -12.6], [5, 1.3, -12.6]]),
         look: curve([[-3, 1.0, -7], [3, 1.0, -7]]),
         setup: () => {
           (S?.spots.assembly || []).slice(0, 24).forEach((p, k) => { const n = self.kid(k, [p.x, p.z], { yaw: Math.PI }); n.singing = true; });
@@ -599,7 +610,11 @@ export class Cinematic {
         name: 'bhawans-aerial', dur: 9, clock: [hm(16, 40), hm(16, 48)], ease: 'linear', fov: 40, dip: true,
         pos: curve([[-40, 150, 30], [120, 120, 40], [300, 110, 110], [420, 120, 230]]),
         look: curve([[120, 0, 140], [180, 0, 170], [300, 0, 220], [380, 0, 260]]),
-        setup: () => { self.flock(200, 90, 150); },
+        setup: () => {
+          self.flock(200, 90, 150);
+          self.cricket();
+          const f = H.football; self.football(0, [[-6, -7], [7, -3], [5, 8], [-5, 6]].map(([du, dv]) => { const p = H.world(f.u + du, f.v + dv); return [p.x, p.z]; }));
+        },
         caption: { kicker: 'Ten Bhawans to walk into', title: 'The Hostels', at: 1.5, hold: 7 },
       },
       {
@@ -615,14 +630,13 @@ export class Cinematic {
         pos: (ctx) => { const p = corridor.at(1.4 * ctx.t); const [u, v] = H.local(p.x, p.z); return H.world(u + 0.5, v - 3.6, 1.6); },
         look: (ctx) => { const p = corridor.at(1.4 * ctx.t); const [u, v] = H.local(p.x, p.z); return H.world(u - 0.2, v + 2, 1.35); },
         setup: () => self.cricket(),
-        tick: (ctx) => { self.walkGuide(ctx, corridor, 1.4); self.tickCricket(ctx); },
+        tick: (ctx) => self.walkGuide(ctx, corridor, 1.4),
       },
       {
         name: 'courtyard', dur: 11, clock: [hm(17, 12), hm(17, 16)], ease: 'inOut', fov: [40, 46],
         pos: (ctx, e) => { const c = H.cricket; return H.world(c.u + 6 - e * 4, c.v + 18 + e * 6, 1.6 + e * 17); },
         look: (ctx, e) => { const c = H.cricket; return H.world(c.u - 1, c.v - 2 - e * 8, 1.0 + e * 2); },
         setup: () => self.cricket(),
-        tick: (ctx) => self.tickCricket(ctx),
         caption: { kicker: 'Every evening', title: 'Courtyard cricket', at: 1.2, hold: 7 },
       },
       // ===== Act 5: landmarks at golden hour =====
@@ -630,7 +644,13 @@ export class Cinematic {
         name: 'ride', dof: { on: 'guide', aperture: 0.0004 }, dur: 9, clock: [hm(17, 30), hm(17, 34)], damp: 2.2, fov: 44, dip: true,
         pos: (ctx) => { const { p, yaw } = ctx.g; const f = V(Math.sin(yaw), 0, Math.cos(yaw)); const r = V(-f.z, 0, f.x); return p.clone().addScaledVector(r, -4.2).addScaledVector(f, 1.5).setY(1.4); },
         look: (ctx) => { const { p, yaw } = ctx.g; const f = V(Math.sin(yaw), 0, Math.cos(yaw)); return p.clone().addScaledVector(f, 1.2).setY(1.2); },
-        setup: () => { self.walkers(0, 6, [140, 450], 40, 21); },
+        setup: () => {
+          self.walkers(0, 4, [140, 450], 40, 21);
+          // a kickabout on the open ground beyond the road, on Mirnal's right
+          const p = ride.at(20 + 5.2 * 4.5); const hd = ride.heading(20 + 5.2 * 4.5); const r = V(-Math.cos(hd), 0, Math.sin(hd));
+          const c = p.clone().addScaledVector(r, 20); // the far side of the road, behind Mirnal from the camera
+          self.football(6, [[-6, -4], [5, -6], [7, 5], [-4, 6]].map(([dx, dz]) => [c.x + dx, c.z + dz]), { offset: 3 });
+        },
         tick: (ctx) => self.walkGuide(ctx, ride, 5.2, 20, 'ride'),
         caption: { kicker: 'Golden hour', title: 'Across campus', at: 1.5, hold: 6 },
       },
@@ -657,6 +677,7 @@ export class Cinematic {
         tick: (ctx) => { self.walkGuide(ctx, rot, 1.2); },
       },
     ];
+    this.walks = { schoolIn, schoolOut, gateWalk, nabWalk, kIn, corridor, ride, rot };
     // dips to black at act changes, and the title cards
     let at = 0;
     for (const s of shots) { if (s.dip) this.dips.push(at); at += s.dur; }
@@ -665,26 +686,22 @@ export class Cinematic {
     return shots;
   }
 
-  // Hostel-mates at cricket in Krishna's first courtyard: batter, bowler running in, fielders.
+  // Hostel-mates at cricket in Krishna's first courtyard: run-up, delivery, the ball pitching and hit (sports.js).
   cricket() {
     const sp = this.campus.hostel.npcSpots.cricket;
     if (!sp) return;
-    this.extra(20, [sp.bat.at.x, sp.bat.at.z], { yaw: sp.bat.yaw });
-    const b = this.extra(21, [sp.bowl.a.x, sp.bowl.a.z]);
-    b.driven = true;
-    sp.field.forEach((f, k) => this.extra(22 + k, [f.at.x, f.at.z], { yaw: f.yaw }));
-    this.bowl = { n: b, a: sp.bowl.a, b: sp.bowl.b };
+    const batter = this.extra(20, [sp.bat.at.x, sp.bat.at.z], { yaw: sp.bat.yaw });
+    const bowler = this.extra(21, [sp.bowl.a.x, sp.bowl.a.z]);
+    const fielders = sp.field.map((f, k) => this.extra(22 + k, [f.at.x, f.at.z], { yaw: f.yaw }));
+    for (const n of [batter, bowler, ...fielders]) n.driven = true;
+    this.games.push(new Cricket(this.scene, { batter, bowler, fielders, spots: sp }));
   }
 
-  tickCricket(ctx) {
-    const { n, a, b } = this.bowl || {};
-    if (!n) return;
-    const T = 6; const ph = (ctx.t % T) / T;
-    const f = ph < 0.55 ? ph / 0.55 : 1 - (ph - 0.55) / 0.45;
-    n.pos.set(a.x + (b.x - a.x) * f, 0, a.z + (b.z - a.z) * f);
-    const dir = ph < 0.55 ? [b.x - a.x, b.z - a.z] : [a.x - b.x, a.z - b.z];
-    n.group.rotation.y = Math.atan2(dir[0], dir[1]);
-    n.gait = ph < 0.55 ? 'run' : 'walk';
-    n.animate(ctx.dt, true, 0);
+  // Four players passing a football around anchors ([x, z]); cast from index `from` (or the school children).
+  football(from, anchors, { kids = false, offset = 0 } = {}) {
+    const players = anchors.map((p, k) => { const n = kids ? this.kid(from + k, p) : this.extra(from + k, p); n.driven = true; return n; });
+    const g = new Football(this.scene, { players, anchors });
+    g.offset = offset;
+    this.games.push(g);
   }
 }

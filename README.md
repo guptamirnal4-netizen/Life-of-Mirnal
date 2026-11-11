@@ -121,7 +121,7 @@ js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), 
 js/cinematic/    the film (school, then college): shot list, camera rigs, cast, titles
 dev/             dev server, film renderer and score generator
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM
-js/world/        campus (3D school), bits-world (real-scale BITS campus), hostel + comb-hostel (walk-in Bhawans), player, npcs (characters, ball), labels
+js/world/        campus (3D school), bits-world (real-scale BITS campus), hostel + comb-hostel (walk-in Bhawans), player, npcs (characters, ball), sports (cricket and football), labels
 data/bits-campus.js  BITS Pilani footprints, roads and areas from OpenStreetMap, in metres from the Rotunda
 js/ui/minimap.js minimap and full map (N) for the college campus
 js/ui/           dom helpers, academic screens, dialogue, stream builder, learning journey

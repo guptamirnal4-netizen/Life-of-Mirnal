@@ -565,6 +565,8 @@ export class Hostel {
     } else if (key.startsWith('facade:')) m = this.campus.material(key);
     else if (key === VC) m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
     else m = mat(key.replace(/^c:/, ''));
+    // the courtyard concrete lies 3.5 cm over the ground: keep it in front at a distance
+    if (key === 't:concrete:#dcd6ca') Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
     this.customMats[key] = m;
     if (key !== 'x:tvOn') sharedMats.set(key, m);
     return m;
@@ -864,7 +866,7 @@ export class Hostel {
   shell(sp, { floor = 't:terrazzo:#dcdcd6', ceiling = true, back = true } = {}) {
     const w = this.wings[sp.wing]; const { t0, t1 } = sp; const y0 = sp.k * FH; const y1 = y0 + FH - SLAB;
     this.partitions(sp, w, t0, t1, y0, y1);
-    if (back) this.bbox(w, w.depth, w.depth + 0.3, t0, t1, y0, y1, 't:plaster:#f3efe6');
+    if (back) this.bbox(w, w.depth, w.depth + 0.28, t0, t1, y0, y1, 't:plaster:#f3efe6');
     if (sp.k === 0) this.bbox(w, 0, w.depth, t0, t1, 0, 0.03, floor, { collide: false });
     else this.bbox(w, 0, w.depth, t0, t1, y0 - SLAB, y0, floor, { walkable: true });
     if (ceiling) this.bbox(w, 0, w.depth, t0, t1, y1, y1 + SLAB - 0.05, 't:concrete:#f6f4ee', { walkable: true });
@@ -913,9 +915,9 @@ export class Hostel {
     const { w, t0, t1, y0 } = this.shell(sp, { floor: 't:terrazzo:#e3ddcf', back: false });
     const tc = (t0 + t1) / 2;
     // entrance: an opening in the back (outer) wall with a wooden frame
-    this.bbox(w, w.depth, w.depth + 0.3, t0, tc - 1.5, 0, FH - SLAB, 't:plaster:#f3efe6');
-    this.bbox(w, w.depth, w.depth + 0.3, tc + 1.5, t1, 0, FH - SLAB, 't:plaster:#f3efe6');
-    this.bbox(w, w.depth, w.depth + 0.3, tc - 1.5, tc + 1.5, 2.7, FH - SLAB, 't:plaster:#f3efe6', { collide: false });
+    this.bbox(w, w.depth, w.depth + 0.28, t0, tc - 1.5, 0, FH - SLAB, 't:plaster:#f3efe6');
+    this.bbox(w, w.depth, w.depth + 0.28, tc + 1.5, t1, 0, FH - SLAB, 't:plaster:#f3efe6');
+    this.bbox(w, w.depth, w.depth + 0.28, tc - 1.5, tc + 1.5, 2.7, FH - SLAB, 't:plaster:#f3efe6', { collide: false });
     for (const t of [tc - 1.55, tc + 1.45]) this.bbox(w, w.depth - 0.05, w.depth + 0.35, t, t + 0.1, 0, 2.7, 'c:#7a5532', { collide: false });
     // security desk and register
     this.bbox(w, 2.7, 3.3, t0 + 0.4, t0 + 2.0, 0, 1.0, 't:wood:#8a6040');
@@ -952,7 +954,7 @@ export class Hostel {
     const w = this.wings[sp.wing]; const { t0, t1 } = sp; const y0 = sp.k * FH;
     if (sp.k === 0) this.legendBand('🪜', sp.roof ? 'Main stairs · roof' : 'East stairs', sp.roof ? [0, 1, 2] : [0, 1], w, 1.6, t0 + MOD / 2);
     this.partitions(sp, w, t0, t1, y0, y0 + FH);
-    this.bbox(w, w.depth, w.depth + 0.3, t0, t1, y0, y0 + FH, 't:plaster:#f3efe6');
+    this.bbox(w, w.depth, w.depth + 0.28, t0, t1, y0, y0 + FH, 't:plaster:#f3efe6');
     const stone = 't:terrazzo:#c9c6bd';
     // platform at this floor (the ground floor stands on the ground)
     if (sp.k === 0) this.bbox(w, -T, 0.84, t0, t1, 0, 0.03, stone, { collide: false });

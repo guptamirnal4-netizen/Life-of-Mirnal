@@ -145,13 +145,13 @@ export class CombHostel extends Hostel {
       const alongU = Math.abs(ub - ua) > Math.abs(vb - va);
       if (alongU) {
         const v = va; const inV = inside(pts, (ua + ub) / 2, v + 0.15) ? 1 : -1;
-        this.box(Math.min(ua, ub), Math.max(ua, ub), v, v + inV * OUT, 0, H, 't:plaster:#f3efe6');
+        this.box(Math.min(ua, ub), Math.max(ua, ub), v + inV * 0.02, v + inV * OUT, 0, H, 't:plaster:#f3efe6'); // 2 cm behind the facade
         // windows onto an arm corridor
         const arm = this.arms.find((a) => Math.abs(a.v0 - v) < 0.05 && inV > 0);
         if (arm) for (let k = 0; k < FLOORS; k++) for (let u = WD + 1.4; u < arm.u1 - 1.2; u += 3.4) this.glass(u, v + OUT, k, 'u');
       } else {
         const u = ua; const inU = inside(pts, u + 0.15, (va + vb) / 2) ? 1 : -1;
-        this.box(u, u + inU * OUT, Math.min(va, vb), Math.max(va, vb), 0, H, 't:plaster:#f3efe6');
+        this.box(u + inU * 0.02, u + inU * OUT, Math.min(va, vb), Math.max(va, vb), 0, H, 't:plaster:#f3efe6');
         if (Math.abs(u - WD) < 0.05) for (let k = 0; k < FLOORS; k++) for (let v = Math.min(va, vb) + 1.4; v < Math.max(va, vb) - 1.2; v += 3.4) this.glass(WD - OUT, v, k, 'v');
       }
     }

@@ -3,6 +3,9 @@ import { makeLabel } from './labels.js';
 import { mat } from './campus.js';
 import { LOOKS } from '../../data/people.js';
 
+// How far the cycle and its rider sit above the ground, so the tyres rest on top of the roads (5 cm up).
+export const RIDE_LIFT = 0.075;
+
 export function studentHeight(classNum) {
   return 1.12 + (classNum - 1) * 0.05;
 }
@@ -464,7 +467,8 @@ export class NPC {
       const dx = target.x - this.pos.x;
       const dz = target.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
-      const step = this.speed * (this.chase ? 1.3 : 1) * dt;
+      this.moveSpeed = this.speed * (this.chase ? 1.3 : 1);
+      const step = this.moveSpeed * dt;
       if (this.chase && dist < 0.55) {
         ball.kick(new THREE.Vector3(this.chase.x - this.pos.x, 0, (Math.random() - 0.5) * 6).normalize().multiplyScalar(5 + Math.random() * 3));
       } else if (dist <= step) {
@@ -504,7 +508,10 @@ export class NPC {
   animate(dt, walking, baseY = 0) {
     if (this.gait === 'ride' || this.gait === 'bikeIdle') return this.animateRide(dt, baseY);
     const running = walking && this.gait === 'run';
-    this.phase += dt * (walking ? (running ? 13 : this.chase ? 12 : 9) : 1.5);
+    // legs keep pace with the ground: one cycle (two steps) covers ~1.9 m walking, ~2.9 m running, for a 1.72 m adult
+    const v = this.moveSpeed ?? (running ? 4.5 : this.speed ?? 1.4);
+    const stride = (running ? 2.9 : 1.9) * this.scale;
+    this.phase += dt * (walking ? (this.chase ? 12 : (2 * Math.PI * v) / stride) : 1.5);
     this.breath += dt * 2.2;
     const s = Math.sin(this.phase);
     const swing = walking ? s * (this.longSkirt ? 0.3 : running ? 0.95 : 0.55) : 0;
@@ -525,6 +532,7 @@ export class NPC {
     this.lean(running ? 0.16 : 0, walking ? Math.abs(Math.cos(this.phase)) * (running ? 0.08 : 0.03) : 0);
     this.pos.y = baseY + (this.seated ? -0.36 * this.scale : 0);
     this.blob.visible = !this.seated;
+    if (this.bag) this.bag.visible = !this.seated; // a bag on the back would go through the bench or chair
     if (this.seated) {
       this.legs[0].rotation.x = -1.5;
       this.legs[1].rotation.x = -1.5;
@@ -555,9 +563,9 @@ export class NPC {
   // Sitting on the cycle: hands on the handlebar, legs pedalling in step with the wheels.
   animateRide(dt, baseY) {
     const pedalling = this.gait === 'ride';
-    if (pedalling) this.phase += dt * (2.2 + this.rideSpeed * 1.1);
+    if (pedalling) this.phase += dt * this.rideSpeed / 0.85; // the cranks turn with the wheels (about 2.5 wheel turns per crank turn)
     this.blob.visible = false;
-    this.pos.y = baseY + 0.91 - 0.9 * this.scale; // hips on the saddle
+    this.pos.y = baseY + 0.91 - 0.9 * this.scale + RIDE_LIFT; // hips on the saddle
     this.lean(0.32);
     this.torso.scale.y = 1;
     for (const i of [0, 1]) {
@@ -580,6 +588,7 @@ export class NPC {
     this.seated = !!seated;
     this.gait = gait;
     this.rideSpeed = speed;
+    this.moveSpeed = speed;
     this.animate(dt, walking, pos.y);
   }
 

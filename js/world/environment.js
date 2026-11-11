@@ -70,7 +70,7 @@ export function setupGraphics({ renderer, scene, campus }) {
     const d = sunDirection(clock);
     u.sunPosition.value.copy(d);
     const elevationDeg = THREE.MathUtils.radToDeg(Math.asin(d.y));
-    if (Math.abs(elevationDeg - envElevation) > 4) {
+    if (Math.abs(elevationDeg - envElevation) > api.envStep) {
       envElevation = elevationDeg;
       refreshEnv(d);
     }
@@ -98,5 +98,7 @@ export function setupGraphics({ renderer, scene, campus }) {
     world().update?.(dt, f);
   };
 
-  return { sun, sky, hemi, update, setRange };
+  // envStep: degrees of sun movement between re-bakes of the sky lighting (finer in the film, so it never steps)
+  const api = { sun, sky, hemi, update, setRange, envStep: 4 };
+  return api;
 }
