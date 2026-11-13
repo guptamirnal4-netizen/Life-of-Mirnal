@@ -11,6 +11,7 @@ import { NavGraph } from './nav.js';
 import { Hostel, WALK_IN, entranceOrder, mergeShells } from './hostel.js';
 import { CombHostel, COMB } from './comb-hostel.js';
 import { COUNTER_FOOD } from '../../data/mess.js';
+import { crownGeometry } from './foliage.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -1371,31 +1372,34 @@ export class BitsCampus extends Campus {
     }
     const trunkGeo = new THREE.CylinderGeometry(0.22, 0.34, 3.2, 6);
     trunkGeo.translate(0, 1.6, 0);
-    // Broad, flat-topped canopies in olive greens: the khejri, neem and babool lining every campus road.
-    const crownGeo = new THREE.IcosahedronGeometry(2.6, 0);
-    crownGeo.scale(1.25, 0.72, 1.25);
-    crownGeo.translate(0, 4.4, 0);
+    // Broad, flat-topped canopies in olive greens: the khejri, neem and babool lining every campus road. Each chunk
+    // has both crowns (js/world/foliage.js); update() shows the clustered one only near the camera.
+    const crownGeo = { near: crownGeometry('near'), far: crownGeometry('far') };
     const trunkMat = mat('#5b4532', { roughness: 1 });
-    const crownMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, flatShading: true });
+    const crownMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, flatShading: true, vertexColors: true });
     const greens = ['#5b8a3c', '#4d7d34', '#6b9442', '#77954a', '#3f6f2f'].map((c) => new THREE.Color(c));
     const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion(); const v = new THREE.Vector3(); const sc = new THREE.Vector3();
+    this.treeChunks = [];
     for (const list of byChunk.values()) {
       const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, list.length);
-      const crowns = new THREE.InstancedMesh(crownGeo, crownMat, list.length);
+      const crowns = { near: new THREE.InstancedMesh(crownGeo.near, crownMat, list.length), far: new THREE.InstancedMesh(crownGeo.far, crownMat, list.length) };
+      const box = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
       list.forEach(([x, z, k], i) => {
         q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), (x * 13.1 + z * 7.7) % 6.28);
         m4.compose(v.set(x, 0, z), q, sc.set(k, k, k));
         trunks.setMatrixAt(i, m4);
         m4.compose(v.set(x, 0, z), q, sc.set(k * (0.85 + ((i * 7) % 5) * 0.08), k * (0.8 + ((i * 3) % 4) * 0.1), k * (0.85 + ((i * 5) % 5) * 0.07)));
-        crowns.setMatrixAt(i, m4);
-        crowns.setColorAt(i, greens[i % greens.length]);
+        for (const c of [crowns.near, crowns.far]) { c.setMatrixAt(i, m4); c.setColorAt(i, greens[i % greens.length]); }
+        box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z);
       });
-      for (const im of [trunks, crowns]) {
+      for (const im of [trunks, crowns.near, crowns.far]) {
         im.castShadow = true;
         im.receiveShadow = true;
         im.computeBoundingSphere();
         this.root.add(im);
       }
+      crowns.near.visible = false;
+      this.treeChunks.push({ ...crowns, box });
     }
     this.treeCount = pts.length;
     // Trunks: a lookup grid for the NPC checks and a low collider for the player. 1.2 m tall, so the
@@ -1552,6 +1556,13 @@ export class BitsCampus extends Campus {
     }
     this.nearPos = playerPos;
     for (const H of this.hostels) H.update(dt, playerPos);
+    // clustered tree crowns within ~70 m of the camera, the simple ones beyond
+    for (const c of this.treeChunks || []) {
+      const b = c.box;
+      const dx = Math.max(b.minX - playerPos.x, 0, playerPos.x - b.maxX); const dz = Math.max(b.minZ - playerPos.z, 0, playerPos.z - b.maxZ);
+      const near = dx * dx + dz * dz < 70 * 70;
+      c.near.visible = near; c.far.visible = !near;
+    }
     // inside a Bhawan a ceiling light follows you (your own room's light has a switch)
     const hs = this.hostelAt(playerPos.x, playerPos.z)?.roomAt(playerPos.x, playerPos.z, playerPos.y);
     if (hs) {

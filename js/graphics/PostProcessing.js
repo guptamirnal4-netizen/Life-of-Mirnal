@@ -4,6 +4,17 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+
+// Ambient occlusion (soft shade in corners, under eaves and where people and trees meet the ground), computed at
+// a fraction of the screen size and upsampled: the shade is soft anyway, and it keeps the extra normal pass cheap.
+class ScaledGTAOPass extends GTAOPass {
+  constructor(scene, camera, w, h, scale, ao) {
+    super(scene, camera, Math.round(w * scale), Math.round(h * scale), undefined, ao, { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+    this.aoScale = scale;
+  }
+  setSize(w, h) { super.setSize(Math.max(1, Math.round(w * this.aoScale)), Math.max(1, Math.round(h * this.aoScale))); }
+}
 
 // The game's look: a warm, saturated, slightly soft "storybook campus" grade with a gentle vignette, and a
 // soft glow on bright sky and sunlit walls. It is applied in one final pass that also does the tone mapping
@@ -20,6 +31,8 @@ const GradeShader = {
     vignette: { value: 0.26 },
     shadowTint: { value: new THREE.Vector3(-0.012, 0.0, 0.018) },
     highTint: { value: new THREE.Vector3(0.02, 0.008, -0.012) },
+    grain: { value: 0.022 },
+    seed: { value: 0 },
   },
   // raw, like three's OutputPass: the chunks below are included once, whatever the renderer's settings
   vertexShader: /* glsl */`
@@ -34,7 +47,7 @@ const GradeShader = {
     #include <tonemapping_pars_fragment>
     #include <colorspace_pars_fragment>
     uniform sampler2D tDiffuse;
-    uniform float warmth, saturation, contrast, vignette;
+    uniform float warmth, saturation, contrast, vignette, grain, seed;
     uniform vec3 shadowTint, highTint;
     varying vec2 vUv;
     void main() {
@@ -48,6 +61,9 @@ const GradeShader = {
       c += shadowTint * (1.0 - smoothstep(0.0, 0.45, l)) + highTint * smoothstep(0.55, 1.0, l);
       vec2 d = vUv - 0.5;
       c *= 1.0 - vignette * smoothstep(0.18, 0.75, dot(d, d) * 2.0);
+      // fine film grain, strongest in the mid-tones
+      float n = fract(sin(dot(gl_FragCoord.xy + seed, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+      c += n * grain * (1.0 - abs(l - 0.5) * 1.2);
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
 };
@@ -72,7 +88,7 @@ export class PostProcessing {
 
   // Rebuilds the chain when the profile's post settings change; Low (post: false) tears it down.
   setProfile(p) {
-    const key = p.post ? `${p.msaa}|${p.bloom}` : null;
+    const key = p.post ? `${p.msaa}|${JSON.stringify(p.bloom)}|${JSON.stringify(p.ao)}` : null;
     if (key === this.key) return;
     this.key = key;
     this.dispose();
@@ -81,6 +97,10 @@ export class PostProcessing {
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: p.msaa });
     const composer = new EffectComposer(this.renderer, rt);
     composer.addPass(new RenderPass(this.scene, this.camera));
+    if (p.ao) {
+      this.ao = new ScaledGTAOPass(this.scene, this.camera, size.x, size.y, p.ao.scale, { radius: p.ao.radius, distanceExponent: 1.4, thickness: 1.2, scale: p.ao.strength, samples: p.ao.samples, distanceFallOff: 1, screenSpaceRadius: false });
+      composer.addPass(this.ao);
+    }
     if (p.bloom) {
       this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), p.bloom.strength, p.bloom.radius, p.bloom.threshold);
       composer.addPass(this.bloom);
@@ -108,6 +128,7 @@ export class PostProcessing {
     u.warmth.value = g.warmth;
     u.saturation.value = g.saturation;
     u.toneMappingExposure.value = this.renderer.toneMappingExposure;
+    u.seed.value = (clock * 37.0) % 1000; // follows the clock, so the film's frames are repeatable
   }
 
   // Depth of field, for the campus film's close shots (it renders the scene's depth a second time, so the game
@@ -134,10 +155,12 @@ export class PostProcessing {
     this.composer.renderTarget2.dispose();
     this.bloom?.dispose();
     this.bokeh?.dispose();
+    this.ao?.dispose();
     this.grade?.material.dispose();
     this.composer = null;
     this.bloom = null;
     this.bokeh = null;
+    this.ao = null;
     this.grade = null;
   }
 }

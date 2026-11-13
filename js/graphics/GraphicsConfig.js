@@ -11,12 +11,13 @@ export const RENDERER_DEFAULTS = {
 // size, so a full-screen Retina window does not render ~5.4 million pixels on High. Shadows come from the sun
 // only (the indoor light never casts), over a square frustum of shadowSpan metres that follows the player.
 // post: the colour grade and vignette (js/graphics/PostProcessing.js); msaa: samples for its render target;
-// bloom: the soft glow on bright sky and sunlit walls.
+// bloom: the soft glow on bright sky and sunlit walls; ao: ambient occlusion (scale: its resolution as a fraction
+// of the screen; radius in metres; strength: how dark the occlusion gets, as a power).
 export const PROFILES = {
   low: { label: 'Low', note: 'no shadows or colour grade, fastest', pixelRatioCap: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 1024, shadowType: 'pcf', shadowSpan: 60, anisotropy: 2, post: false },
   medium: { label: 'Medium', note: 'sharp shadows nearby', pixelRatioCap: 1.25, maxPixels: 2.6e6, shadows: true, shadowMapSize: 1024, shadowType: 'pcf', shadowSpan: 60, anisotropy: 4, post: true, msaa: 2, bloom: null },
   high: { label: 'High', note: 'soft shadows, recommended', pixelRatioCap: 2, maxPixels: 3.7e6, shadows: true, shadowMapSize: 2048, shadowType: 'pcfsoft', shadowSpan: 76, anisotropy: 8, post: true, msaa: 4, bloom: { strength: 0.28, radius: 0.5, threshold: 3.4 } },
-  ultra: { label: 'Ultra', note: 'full Retina, larger shadow area', pixelRatioCap: 2, maxPixels: 6.5e6, shadows: true, shadowMapSize: 4096, shadowType: 'pcfsoft', shadowSpan: 110, anisotropy: 16, post: true, msaa: 4, bloom: { strength: 0.32, radius: 0.55, threshold: 3.1 } },
+  ultra: { label: 'Ultra', note: 'full Retina, larger shadow area, ambient occlusion', pixelRatioCap: 2, maxPixels: 6.5e6, shadows: true, shadowMapSize: 4096, shadowType: 'pcfsoft', shadowSpan: 110, anisotropy: 16, post: true, msaa: 4, bloom: { strength: 0.32, radius: 0.55, threshold: 3.1 }, ao: { scale: 0.75, radius: 1.0, samples: 16, strength: 2 } },
 };
 
 export const PROFILE_ORDER = ['low', 'medium', 'high', 'ultra'];

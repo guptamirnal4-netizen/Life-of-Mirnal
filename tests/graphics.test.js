@@ -42,3 +42,25 @@ test('the colour grade is warmer at golden hour than at midday', async () => {
   assert.ok(gradeFor(7 * 60).warmth > noon + 0.04, 'morning');
   assert.ok(gradeFor(18 * 60 + 30).warmth > noon + 0.04, 'evening');
 });
+
+test('ambient occlusion is Ultra only (it re-renders the scene), at a fraction of the screen size', () => {
+  for (const k of ['low', 'medium', 'high']) assert.equal(PROFILES[k].ao, undefined, k);
+  const ao = PROFILES.ultra.ao;
+  assert.ok(ao.scale > 0 && ao.scale <= 1 && ao.radius > 0 && ao.strength >= 1);
+});
+
+test('tree crowns: shaded darker underneath than on top; the near crown has more detail than the far one', async () => {
+  const { crownGeometry } = await import('../js/world/foliage.js');
+  for (const kind of ['near', 'far']) {
+    const g = crownGeometry(kind);
+    const p = g.attributes.position; const c = g.attributes.color;
+    assert.ok(c && c.count === p.count, kind);
+    let lo = { y: Infinity, v: 0 }; let hi = { y: -Infinity, v: 0 };
+    for (let i = 0; i < p.count; i++) {
+      if (p.getY(i) < lo.y) lo = { y: p.getY(i), v: c.getX(i) };
+      if (p.getY(i) > hi.y) hi = { y: p.getY(i), v: c.getX(i) };
+    }
+    assert.ok(hi.v > lo.v * 1.3, `${kind}: top ${hi.v} vs underside ${lo.v}`);
+  }
+  assert.ok(crownGeometry('near').attributes.position.count > 4 * crownGeometry('far').attributes.position.count);
+});

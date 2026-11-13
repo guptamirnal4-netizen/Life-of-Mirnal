@@ -4,6 +4,7 @@ import { QualityManager } from './QualityManager.js';
 import { PerformanceMonitor } from './PerformanceMonitor.js';
 import { PostProcessing } from './PostProcessing.js';
 import { DEFAULT_PROFILE } from './GraphicsConfig.js';
+import { applySurfaceShading } from './SurfaceShading.js';
 
 // Coordinates the graphics modules around the game's existing renderer, scene and camera. It owns no loop:
 // the game's frame() calls update() and render() once per frame.
@@ -17,6 +18,7 @@ export class GraphicsEngine {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
+    applySurfaceShading();
     this.rendererManager = new RendererManager(renderer, camera);
     // Sky, sun, fog and image-based lighting follow the game clock (js/world/environment.js).
     this.env = setupGraphics({ renderer, scene, campus });

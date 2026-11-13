@@ -7,11 +7,13 @@ export function setupGraphics({ renderer, scene, campus }) {
   const sky = new Sky();
   sky.scale.setScalar(280);
   const u = sky.material.uniforms;
-  u.turbidity.value = 3.2;
-  u.rayleigh.value = 2.4;
-  u.mieCoefficient.value = 0.003;
+  u.turbidity.value = 1.6;
+  u.rayleigh.value = 0.7;
+  u.mieCoefficient.value = 0.002;
   u.mieDirectionalG.value = 0.82;
   scene.add(sky);
+  const clouds = cloudLayer();
+  sky.add(clouds); // follows the sky's position and scale
   scene.background = null;
   scene.fog = new THREE.Fog('#b9cfe0', 90, 270);
 
@@ -77,11 +79,17 @@ export function setupGraphics({ renderer, scene, campus }) {
     sun.intensity = 1.1 + 2.1 * Math.min(1, d.y * 1.6);
     // golden hour: 1 with the sun on the horizon, 0 once it is ~30° up
     const low = 1 - THREE.MathUtils.smoothstep(d.y, 0.12, 0.5);
-    u.turbidity.value = 3.2 + 3.5 * low;
-    u.rayleigh.value = 2.4 + 1.4 * low;
-    u.mieCoefficient.value = 0.003 + 0.004 * low;
+    // a clear, deep blue by day; hazier and warmer as the sun gets low
+    u.turbidity.value = 1.6 + 4.6 * low;
+    u.rayleigh.value = 0.7 + 2.6 * low;
+    u.mieCoefficient.value = 0.002 + 0.005 * low;
     sun.color.setHSL(0.075 + 0.035 * (1 - low), 0.5 + 0.4 * low, 0.8 + 0.14 * (1 - low));
     scene.fog.color.copy(fogDay).lerp(fogGold, 0.55 * low);
+    const cu = clouds.material.uniforms;
+    cu.sunDir.value.copy(d);
+    cu.sunColor.value.copy(sun.color);
+    cu.drift.value = clock * 0.0035; // drifts with the game clock, so the film's frames are repeatable
+    cu.light.value = 0.55 + 0.45 * Math.min(1, d.y * 2);
     hemi.color.copy(skyDay).lerp(skyGold, 0.5 * low);
     const f = focus || new THREE.Vector3();
     // Snap the shadow frustum to texels so shadows don't shimmer while walking.
@@ -99,6 +107,66 @@ export function setupGraphics({ renderer, scene, campus }) {
   };
 
   // envStep: degrees of sun movement between re-bakes of the sky lighting (finer in the film, so it never steps)
-  const api = { sun, sky, hemi, update, setRange, envStep: 4 };
+  const api = { sun, sky, clouds, hemi, update, setRange, envStep: 4 };
   return api;
+}
+
+// Fair-weather cumulus: soft fbm clouds on a plane high above the campus, seen through the sky box. Brighter
+// and warmer towards the sun, grey-blue underneath, thinning out towards the horizon.
+function cloudLayer() {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      sunDir: { value: new THREE.Vector3(0, 1, 0) },
+      sunColor: { value: new THREE.Color('#fff0d4') },
+      drift: { value: 0 },
+      light: { value: 1 },
+    },
+    vertexShader: /* glsl */`
+      varying vec3 vDir;
+      void main() {
+        vDir = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position.z = gl_Position.w; // on the far plane, like the sky
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 sunDir, sunColor;
+      uniform float drift, light;
+      varying vec3 vDir;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) {
+        vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1)), f.x), f.y);
+      }
+      float fbm(vec2 p) {
+        float v = 0.0, a = 0.5;
+        for (int k = 0; k < 5; k++) { v += a * noise(p); p = p * 2.03 + 11.7; a *= 0.5; }
+        return v;
+      }
+      void main() {
+        vec3 d = normalize(vDir);
+        if (d.y < 0.015) discard;
+        vec2 p = d.xz / (d.y + 0.12) * 1.6 + vec2(drift, drift * 0.37);
+        float n = fbm(p);
+        float cover = smoothstep(0.5, 0.78, n);
+        float a = cover * smoothstep(0.015, 0.22, d.y) * 0.92;
+        if (a < 0.003) discard;
+        // thicker cloud is darker underneath; the edges catch the light
+        float thick = smoothstep(0.55, 0.95, fbm(p * 1.7 + 3.1));
+        float toward = pow(max(dot(d, normalize(sunDir)), 0.0), 6.0);
+        vec3 lit = mix(vec3(1.0), sunColor, 0.35) * (1.2 + toward * 0.45);
+        vec3 shade = vec3(0.62, 0.68, 0.78);
+        vec3 c = mix(lit, shade, thick * 0.75) * light * 2.0;
+        gl_FragColor = vec4(c, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    side: THREE.BackSide,
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -1;
+  return mesh;
 }

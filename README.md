@@ -85,7 +85,9 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
   - the pixel ratio, capped both by the preset and by a pixel budget, so a full-screen Retina window isn't rendered at full 2×
   - the sun's shadows (off on Low, then soft shadows up to 4096 px)
   - texture filtering
-  - the look (Medium and up): a warm, saturated colour grade with a soft vignette, warmer at sunrise and sunset; High and Ultra add a soft glow on the sky and lights. Low renders without it.
+  - the look (Medium and up): a warm, saturated colour grade with a soft vignette and fine film grain, warmer at sunrise and sunset; High and Ultra add a soft glow on the sky and lights. Low renders without it.
+  - ambient occlusion (Ultra only, and in the campus film): soft shade in corners, under arcades and benches, and where people and trees meet the ground. It re-renders the scene, so High leaves it out to stay at 60 fps.
+- **On every preset:** a clear blue sky with drifting clouds lit by the sun; walls, kerbs, trunks and legs darken where they meet the ground, and large flat ground gets a soft natural variation (`js/graphics/SurfaceShading.js`); tree crowns near the camera are clusters of rounded clumps, shaded darker underneath (`js/world/foliage.js`); characters' clothes have a woven texture and skin has a soft sheen.
 - **Light through the day:** the sun, sky, haze and bounce light turn golden in the early morning and evening.
 - **Performance stats:** press `` ` `` in the game to show frame rate, frame time, draw calls and resolution.
 - **Code and assets:** the code is in `js/graphics/` (see the comments at the top of each file). Third-party files and their licences are listed in `ASSETS.md`.
@@ -117,7 +119,7 @@ address (Esc skips).
 ```
 data/            mess.js (menu, Pitstop), curriculum-primary.js (1–5), curriculum-middle.js (6–10), senior-a/b.js (11–12),
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
-js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade, bloom, depth of field), PerformanceMonitor
+js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade, bloom, ambient occlusion, depth of field), SurfaceShading (contact shade and ground variation on every lit material), PerformanceMonitor
 js/cinematic/    the film (school, then college): shot list, camera rigs, cast, titles
 dev/             dev server, film renderer and score generator
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM

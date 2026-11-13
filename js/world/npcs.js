@@ -71,7 +71,37 @@ function blobMat() {
   return blobMaterial;
 }
 
-const cloth = (color) => mat(color, { roughness: 0.92 });
+// Cloth: a fine woven bump (a canvas texture, shared) so shirts and trousers read as fabric up close.
+// Skin: a soft sheen at grazing angles, the warm rim real skin gets in sunlight.
+let weave;
+function weaveTexture() {
+  if (!weave) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    let r = 11;
+    const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+    for (let y = 0; y < 128; y += 2) for (let x = 0; x < 128; x += 2) {
+      const v = 120 + ((x + y) % 4 ? 22 : -22) + rnd() * 26;
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.fillRect(x, y, 2, 2);
+    }
+    weave = new THREE.CanvasTexture(c);
+    weave.wrapS = weave.wrapT = THREE.RepeatWrapping;
+    weave.repeat.set(5, 5);
+  }
+  return weave;
+}
+const cloths = new Map();
+const cloth = (color) => {
+  if (!cloths.has(color)) cloths.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.92, bumpMap: weaveTexture(), bumpScale: 0.9 }));
+  return cloths.get(color);
+};
+const skins = new Map();
+const skin = (color) => {
+  if (!skins.has(color)) skins.set(color, new THREE.MeshPhysicalMaterial({ color, roughness: 0.6, sheen: 0.5, sheenColor: new THREE.Color('#ffc9ad'), sheenRoughness: 0.5 }));
+  return skins.get(color);
+};
 const sideMat = (color) => {
   const m = cloth(color).clone();
   m.side = THREE.DoubleSide;
@@ -118,7 +148,7 @@ export class NPC {
     if (outfit) look.outfit = outfit;
     this.look = look;
     const female = look.gender === 'f';
-    const skinMat = mat(SKINS[skinIndex % SKINS.length], { roughness: 0.65 });
+    const skinMat = skin(SKINS[skinIndex % SKINS.length]);
     const isStudent = look.outfit === 'uniform';
     const casual = look.outfit === 'casual';
     const hash = [...name].reduce((a, ch) => a + ch.charCodeAt(0), 0);
