@@ -966,10 +966,14 @@ export class Hostel {
       this.bbox(w, 0.84, w.depth, t0, t1, y0 + FH - SLAB, y0 + FH, 't:concrete:#f6f4ee', { collide: false });
       return;
     }
+    // Each step is a block down to a sloping soffit 0.45 m under its tread (not down to the flight's foot), so the
+    // flight above a lower one leaves full headroom where you step off the first floor onto the way down.
     const flight = (ta, tb, yStart, sStart, dir) => {
       for (let j = 0; j < 8; j++) {
         const sa = sStart + dir * j * TREAD; const sb = sa + dir * TREAD;
-        this.bbox(w, Math.min(sa, sb), Math.max(sa, sb), ta, tb, yStart - (j === 0 ? 0 : 0.6), yStart + (j + 1) * RISE, stone, { walkable: true });
+        const top = yStart + (j + 1) * RISE;
+        const bottom = j === 0 ? yStart : Math.max(yStart - 0.6, top - 0.45 - RISE);
+        this.bbox(w, Math.min(sa, sb), Math.max(sa, sb), ta, tb, sp.k === 0 && yStart === y0 ? y0 : bottom, top, stone, { walkable: true });
       }
     };
     flight(t0 + 0.15, t0 + 1.4, y0, 0.84, 1); // up to the landing
