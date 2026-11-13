@@ -29,6 +29,7 @@ import { openChat, detectLLM } from './ui/chat.js';
 import { openStreamSelection } from './ui/streams.js';
 import { openJourney, openFinalPortfolio } from './ui/journey.js';
 import { Voice, tokens } from './voice.js';
+import { Explorer } from './explorer/explorer.js';
 
 // ---------- Renderer & scene ----------
 const canvas = document.getElementById('game');
@@ -61,7 +62,7 @@ addMainInteractables(schoolCampus, { x: 15.5, z: 38 });
 let deskInteract = schoolCampus.deskInteract;
 const minimap = createMinimap();
 const bhawanGuide = createBhawanGuide();
-const touch = createTouchControls({ canvas, player, onMenu: () => openPause() });
+const touch = createTouchControls({ canvas, player, onMenu: () => (mode === 'explore' ? explorer?.toMap() : openPause()) });
 const bike = (() => {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: '#2a2f38', roughness: 0.4, metalness: 0.6 });
@@ -1487,6 +1488,7 @@ function showTitle() {
       choice('🎓', 'Mirnal’s College Life', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
     saveInfo && h('button', { class: 'primary', onclick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } }, `Continue · ${saveInfo}`),
     h('button', { 'data-voice': 'film campus tour watch', onclick: () => playFilm() }, '🎬 Watch the campus film'),
+    h('button', { 'data-voice': 'map explore 3d', onclick: () => openExplorer() }, '🗺️ Explore the 3D map · school and college'),
     h('div', { class: 'title-row' },
       saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
       h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
@@ -1532,6 +1534,10 @@ function showVoiceOnboarding() {
 
 // ---------- Pointer lock & input ----------
 function requestLock() {
+  if (mode === 'explore') {
+    if (explorer?.walking && !touch.on) canvas.requestPointerLock?.();
+    return;
+  }
   if (mode !== 'playing' || isOpen() || touch.on) return;
   canvas.requestPointerLock?.();
 }
@@ -1555,6 +1561,7 @@ onOverlayChange((open) => {
 
 document.addEventListener('keydown', (e) => {
   if (mode === 'film' && e.code === 'Escape' && film && !film.capturing) return film.finish();
+  if (mode === 'explore' && explorer) return explorer.key(e);
   if (mode !== 'playing') return;
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (e.code === 'Escape') {
@@ -1631,7 +1638,7 @@ function toggleView() {
 }
 
 function updateView(dt) {
-  const third = state.settings.view === 'third';
+  const third = (mode === 'explore' ? explorer.view : state.settings.view) === 'third';
   avatar.group.visible = third;
   if (player.bike && campus.roomAt(player.pos.x, player.pos.z)) {
     setBike(false);
@@ -1939,6 +1946,68 @@ function endFilm(back) {
   showTitle();
 }
 
+// ---------- The 3D map ----------
+// Look round the school or BITS Pilani without playing (js/explorer/explorer.js): fly over it like a map, pick a
+// place, walk inside. From the title screen; ?explore (or ?explore=school) in the URL opens it on load.
+let explorer = null;
+function openExplorer(kind = 'college') {
+  if (explorer || film) return explorer;
+  closeAll();
+  exitLock();
+  minimap.closeBig();
+  bhawanGuide.hide();
+  titleEl.classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  setBike(false);
+  avatar.group.visible = false;
+  mode = 'explore';
+  explorer = new Explorer({
+    camera, canvas, graphics,
+    hooks: {
+      setWorld: (k) => { useWorld(k); minimap.setVisible(false); return campus; },
+      collegeReady: () => !!bitsCampus,
+      walk: (pos, yaw) => player.place(pos, yaw),
+      toMap: () => { exitLock(); avatar.group.visible = false; },
+      playerPos: () => player.pos,
+      exit: () => endExplorer(),
+    },
+  });
+  explorer.switchTo(kind);
+  return explorer;
+}
+
+function endExplorer() {
+  if (!explorer) return;
+  exitLock();
+  explorer.stop();
+  explorer = null;
+  avatar.group.visible = false;
+  useWorld('school');
+  player.place(new THREE.Vector3(0, 0, 58), 0);
+  camera.position.set(0, 6, 62);
+  camera.lookAt(0, 2, 0);
+  showTitle();
+}
+
+function exploreFrame(dt) {
+  const focus = explorer.update(dt);
+  if (explorer.walking) {
+    player.enabled = document.pointerLockElement === canvas || touch.on;
+    player.update(dt, campus.allColliders());
+    updateView(dt);
+  } else {
+    player.enabled = false;
+    avatar.group.visible = false;
+    document.getElementById('crosshair').classList.add('hidden');
+  }
+  touch.update({ playing: explorer.walking, college: false, prompt: false, seated: false });
+  graphics.setQuality(state?.settings.graphics || (touch.on ? 'medium' : 'high'));
+  hudTimer += dt;
+  if (hudTimer > 0.25) { hudTimer = 0; campus.setClock?.(explorer.clock); }
+  graphics.update(dt, { clock: explorer.clock, focus: focus || player.pos, view: explorer.walking ? explorer.view : 'map' });
+  graphics.render();
+}
+
 // ---------- Live map ----------
 // The route to the current objective along the roads (refreshed every second), for the minimap and the big map.
 let mapRoute = { at: -99, key: '', pts: null };
@@ -1961,6 +2030,7 @@ function frame() {
   const dt = Math.min(clockTimer.getDelta(), 0.05);
   elapsed += dt;
   if (mode === 'film') { if (film && !film.capturing) film.update(dt); return; }
+  if (mode === 'explore' && explorer) return exploreFrame(dt);
   if (mode === 'playing' && state) {
     const paused = isOpen();
     player.enabled = !paused && (document.pointerLockElement === canvas || touch.on);
@@ -2049,7 +2119,9 @@ camera.lookAt(0, 2, 0);
 detectLLM();
 showTitle();
 frame();
-if (new URLSearchParams(location.search).has('film')) playFilm();
+const launch = new URLSearchParams(location.search);
+if (launch.has('film')) playFilm();
+else if (launch.has('explore')) openExplorer(launch.get('explore') === 'school' ? 'school' : 'college');
 
 // Exposed for automated testing in the browser.
-window.__game = { playFilm, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };
+window.__game = { playFilm, openExplorer, get explorer() { return explorer; }, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };

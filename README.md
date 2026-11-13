@@ -116,6 +116,16 @@ address (Esc skips).
   `node dev/render-film.mjs out.mp4` (with `npm start` running; needs Chrome, ffmpeg and playwright-core) draws
   every frame at 1.5× on Ultra with depth of field and encodes 1080p30 H.264 with the score.
 
+## The 3D map
+
+**🗺️ Explore the 3D map** on the title screen (or `?explore`, `?explore=school` in the URL) lets you look round both
+campuses without playing. From above it works like a map: drag to move, right-drag to turn, scroll to zoom (one finger
+and two fingers on a phone). The list has every place on each campus (116 at BITS Pilani: the walk-in Bhawans, the
+rooms with interiors, named buildings and landmarks; the school's rooms, gate, assembly ground, playground and
+canteen), with search. Pick one to fly there, then **Walk inside** to drop in at its door and walk round on foot with
+the game's collisions, stairs and interiors; **M** (or the button) goes back up. Double-click the ground to walk from
+that spot, and the time slider moves the sun from dawn to night. It never touches the saved game.
+
 ## Code map
 
 ```
@@ -123,6 +133,7 @@ data/            mess.js (menu, Pitstop), curriculum-primary.js (1–5), curricu
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
 js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade, bloom, ambient occlusion, depth of field), SurfaceShading (contact shade and ground variation on every lit material), PerformanceMonitor
 js/cinematic/    the film (school, then college): shot list, camera rigs, cast, titles
+js/explorer/     the 3D map: map camera, place list, walking inside
 dev/             dev server, film renderer and score generator
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM
 js/world/        campus (3D school), bits-world (real-scale BITS campus), hostel + comb-hostel (walk-in Bhawans), player, npcs (characters, ball), sports (cricket and football), labels

@@ -253,3 +253,38 @@ body.touch #bhawan-guide { left: calc(12px + env(safe-area-inset-left)) !importa
   body.touch #minimap { top: auto; bottom: calc(214px + env(safe-area-inset-bottom)); width: 96px; height: 96px; }
   body.touch #bhawan-guide { transform: scale(0.66); }
 }
+
+/* 3D map (js/explorer/explorer.js) */
+#explorer { position: fixed; inset: 0; pointer-events: none; z-index: 6; color: var(--ink); }
+#explorer button, #explorer input { pointer-events: auto; }
+.ex-panel { position: absolute; top: 12px; left: 12px; width: 300px; max-height: calc(100% - 96px); display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: rgba(251,247,238,0.94); box-shadow: 0 8px 28px rgba(0,0,0,0.25); pointer-events: auto; }
+.ex-head { display: flex; align-items: center; justify-content: space-between; font-size: 16px; }
+.ex-fold { padding: 4px 10px; }
+.ex-panel.folded { width: auto; }
+.ex-panel.folded > :not(.ex-head) { display: none; }
+.ex-panel.folded .ex-head b { margin-right: 10px; }
+.ex-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ex-tab { padding: 8px; font-weight: 600; }
+.ex-tab.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ex-title { font-size: 13px; color: var(--muted); letter-spacing: 0.04em; }
+.ex-search { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 15px; }
+.ex-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.ex-item { text-align: left; padding: 7px 9px; border: 0; background: transparent; border-radius: 8px; font-size: 14px; }
+.ex-item:hover { background: rgba(232,93,42,0.1); }
+.ex-item.on { background: rgba(232,93,42,0.18); font-weight: 600; }
+.ex-empty { color: var(--muted); font-size: 14px; padding: 6px; }
+.ex-card { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: min(460px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; background: rgba(251,247,238,0.96); box-shadow: 0 8px 28px rgba(0,0,0,0.25); pointer-events: auto; }
+.ex-card small { color: var(--muted); }
+.ex-card-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.ex-bar { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: rgba(15,20,36,0.78); color: #fff; pointer-events: auto; }
+.ex-time { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.ex-time input { width: 160px; pointer-events: auto; }
+.ex-time-label { min-width: 118px; font-variant-numeric: tabular-nums; }
+.ex-hint { flex: 1; font-size: 13px; opacity: 0.85; min-width: 180px; }
+.ex-exit { margin-left: auto; }
+@media (max-width: 700px) {
+  .ex-panel { width: calc(100% - 24px); max-height: 46%; }
+  .ex-card { top: 72px; left: 12px; right: 12px; transform: none; max-width: none; }
+  .ex-panel:not(.folded) ~ .ex-card { display: none; } /* the open list takes the top of a phone screen */
+  .ex-time input { width: 110px; }
+}
