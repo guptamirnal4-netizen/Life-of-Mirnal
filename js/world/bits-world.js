@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Campus, ROOMS, mat } from './campus.js';
 import { makeLabel } from './labels.js';
-import { texture, TEX_SIZE } from './textures.js';
+import { texture, texturedMaterial, TEX_SIZE } from './textures.js';
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
 import { NavGraph } from './nav.js';
 import { Hostel, WALK_IN, entranceOrder, mergeShells } from './hostel.js';
@@ -1220,34 +1220,196 @@ export class BitsCampus extends Campus {
     this.hostelEntrance = H.bedSpot;
   }
 
-  // Main Gate on the eastern town road: carved pink-sandstone pillars, a WELCOME banner and wooden gates.
+  // Main Gate on the eastern town road, built in the campus's own style: cream plaster with grey Art Deco fins and
+  // stepped tops like the clock tower, a wide segmental arch carrying the institute's name, a pedestrian arch on
+  // either side, green gate leaves swung open, the boundary wall running off both ways, and inside a guard booth
+  // and a raised boom barrier. The road runs through along x; the campus is on the -x side.
   buildMainGate() {
     const p = this.poi('Main Gate');
     if (!p) return;
     const X = p.x; const Z = p.z;
-    const sand = '#d8a487';
+    const cream = '#ecd7a6'; const trim = '#b9bdbf'; const stone = '#c9b08a';
+    const plaster = texturedMaterial('plasterWhite', { tint: cream });
+    const trimMat = mat(trim, { roughness: 0.7 });
+    const add = (geo, m, x, y, z, ry = 0) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      mesh.rotation.y = ry;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.root.add(mesh);
+      return mesh;
+    };
+    const solid = (x0, x1, z0, z1, y1) => this.colliders.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, minY: 0, maxY: y1, walkable: false, enabled: true });
+    // a shape drawn across the road (s, y) and extruded through the wall's depth, with UVs in plaster tiles
+    const extrude = (shape, depth) => {
+      const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 24 });
+      g.translate(0, 0, -depth / 2).rotateY(Math.PI / 2);
+      const uv = g.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / TEX_SIZE.plasterWhite, uv.getY(i) / TEX_SIZE.plasterWhite);
+      return g;
+    };
+    const HALF = 4.3; // half the carriageway opening
+    const PIER = 5.25; // pier centres either side of the road
+    const lamp = mat('#fff1c8', { emissive: '#8a6320' });
     for (const s of [-1, 1]) {
-      const zp = Z + s * 4.6;
-      this.box(X, 0, zp, 1.9, 0.6, 1.9, '#cf9a7e');
-      this.box(X, 0.6, zp, 1.4, 4.8, 1.4, null, { tex: 'plasterWhite', tint: sand });
-      this.box(X, 5.4, zp, 1.8, 0.4, 1.8, '#e6c2a8', { collide: false });
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.3, 4), mat('#d39c80'));
-      cap.position.set(X, 6.45, zp);
-      cap.rotation.y = Math.PI / 4;
-      cap.castShadow = true;
-      this.root.add(cap);
-      this.box(X - 1.9, 0, Z + s * 2.0, 3.6, 2.2, 0.14, '#7a4f2e', { collide: false }); // gate leaf, swung open
-      this.box(X, 0, Z + s * 15.5, 0.5, 2.3, 20, null, { tex: 'plasterWhite', tint: '#e9e4da' }); // boundary wall
+      const zp = Z + s * PIER;
+      this.box(X, 0, zp, 2.5, 0.55, 2.2, stone);
+      this.box(X, 0.55, zp, 2.0, 6.65, 1.8, null, { tex: 'plasterWhite', tint: cream });
+      this.box(X, 7.2, zp, 2.2, 0.22, 2.0, trim, { collide: false });
+      this.box(X, 7.42, zp, 1.6, 0.9, 1.4, null, { tex: 'plasterWhite', tint: cream, collide: false });
+      this.box(X, 8.32, zp, 1.8, 0.18, 1.6, trim, { collide: false });
+      this.box(X, 8.5, zp, 1.1, 0.7, 0.9, null, { tex: 'plasterWhite', tint: cream, collide: false });
+      add(new THREE.ConeGeometry(0.62, 1.1, 4), trimMat, X, 9.75, zp, Math.PI / 4);
+      // three grey fins up each road face, as on the clock tower
+      for (const f of [-1, 1]) for (const k of [-1, 0, 1]) this.box(X + f * 1.03, 1.3, zp + k * 0.42, 0.08, 4.9, 0.14, trim, { collide: false });
+      // a lantern on the face towards the road
+      const zf = zp - s * 1.05;
+      this.box(X, 3.75, zp - s * 0.95, 0.12, 0.08, 0.3, '#3a3a3a', { collide: false });
+      add(new THREE.BoxGeometry(0.3, 0.44, 0.3), lamp, X, 3.5, zf);
+      add(new THREE.ConeGeometry(0.26, 0.2, 4), mat('#3a3a3a'), X, 3.82, zf, Math.PI / 4);
     }
-    const banner = canvasTexture(512, 64, (g, W, H) => {
-      g.fillStyle = '#fbfbf8'; g.fillRect(0, 0, W, H);
-      g.fillStyle = '#1f3f8f'; g.font = 'bold 44px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('WELCOME', W / 2, H / 2 + 2);
+    // the arch across the road, a grey band round it, a keystone, the cornice and a raised parapet
+    const span = new THREE.Shape();
+    span.moveTo(-HALF - 0.2, 4.7);
+    span.lineTo(-HALF - 0.2, 7.2);
+    span.lineTo(HALF + 0.2, 7.2);
+    span.lineTo(HALF + 0.2, 4.7);
+    span.lineTo(HALF, 4.7);
+    span.quadraticCurveTo(0, 7.1, -HALF, 4.7);
+    add(extrude(span, 1.5), plaster, X, 0, Z);
+    const band = new THREE.Shape();
+    band.moveTo(-HALF - 0.02, 4.7);
+    band.quadraticCurveTo(0, 7.14, HALF + 0.02, 4.7);
+    band.lineTo(HALF + 0.3, 4.7);
+    band.quadraticCurveTo(0, 7.55, -HALF - 0.3, 4.7);
+    add(extrude(band, 1.58), trimMat, X, 0, Z);
+    this.box(X, 5.55, Z, 1.62, 0.7, 0.55, trim, { collide: false });
+    this.box(X, 7.2, Z, 1.75, 0.22, PIER * 2, trim, { collide: false });
+    this.box(X, 7.42, Z, 1.3, 0.7, 5.2, null, { tex: 'plasterWhite', tint: cream, collide: false });
+    this.box(X, 8.12, Z, 1.45, 0.14, 5.4, trim, { collide: false });
+    // the institute's name on both faces, above the keystone
+    const name = canvasTexture(1536, 168, (g, W, H) => {
+      g.fillStyle = '#f6edd4'; g.fillRect(0, 0, W, H);
+      g.strokeStyle = '#7a2622'; g.lineWidth = 8; g.strokeRect(10, 10, W - 20, H - 20);
+      g.fillStyle = '#7a2622'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const fit = (text, px, y) => {
+        g.font = `bold ${px}px Georgia, serif`;
+        const w = g.measureText(text).width;
+        if (w > W - 80) g.font = `bold ${Math.floor((px * (W - 80)) / w)}px Georgia, serif`;
+        g.fillText(text, W / 2, y);
+      };
+      fit('BIRLA INSTITUTE OF TECHNOLOGY & SCIENCE', 74, H * 0.4);
+      fit('P I L A N I', 40, H * 0.78);
     }, false);
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.1, 8.0), [new THREE.MeshStandardMaterial({ map: banner }), new THREE.MeshStandardMaterial({ map: banner }), mat('#fbfbf8'), mat('#fbfbf8'), mat('#fbfbf8'), mat('#fbfbf8')]);
-    sign.position.set(X, 5.0, Z);
+    const nameMat = new THREE.MeshStandardMaterial({ map: name, roughness: 0.7 });
+    for (const f of [-1, 1]) {
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(7.0, 0.77), nameMat);
+      plate.position.set(X + f * 0.765, 6.7, Z);
+      plate.rotation.y = f * Math.PI / 2;
+      this.root.add(plate);
+    }
+    // pedestrian arches either side, between the piers and the boundary wall
+    const wing = new THREE.Shape();
+    wing.moveTo(-1.6, 0);
+    wing.lineTo(-0.7, 0);
+    wing.lineTo(-0.7, 2.1);
+    wing.absarc(0, 2.1, 0.7, Math.PI, 0, true);
+    wing.lineTo(0.7, 0);
+    wing.lineTo(1.6, 0);
+    wing.lineTo(1.6, 4.0);
+    wing.lineTo(-1.6, 4.0);
+    wing.lineTo(-1.6, 0);
+    const wingGeo = extrude(wing, 1.2);
+    const ring = new THREE.Shape();
+    ring.moveTo(-0.9, 2.1);
+    ring.absarc(0, 2.1, 0.9, Math.PI, 0, true);
+    ring.lineTo(0.72, 2.1);
+    ring.absarc(0, 2.1, 0.72, 0, Math.PI, false);
+    const ringGeo = extrude(ring, 1.26);
+    const W0 = PIER + 1.0; const W1 = W0 + 3.2;
+    for (const s of [-1, 1]) {
+      const zw = Z + s * (W0 + 1.6);
+      add(wingGeo, plaster, X, 0, zw);
+      add(ringGeo, trimMat, X, 0, zw);
+      this.box(X, 4.0, zw, 1.4, 0.16, 3.4, trim, { collide: false });
+      for (const [a, b] of [[W0, W0 + 0.9], [W1 - 0.9, W1]]) solid(X - 0.6, X + 0.6, Math.min(Z + s * a, Z + s * b), Math.max(Z + s * a, Z + s * b), 4);
+    }
+    // green gate leaves, swung open against the inside of the arch
+    const parts = [];
+    const L = 4.2;
+    const bar = (x, y, w, h, d) => parts.push(new THREE.BoxGeometry(w, h, d).translate(x, y, 0));
+    bar(-L / 2, 0.22, L, 0.12, 0.09);
+    bar(-L / 2, 1.25, L, 0.1, 0.07);
+    bar(-L / 2, 2.35, L, 0.12, 0.09);
+    bar(-0.06, 1.3, 0.12, 2.4, 0.1);
+    bar(-L + 0.06, 1.3, 0.12, 2.4, 0.1);
+    for (let x = -0.34; x > -L + 0.15; x -= 0.28) {
+      bar(x, 1.3, 0.045, 2.2, 0.045);
+      parts.push(new THREE.ConeGeometry(0.045, 0.16, 4).translate(x, 2.49, 0));
+    }
+    const leafGeo = mergeGeometries(parts.map((g) => g.toNonIndexed()));
+    const green = mat('#2d5a3d', { roughness: 0.55, metalness: 0.35 });
+    for (const s of [-1, 1]) {
+      const zl = Z + s * (HALF - 0.15);
+      add(leafGeo, green, X - 0.8, 0.05, zl);
+      solid(X - 0.8 - L, X - 0.8, zl - 0.08, zl + 0.08, 2.6);
+    }
+    // the boundary wall: cream plaster on a stone plinth, grey coping, pilasters every 4.5 m
+    for (const s of [-1, 1]) {
+      const len = 32.5;
+      const zc = Z + s * (W1 + len / 2);
+      this.box(X, 0, zc, 0.45, 2.5, len, null, { tex: 'plasterWhite', tint: cream });
+      this.box(X, 0, zc, 0.6, 0.32, len, stone, { collide: false });
+      this.box(X, 2.5, zc, 0.62, 0.14, len, trim, { collide: false });
+      for (let d = 2.5; d < len; d += 4.5) {
+        const zq = Z + s * (W1 + d);
+        this.box(X, 0, zq, 0.75, 2.85, 0.75, null, { tex: 'plasterWhite', tint: cream, collide: false });
+        this.box(X, 2.85, zq, 0.88, 0.12, 0.88, trim, { collide: false });
+      }
+      // planters along the town side of the wall
+      for (const d of [6, 15]) {
+        const zq = Z + s * (W1 + d);
+        this.box(X + 0.9, 0, zq, 0.9, 0.55, 2.6, stone);
+        for (const k of [-0.8, 0, 0.8]) add(new THREE.IcosahedronGeometry(0.42, 1), mat('#4f7d3a', { roughness: 0.9 }), X + 0.9, 0.85, zq + k).scale.set(1, 0.8, 1);
+      }
+    }
+    // guard booth inside, south of the road, its window towards the gate
+    const bx = X - 5.6; const bz = Z + 11.9;
+    this.box(bx, 0, bz, 2.6, 2.5, 2.4, null, { tex: 'plasterWhite', tint: cream });
+    this.box(bx, 2.5, bz, 3.3, 0.18, 3.1, trim, { collide: false });
+    this.box(bx, 0.95, bz - 1.21, 1.6, 0.95, 0.04, '#2c3a44', { collide: false, roughness: 0.2, metalness: 0.3 });
+    this.box(bx, 0.88, bz - 1.25, 1.8, 0.07, 0.12, trim, { collide: false });
+    this.box(bx - 1.31, 0, bz + 0.3, 0.05, 2.0, 0.9, '#6e2a24', { collide: false });
+    const plaque = canvasTexture(256, 64, (g, W, H) => {
+      g.fillStyle = '#7a2622'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#f6edd4'; g.font = 'bold 34px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('SECURITY', W / 2, H / 2 + 2);
+    }, false);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshStandardMaterial({ map: plaque, roughness: 0.6 }));
+    sign.position.set(bx, 2.12, bz - 1.215);
+    sign.rotation.y = Math.PI;
     this.root.add(sign);
+    // the boom barrier, raised, on the same side
+    const stripes = canvasTexture(128, 16, (g, W, H) => {
+      for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f4f1ea' : '#c3262b'; g.fillRect((i * W) / 8, 0, W / 8, H); }
+    });
+    stripes.repeat.set(1, 1);
+    const boomX = X - 8.2; const boomZ = Z + HALF + 0.6;
+    this.box(boomX, 0, boomZ, 0.32, 1.0, 0.32, '#5c6166');
+    const pivot = new THREE.Group();
+    pivot.position.set(boomX, 1.0, boomZ);
+    pivot.rotation.x = 1.25;
+    this.root.add(pivot);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 7.4), new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.6 }));
+    arm.position.z = -3.6;
+    arm.castShadow = true;
+    pivot.add(arm);
+    const weight = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.6), mat('#5c6166'));
+    weight.position.z = 0.35;
+    pivot.add(weight);
     this.gatePos = new THREE.Vector3(X, 0, Z);
+    this.gateWall = { x: X, z0: Z - W1 - 33, z1: Z + W1 + 33 };
   }
 
   // Bronze statues on stone pedestals in the middle of the roundabouts (Gandhi, Patel) and G.D. Birla's.
@@ -1324,6 +1486,7 @@ export class BitsCampus extends Campus {
       if (this.keepClear(x, z)) return;
       if (Math.hypot(x, z) < 30) return;
       if (this.gatePos && Math.hypot(x - this.gatePos.x, z - this.gatePos.z) < 26) return;
+      if (this.gateWall && Math.abs(x - this.gateWall.x) < 3.5 && z > this.gateWall.z0 && z < this.gateWall.z1) return;
       if ((this.statuePts || []).some(([sx, sz]) => Math.hypot(x - sx, z - sz) < 9)) return;
       for (const r of this.roomList) if (x > r.x0 - 3 && x < r.x1 + 3 && z > r.z0 - 3 && z < r.z1 + 3) return;
       pts.push([x, z, s]);
@@ -1462,7 +1625,8 @@ export class BitsCampus extends Campus {
       const [cx, cz] = centroid(b.outer);
       put(b.name, cx, b.h + 4, cz);
     }
-    for (const p of D.pois) put(p.name === 'All night canteen' ? null : p.name, p.x, p.name === 'BITS Clock Tower' ? 60 : 6, p.z);
+    const LABEL_Y = { 'BITS Clock Tower': 60, 'Main Gate': 11.5 }; // above the tower, and above the gate's spires
+    for (const p of D.pois) put(p.name === 'All night canteen' ? null : p.name, p.x, LABEL_Y[p.name] ?? 6, p.z);
     for (const a of D.areas) if (a.name) { const [cx, cz] = centroid(a.poly); put(a.name, cx, 5, cz); }
   }
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './labels.js';
 import { mat } from './campus.js';
 import { LOOKS } from '../../data/people.js';
@@ -10,32 +11,125 @@ export function studentHeight(classNum) {
   return 1.12 + (classNum - 1) * 0.05;
 }
 
+// Faces and shirt trims are only drawn near the camera; beyond this they are a pixel or two and only cost draws.
+const DETAIL_RANGE = 16;
+let viewer = null;
+export function setDetailViewer(position) {
+  viewer = position;
+}
+
 const SKINS = ['#c68c5a', '#a8724a', '#d9a273', '#8d5a3a', '#b98055', '#e0b088'];
 const HAIR = '#16110d';
 
+// A limb as a lathe: rounded ends, `top` radius at the joint it hangs from, `bot` at the far end, and an
+// optional `bulge` (a calf or a forearm muscle) a third of the way down. Centred like the capsules it replaced.
+function limb(top, bot, len, bulge = 0) {
+  const pts = [];
+  const half = len / 2;
+  for (let i = 0; i <= 4; i++) { const a = (i / 4) * (Math.PI / 2); pts.push(new THREE.Vector2(Math.sin(a) * bot, -half - Math.cos(a) * bot)); }
+  for (let i = 1; i < 8; i++) {
+    const t = i / 8; // 0 at the bottom, 1 at the top
+    pts.push(new THREE.Vector2(THREE.MathUtils.lerp(bot, top, t) + bulge * Math.sin(Math.PI * Math.min(1, t * 1.4)), -half + len * t));
+  }
+  for (let i = 4; i >= 0; i--) { const a = (i / 4) * (Math.PI / 2); pts.push(new THREE.Vector2(Math.sin(a) * top, half + Math.cos(a) * top)); }
+  return new THREE.LatheGeometry(pts, 12);
+}
+
+// Torso as a lathe through [radius, height] pairs (height from the torso centre): a waist, a chest, shoulders
+// rolling in to the neck. Scaled flat front-to-back on the mesh. frontZ() says where the shirt front is at a height,
+// so ties, badges and prints sit on it.
+const TORSO = {
+  m: [[0, -0.27], [0.148, -0.262], [0.152, -0.17], [0.146, -0.07], [0.155, 0.03], [0.166, 0.12], [0.163, 0.19], [0.14, 0.245], [0.094, 0.272], [0.052, 0.284], [0, 0.286]],
+  f: [[0, -0.27], [0.15, -0.262], [0.146, -0.17], [0.132, -0.06], [0.148, 0.04], [0.16, 0.11], [0.152, 0.19], [0.13, 0.243], [0.088, 0.27], [0.05, 0.282], [0, 0.284]],
+};
+const TORSO_Y = 1.2;
+const TORSO_DEPTH = 0.7;
+function frontZ(kind, y) {
+  const p = TORSO[kind];
+  const h = y - TORSO_Y;
+  for (let i = 1; i < p.length; i++) {
+    if (h <= p[i][1]) { const t = (h - p[i - 1][1]) / (p[i][1] - p[i - 1][1]); return THREE.MathUtils.lerp(p[i - 1][0], p[i][0], THREE.MathUtils.clamp(t, 0, 1)) * TORSO_DEPTH + 0.004; }
+  }
+  return 0;
+}
+
+// A relaxed mitten hand: a flat palm, the fingers together and slightly curled, the thumb forward.
+function handGeometry() {
+  const palm = new THREE.SphereGeometry(0.048, 12, 10).scale(0.5, 1.0, 0.86).translate(0, -0.245, 0);
+  const fingers = new THREE.CapsuleGeometry(0.026, 0.05, 4, 8).scale(0.62, 1, 1.25).rotateX(0.28).translate(0, -0.305, 0.008);
+  const thumb = new THREE.CapsuleGeometry(0.014, 0.04, 4, 6).rotateX(0.55).translate(0, -0.248, 0.045);
+  return mergeGeometries([palm, fingers, thumb].map((g) => g.toNonIndexed()));
+}
+
+// A shoe around the ankle pivot (the ankle sits 0.40 below the knee): a rounded upper and a flat sole.
+function shoeGeometry() {
+  const upper = new THREE.SphereGeometry(0.06, 14, 10).scale(0.95, 0.7, 2.15).translate(0, -0.039, 0.05);
+  const heel = new THREE.CylinderGeometry(0.05, 0.055, 0.06, 10).translate(0, -0.035, -0.03);
+  return mergeGeometries([upper, heel].map((g) => g.toNonIndexed()));
+}
+
+// Nose: a narrow bridge running into a rounded tip with two small wings.
+function noseGeometry() {
+  const bridge = new THREE.CapsuleGeometry(0.011, 0.03, 4, 6).rotateX(-0.35).translate(0, 0.004, -0.004);
+  const tip = new THREE.SphereGeometry(0.0145, 10, 8).scale(1, 0.85, 0.95).translate(0, -0.021, 0.004);
+  const wingL = new THREE.SphereGeometry(0.0085, 8, 6).translate(-0.012, -0.025, -0.005);
+  const wingR = new THREE.SphereGeometry(0.0085, 8, 6).translate(0.012, -0.025, -0.005);
+  return mergeGeometries([bridge, tip, wingL, wingR].map((g) => g.toNonIndexed()));
+}
+
+// Head: a sphere narrowed through the cheeks into a jaw, with the chin brought forward, as one smooth surface.
+function headGeometry(narrow, lower = false) {
+  // `lower`: only the front of the jaw, from the cheekbones down (a beard)
+  const g = lower ? new THREE.SphereGeometry(0.12, 24, 10, 0, Math.PI, Math.PI * 0.56, Math.PI * 0.44) : new THREE.SphereGeometry(0.12, 28, 20);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const t = THREE.MathUtils.smoothstep(-p.getY(i) / 0.12, -0.1, 0.95);
+    p.setX(i, p.getX(i) * (1 - narrow * t));
+    p.setZ(i, p.getZ(i) + Math.max(0, p.getZ(i)) * 0.07 * t);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 // Shared geometries (built once; every character reuses them).
 const G = {
-  thigh: new THREE.CapsuleGeometry(0.072, 0.3, 4, 10),
-  shin: new THREE.CapsuleGeometry(0.06, 0.3, 4, 10),
-  shoe: new THREE.BoxGeometry(0.11, 0.08, 0.25),
-  torso: new THREE.CapsuleGeometry(0.16, 0.28, 6, 14),
+  thigh: limb(0.084, 0.064, 0.32),
+  shin: limb(0.062, 0.046, 0.32, 0.01),
+  shoe: shoeGeometry(),
+  sole: new THREE.BoxGeometry(0.108, 0.022, 0.25).translate(0, -0.069, 0.035),
+  torsoM: new THREE.LatheGeometry(TORSO.m.map(([r, y]) => new THREE.Vector2(r, y)), 20),
+  torsoF: new THREE.LatheGeometry(TORSO.f.map(([r, y]) => new THREE.Vector2(r, y)), 20),
   pelvis: new THREE.CapsuleGeometry(0.15, 0.06, 4, 12),
-  upperArm: new THREE.CapsuleGeometry(0.05, 0.2, 4, 8),
-  forearm: new THREE.CapsuleGeometry(0.043, 0.18, 4, 8),
-  hand: new THREE.SphereGeometry(0.048, 10, 8),
-  neck: new THREE.CylinderGeometry(0.05, 0.055, 0.09, 10),
-  head: new THREE.SphereGeometry(0.12, 22, 16),
-  eye: new THREE.SphereGeometry(0.021, 10, 8),
-  pupil: new THREE.SphereGeometry(0.012, 8, 6),
-  brow: new THREE.BoxGeometry(0.048, 0.009, 0.012),
-  nose: new THREE.ConeGeometry(0.016, 0.04, 6),
-  mouth: new THREE.BoxGeometry(0.05, 0.012, 0.01),
-  ear: new THREE.SphereGeometry(0.026, 8, 6),
-  hairCap: new THREE.SphereGeometry(0.128, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+  deltoid: new THREE.SphereGeometry(0.062, 12, 8),
+  upperArm: limb(0.056, 0.045, 0.22),
+  forearm: limb(0.045, 0.035, 0.18, 0.006),
+  cuff: new THREE.CylinderGeometry(0.06, 0.06, 0.035, 12, 1, true),
+  hand: handGeometry(),
+  neck: new THREE.CylinderGeometry(0.05, 0.056, 0.1, 12),
+  collar: new THREE.TorusGeometry(0.06, 0.013, 6, 18),
+  collarFlap: new THREE.CircleGeometry(0.036, 3).rotateZ(-Math.PI / 2),
+  placket: new THREE.BoxGeometry(0.014, 0.3, 0.004),
+  button: new THREE.CylinderGeometry(0.006, 0.006, 0.004, 8),
+  headM: headGeometry(0.2),
+  headF: headGeometry(0.26),
+  beard: headGeometry(0.2, true),
+  eye: new THREE.SphereGeometry(0.021, 12, 10),
+  iris: new THREE.CircleGeometry(0.0115, 14),
+  pupil: new THREE.CircleGeometry(0.0055, 10),
+  glint: new THREE.CircleGeometry(0.0028, 6),
+  lid: new THREE.SphereGeometry(0.0222, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.36),
+  brow: new THREE.CapsuleGeometry(0.0065, 0.036, 3, 6).rotateZ(Math.PI / 2),
+  nose: noseGeometry(),
+  mouth: new THREE.BoxGeometry(0.044, 0.005, 0.006),
+  lip: new THREE.CapsuleGeometry(0.0065, 0.034, 3, 8).rotateZ(Math.PI / 2),
+  ear: new THREE.SphereGeometry(0.026, 10, 8),
+  hairCap: new THREE.SphereGeometry(0.129, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
   hairBack: new THREE.SphereGeometry(0.127, 16, 10, Math.PI, Math.PI, Math.PI * 0.2, Math.PI * 0.55),
+  quiff: new THREE.SphereGeometry(0.075, 14, 10),
+  lock: new THREE.CapsuleGeometry(0.03, 0.17, 4, 8),
   ponytail: new THREE.CapsuleGeometry(0.035, 0.16, 4, 8),
   braid: new THREE.CapsuleGeometry(0.024, 0.26, 4, 6),
-  bun: new THREE.SphereGeometry(0.055, 10, 8),
+  bun: new THREE.SphereGeometry(0.055, 12, 10),
   spike: new THREE.ConeGeometry(0.03, 0.07, 5),
   belt: new THREE.CylinderGeometry(0.165, 0.165, 0.04, 16),
   tie: new THREE.BoxGeometry(0.045, 0.24, 0.012),
@@ -102,6 +196,32 @@ const skin = (color) => {
   if (!skins.has(color)) skins.set(color, new THREE.MeshPhysicalMaterial({ color, roughness: 0.6, sheen: 0.5, sheenColor: new THREE.Color('#ffc9ad'), sheenRoughness: 0.5 }));
   return skins.get(color);
 };
+// Hair: fine strands running from the crown (the v direction of the sphere caps), a little glossier than cloth.
+let strands;
+function strandTexture() {
+  if (!strands) {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 32;
+    const g = c.getContext('2d');
+    let r = 7;
+    const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+    for (let x = 0; x < 128; x++) {
+      const v = 90 + rnd() * 120;
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.fillRect(x, 0, 1, 32);
+    }
+    strands = new THREE.CanvasTexture(c);
+    strands.wrapS = strands.wrapT = THREE.RepeatWrapping;
+    strands.repeat.set(3, 1);
+  }
+  return strands;
+}
+const hairs = new Map();
+const hairMaterial = (color) => {
+  if (!hairs.has(color)) hairs.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.5, bumpMap: strandTexture(), bumpScale: 1.2 }));
+  return hairs.get(color);
+};
 const sideMat = (color) => {
   const m = cloth(color).clone();
   m.side = THREE.DoubleSide;
@@ -161,10 +281,14 @@ export class NPC {
     const accent = isStudent ? color : '#8b1e2d';
     const cast = (m) => { m.castShadow = true; m.receiveShadow = true; return m; };
 
-    // Legs (hip → knee → shoe), +z is the character's front.
+    // Legs (hip → knee → ankle → shoe), +z is the character's front.
     this.legs = [];
     this.knees = [];
+    this.ankles = [];
     const skirtStyle = isStudent && female;
+    const sporty = look.outfit === 'tracksuit' || casual;
+    const shoeMat = mat(look.outfit === 'tracksuit' ? '#f2f2f2' : casual ? ['#f2f2f2', '#d8392b', '#2b2b2b', '#e8e2d0'][hash % 4] : '#111111', { roughness: sporty ? 0.7 : 0.35 });
+    const soleMat = mat(sporty ? '#f4f1ea' : '#2a1c14', { roughness: 0.8 });
     for (const side of [-1, 1]) {
       const hip = new THREE.Group();
       hip.position.set(side * 0.095, 0.9, 0);
@@ -176,13 +300,16 @@ export class NPC {
       const shin = cast(new THREE.Mesh(G.shin, skirtStyle ? cloth('#fafafa') : trouser));
       shin.position.y = -0.2;
       knee.add(shin);
-      const shoe = cast(new THREE.Mesh(G.shoe, mat(look.outfit === 'tracksuit' ? '#f2f2f2' : casual ? ['#f2f2f2', '#d8392b', '#2b2b2b', '#e8e2d0'][hash % 4] : '#111111', { roughness: 0.4 })));
-      shoe.position.set(0, -0.43, 0.045);
-      knee.add(shoe);
+      const ankle = new THREE.Group();
+      ankle.position.y = -0.4;
+      ankle.add(new THREE.Mesh(G.shoe, shoeMat));
+      ankle.add(new THREE.Mesh(G.sole, soleMat));
+      knee.add(ankle);
       hip.add(knee);
       this.group.add(hip);
       this.legs.push(hip);
       this.knees.push(knee);
+      this.ankles.push(ankle);
     }
 
     // Torso, pelvis, belt
@@ -192,11 +319,54 @@ export class NPC {
     pelvis.position.y = 0.93;
     pelvis.scale.set(1.05, 1, 0.72);
     this.body.add(pelvis);
-    const torso = cast(new THREE.Mesh(G.torso, shirt));
-    torso.position.y = 1.2;
-    torso.scale.set(female ? 0.98 : 1.08, 1, 0.68);
+    const kind = female ? 'f' : 'm';
+    const front = (y, off = 0.006) => frontZ(kind, y) + off;
+    const torso = cast(new THREE.Mesh(female ? G.torsoF : G.torsoM, shirt));
+    torso.position.y = TORSO_Y;
+    torso.scale.set(female ? 1.0 : 1.1, 1, TORSO_DEPTH);
     this.body.add(torso);
     this.torso = torso;
+    const trim = new THREE.Group();
+    this.body.add(trim);
+    this.trim = trim;
+    // Shirts get a collar; the ones without a tie show a button placket.
+    const shirted = isStudent || look.outfit === 'guard' || look.outfit === 'formal';
+    if (shirted || look.outfit === 'labcoat') {
+      const collarMat = look.outfit === 'labcoat' ? cloth('#f4f4f4') : shirt;
+      const ring = cast(new THREE.Mesh(G.collar, collarMat));
+      ring.position.set(0, 1.482, 0.004);
+      ring.rotation.x = Math.PI / 2 + 0.15;
+      ring.scale.set(1.08, 0.95, 1);
+      trim.add(ring);
+      // the two collar points, lying on the slope of the chest either side of the neck
+      for (const side of [-1, 1]) {
+        const flap = new THREE.Mesh(G.collarFlap, sideMat(shirted ? shirtColor : '#f4f4f4'));
+        flap.position.set(side * 0.03, 1.452, front(1.452, 0.004));
+        flap.rotation.set(-0.95, 0, side * 0.35);
+        trim.add(flap);
+      }
+    }
+    const tieless = look.outfit === 'guard' || (look.outfit === 'formal' && female);
+    if (tieless) {
+      const placket = new THREE.Mesh(G.placket, cloth(new THREE.Color(shirtColor).offsetHSL(0, 0, -0.06).getStyle()));
+      placket.position.set(0, 1.27, front(1.27, 0.0));
+      placket.rotation.x = 0.06;
+      trim.add(placket);
+      const btn = mat('#e8e2d2', { roughness: 0.4 });
+      for (const y of [1.17, 1.25, 1.33, 1.41]) {
+        const b = new THREE.Mesh(G.button, btn);
+        b.position.set(0, y, front(y, 0.003));
+        b.rotation.x = Math.PI / 2;
+        trim.add(b);
+      }
+    }
+    if (look.outfit === 'guard') {
+      for (const side of [-1, 1]) {
+        const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.075, 0.008), cloth('#a68c57'));
+        pocket.position.set(side * 0.075, 1.3, front(1.3, 0.001));
+        trim.add(pocket);
+      }
+    }
     if (look.outfit !== 'saree' && look.outfit !== 'kurta' && !casual) {
       const belt = new THREE.Mesh(G.belt, mat('#1b1b1b', { roughness: 0.5 }));
       belt.position.y = 1.0;
@@ -213,15 +383,20 @@ export class NPC {
         this.body.add(skirt);
       }
       const tie = new THREE.Mesh(G.tie, cloth(accent));
-      tie.position.set(0, 1.23, 0.112);
-      tie.rotation.x = -0.12;
+      tie.position.set(0, 1.3, front(1.3));
+      tie.scale.y = 1.12;
+      tie.rotation.x = 0.06;
       this.body.add(tie);
+      const knot = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.03, 0.02), cloth(accent));
+      knot.position.set(0, 1.452, front(1.452, 0.01));
+      knot.rotation.x = 0.3;
+      trim.add(knot);
       const card = new THREE.Mesh(G.card, mat('#ffffff'));
-      card.position.set(0.075, 1.18, 0.115);
-      this.body.add(card);
+      card.position.set(0.075, 1.18, front(1.18, 0.005));
+      trim.add(card);
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.009), cloth('#1d4fa0'));
-      band.position.set(0.075, 1.21, 0.117);
-      this.body.add(band);
+      band.position.set(0.075, 1.21, front(1.21, 0.007));
+      trim.add(band);
       const bag = cast(new THREE.Mesh(G.bag, cloth(accent)));
       bag.position.set(0, 1.17, -0.17);
       this.body.add(bag);
@@ -241,7 +416,7 @@ export class NPC {
       border.scale.set(1, 1, 0.82);
       this.body.add(border);
       const pallu = cast(new THREE.Mesh(G.pallu, sideMat(color)));
-      pallu.position.set(0.0, 1.2, 0.114);
+      pallu.position.set(0.0, 1.2, front(1.2, 0.01));
       pallu.rotation.z = 0.7;
       this.body.add(pallu);
       const palluBack = cast(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.02), sideMat(color)));
@@ -263,18 +438,25 @@ export class NPC {
         this.body.add(dupatta);
       }
     } else if (look.outfit === 'labcoat') {
+      // the coat is the white top itself, its skirt hanging from the waist to the knees
       const coat = cast(new THREE.Mesh(G.coat, sideMat('#f4f4f4')));
-      coat.position.y = 0.98;
+      coat.position.y = 0.76;
       coat.scale.set(1.05, 1, 0.78);
       this.body.add(coat);
       const inner = new THREE.Mesh(G.tie, cloth(color));
       inner.scale.set(1.6, 1, 1);
-      inner.position.set(0, 1.25, 0.112);
+      inner.position.set(0, 1.25, front(1.25, 0.002));
       this.body.add(inner);
     } else if (look.outfit === 'formal' && look.gender === 'm') {
       const tie = new THREE.Mesh(G.tie, cloth('#2a3a6a'));
-      tie.position.set(0, 1.23, 0.112);
+      tie.position.set(0, 1.3, front(1.3));
+      tie.scale.y = 1.12;
+      tie.rotation.x = 0.06;
       this.body.add(tie);
+      const knot = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.03, 0.02), cloth('#2a3a6a'));
+      knot.position.set(0, 1.452, front(1.452, 0.01));
+      knot.rotation.x = 0.3;
+      trim.add(knot);
     } else if (casual) {
       if (kurtaTop) {
         const tunic = cast(new THREE.Mesh(G.tunic, sideMat(color)));
@@ -288,7 +470,7 @@ export class NPC {
         hem.scale.set(1.05, 1, 0.72);
         this.body.add(hem);
         const print = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.08, 0.01), cloth(new THREE.Color(color).offsetHSL(0.45, 0.1, hash % 2 ? 0.25 : -0.2).getStyle()));
-        print.position.set(0, 1.25, 0.112);
+        print.position.set(0, 1.25, front(1.25, 0.004));
         this.body.add(print);
       }
       if (hoodie) {
@@ -299,7 +481,7 @@ export class NPC {
         this.body.add(hood);
         for (const sx of [-0.04, 0.04]) {
           const cord = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.1, 0.008), mat('#f2f2f2'));
-          cord.position.set(sx, 1.3, 0.113);
+          cord.position.set(sx, 1.3, front(1.3, 0.006));
           this.body.add(cord);
         }
       }
@@ -314,10 +496,10 @@ export class NPC {
       }
     } else if (look.outfit === 'tracksuit') {
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.3, 0.012), mat('#ffffff'));
-      stripe.position.set(0, 1.2, 0.113);
+      stripe.position.set(0, 1.2, front(1.2, 0.006));
       this.body.add(stripe);
       const whistle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.05), mat('#c9c9c9', { metalness: 0.8, roughness: 0.3 }));
-      whistle.position.set(0.03, 1.12, 0.12);
+      whistle.position.set(0.03, 1.12, front(1.12, 0.022));
       this.body.add(whistle);
     }
 
@@ -329,17 +511,33 @@ export class NPC {
     for (const side of [-1, 1]) {
       const shoulder = new THREE.Group();
       shoulder.position.set(side * 0.215, 1.38, 0);
-      const upper = cast(new THREE.Mesh(G.upperArm, sleeve));
+      // a rounded shoulder cap fills the gap between the torso and the arm
+      const deltoid = new THREE.Mesh(G.deltoid, sleeve);
+      deltoid.position.set(-side * 0.008, -0.012, 0);
+      deltoid.scale.set(1, 0.95, 0.92);
+      shoulder.add(deltoid);
+      const upper = cast(new THREE.Mesh(G.upperArm, longSleeves ? sleeve : skinMat));
       upper.position.y = -0.14;
       shoulder.add(upper);
+      if (!longSleeves) {
+        // a short sleeve, open at the hem, over the top half of the arm
+        const short = new THREE.Mesh(G.cuff, sleeve);
+        short.scale.set(1.08, 3.4, 1.08);
+        short.position.y = -0.07;
+        shoulder.add(short);
+      }
       const elbow = new THREE.Group();
       elbow.position.y = -0.29;
       const fore = cast(new THREE.Mesh(G.forearm, longSleeves ? sleeve : skinMat));
       fore.position.y = -0.12;
       elbow.add(fore);
-      const hand = new THREE.Mesh(G.hand, skinMat);
-      hand.position.y = -0.26;
-      elbow.add(hand);
+      if (longSleeves) {
+        const cuff = new THREE.Mesh(G.cuff, sleeve);
+        cuff.scale.set(0.78, 1, 0.78);
+        cuff.position.y = -0.2;
+        elbow.add(cuff);
+      }
+      elbow.add(new THREE.Mesh(G.hand, skinMat));
       shoulder.add(elbow);
       shoulder.rotation.z = side * 0.06;
       this.body.add(shoulder);
@@ -355,52 +553,82 @@ export class NPC {
     head.position.y = 1.6;
     this.body.add(head);
     this.head = head;
-    const skull = cast(new THREE.Mesh(G.head, skinMat));
+    const skull = cast(new THREE.Mesh(female ? G.headF : G.headM, skinMat));
     skull.scale.set(0.95, 1.08, 1);
     head.add(skull);
+    const face = new THREE.Group();
+    head.add(face);
+    this.face = face;
+    // Eyes: white, a brown iris, the pupil and a catch-light, under a skin-coloured upper lid that also blinks.
+    this.eyes = [];
+    this.blinkIn = 1 + Math.random() * 3;
     for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(G.eye, mat('#fbfbf8', { roughness: 0.3 }));
-      eye.position.set(side * 0.042, 0.018, 0.1);
-      eye.scale.set(1, 0.85, 0.6);
-      head.add(eye);
-      const pupil = new THREE.Mesh(G.pupil, mat('#1b120c', { roughness: 0.2 }));
-      pupil.position.set(side * 0.042, 0.017, 0.113);
-      head.add(pupil);
-      const brow = new THREE.Mesh(G.brow, mat(look.hair === 'grey' ? '#9a9a9a' : HAIR));
-      brow.position.set(side * 0.043, 0.055, 0.108);
-      brow.rotation.z = side * -0.12;
-      head.add(brow);
+      const eye = new THREE.Group();
+      eye.position.set(side * 0.042, 0.016, 0.1);
+      face.add(eye);
+      this.eyes.push(eye);
+      const ball = new THREE.Mesh(G.eye, mat('#f3eee6', { roughness: 0.25 }));
+      ball.scale.set(1, 0.82, 0.62);
+      eye.add(ball);
+      const iris = new THREE.Mesh(G.iris, mat('#3d2516', { roughness: 0.3 }));
+      iris.position.z = 0.0131;
+      eye.add(iris);
+      const pupil = new THREE.Mesh(G.pupil, mat('#0b0705', { roughness: 0.2 }));
+      pupil.position.z = 0.0133;
+      eye.add(pupil);
+      const glint = new THREE.Mesh(G.glint, mat('#ffffff', { emissive: '#ffffff' }));
+      glint.position.set(0.0035, 0.0038, 0.0135);
+      eye.add(glint);
+      const lid = new THREE.Mesh(G.lid, skinMat);
+      lid.scale.set(1.04, 0.9, 0.68);
+      lid.rotation.x = -0.12;
+      eye.add(lid);
+      const brow = new THREE.Mesh(G.brow, mat(look.hair === 'grey' ? '#9a9a9a' : HAIR, { roughness: 0.9 }));
+      brow.position.set(side * 0.044, 0.056, 0.104);
+      brow.rotation.set(-0.25, side * 0.25, side * -0.1);
+      brow.scale.set(1, female ? 0.75 : 1.1, 0.8);
+      face.add(brow);
       const ear = new THREE.Mesh(G.ear, skinMat);
-      ear.position.set(side * 0.116, 0, 0);
-      ear.scale.set(0.6, 1, 0.8);
+      ear.position.set(side * 0.114, 0, -0.004);
+      ear.scale.set(0.55, 1, 0.8);
       head.add(ear);
       if (look.glasses) {
         const lens = new THREE.Mesh(G.lens, mat('#1a1a1a', { metalness: 0.6, roughness: 0.3 }));
-        lens.position.set(side * 0.043, 0.017, 0.118);
-        head.add(lens);
+        lens.position.set(side * 0.042, 0.016, 0.119);
+        face.add(lens);
       }
     }
     if (look.glasses) {
       const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.004, 0.004), mat('#1a1a1a'));
-      bridge.position.set(0, 0.022, 0.12);
-      head.add(bridge);
+      bridge.position.set(0, 0.02, 0.121);
+      face.add(bridge);
     }
     const nose = new THREE.Mesh(G.nose, skinMat);
-    nose.position.set(0, -0.008, 0.118);
-    nose.rotation.x = Math.PI / 2.2;
-    head.add(nose);
-    this.mouth = new THREE.Mesh(G.mouth, mat('#7a2a24', { roughness: 0.5 }));
-    this.mouth.position.set(0, -0.05, 0.108);
-    head.add(this.mouth);
+    nose.position.set(0, -0.004, 0.111);
+    face.add(nose);
+    // Mouth: a dark line between two lips a shade deeper than the skin.
+    const lipMat = mat('#' + new THREE.Color(SKINS[skinIndex % SKINS.length]).lerp(new THREE.Color('#8a3a36'), 0.45).getHexString(), { roughness: 0.55 });
+    this.mouth = new THREE.Mesh(G.mouth, mat('#3e1512', { roughness: 0.6 }));
+    this.mouth.position.set(0, -0.052, 0.1135);
+    face.add(this.mouth);
+    const upperLip = new THREE.Mesh(G.lip, lipMat);
+    upperLip.position.set(0, -0.0482, 0.1115);
+    upperLip.scale.set(1, 0.5, 0.6);
+    face.add(upperLip);
+    this.lowerLip = new THREE.Mesh(G.lip, lipMat);
+    this.lowerLip.position.set(0, -0.0565, 0.111);
+    this.lowerLip.scale.set(0.85, female ? 0.75 : 0.62, 0.65);
+    face.add(this.lowerLip);
     if (look.mustache) {
       const m = new THREE.Mesh(G.mustache, mat(look.hair === 'grey' ? '#8a8a8a' : HAIR));
-      m.position.set(0, -0.032, 0.115);
-      head.add(m);
+      m.position.set(0, -0.04, 0.116);
+      m.scale.set(1.1, 1.3, 1);
+      face.add(m);
     }
     if (female && !isStudent) {
-      const bindi = new THREE.Mesh(new THREE.SphereGeometry(0.007, 6, 4), mat('#c0132a'));
-      bindi.position.set(0, 0.04, 0.121);
-      head.add(bindi);
+      const bindi = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), mat('#c0132a'));
+      bindi.position.set(0, 0.045, 0.114);
+      face.add(bindi);
     }
     this.buildHair(head, look);
 
@@ -417,12 +645,12 @@ export class NPC {
   }
 
   buildHair(head, look) {
-    const hairMat = mat(look.hair === 'grey' ? '#8e8e8e' : HAIR, { roughness: 0.75 });
-    const add = (geo, x, y, z, sx = 1, sy = 1, sz = 1, rx = 0) => {
+    const hairMat = hairMaterial(look.hair === 'grey' ? '#8e8e8e' : HAIR);
+    const add = (geo, x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, rz = 0) => {
       const m = new THREE.Mesh(geo, hairMat);
       m.position.set(x, y, z);
       m.scale.set(sx, sy, sz);
-      m.rotation.x = rx;
+      m.rotation.set(rx, 0, rz);
       m.castShadow = true;
       head.add(m);
       return m;
@@ -437,15 +665,23 @@ export class NPC {
       fold.position.set(0, 0.06, 0.02);
       fold.rotation.x = Math.PI / 2 - 0.35;
       head.add(fold);
-      const beard = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), hairMat);
-      beard.position.set(0, -0.02, 0.012);
+      const beard = new THREE.Mesh(G.beard, hairMat);
+      beard.scale.set(0.95 * 1.06, 1.08 * 1.05, 1.07);
       head.add(beard);
       return;
     }
-    add(G.hairCap, 0, 0.012, -0.004, 1, 1.02, 1.05, -0.18);
-    if (look.hair === 'spiky') for (let i = 0; i < 7; i++) add(G.spike, Math.cos(i) * 0.05, 0.12, Math.sin(i) * 0.05 - 0.01, 1, 1, 1, -0.3);
-    if (['long', 'ponytail', 'braids', 'bun'].includes(look.hair)) add(G.hairBack, 0, -0.01, -0.012, 1.02, 1.05, 1.02);
-    if (look.hair === 'long') add(new THREE.BoxGeometry(0.22, 0.26, 0.05), 0, -0.13, -0.085);
+    // The cap is tipped back so the hairline sits above the brows at the front and low at the nape.
+    add(G.hairCap, 0, 0.01, -0.008, 1.05, 1.12, 1.08, -0.5);
+    const tied = ['long', 'ponytail', 'braids', 'bun'].includes(look.hair);
+    if (look.hair === 'short' || look.hair === 'grey') add(G.quiff, 0.018, 0.098, 0.03, 1.38, 0.52, 1.05, 0, -0.12); // a side-swept front
+    if (look.hair === 'spiky') for (let i = 0; i < 7; i++) add(G.spike, Math.cos(i) * 0.05, 0.13, Math.sin(i) * 0.05 - 0.01, 1, 1, 1, -0.3);
+    if (tied) {
+      add(G.hairBack, 0, -0.01, -0.012, 1.04, 1.06, 1.04);
+    }
+    if (look.hair === 'long') {
+      add(G.lock, 0, -0.12, -0.08, 3.4, 1.3, 1.4);
+      for (const side of [-1, 1]) add(G.lock, side * 0.104, -0.07, 0.02, 0.9, 0.95, 0.75, 0, side * 0.08); // framing the face
+    }
     if (look.hair === 'ponytail') add(G.ponytail, 0, -0.06, -0.15, 1, 1, 1, 0.5);
     if (look.hair === 'braids') {
       add(G.braid, -0.085, -0.17, -0.05, 1, 1, 1, 0.12);
@@ -536,6 +772,14 @@ export class NPC {
   }
 
   animate(dt, walking, baseY = 0) {
+    if (viewer) {
+      const near = this.group.position.distanceToSquared(viewer) < DETAIL_RANGE * DETAIL_RANGE;
+      if (near !== this.detailed) {
+        this.detailed = near;
+        this.face.visible = near;
+        this.trim.visible = near;
+      }
+    }
     if (this.gait === 'ride' || this.gait === 'bikeIdle') return this.animateRide(dt, baseY);
     const running = walking && this.gait === 'run';
     // legs keep pace with the ground: one cycle (two steps) covers ~1.9 m walking, ~2.9 m running, for a 1.72 m adult
@@ -573,15 +817,42 @@ export class NPC {
       this.elbows[0].rotation.x = -0.9;
       this.elbows[1].rotation.x = -0.9;
     }
+    // The upper body counter-twists against the stride and rolls a little over the standing leg; standing,
+    // the weight drifts slowly from foot to foot. The head turns back so the gaze stays steady.
+    const twist = walking && !this.seated ? -swing * (running ? 0.16 : 0.12) : 0;
+    this.body.rotation.y = twist;
+    this.body.rotation.z = this.seated ? 0 : walking ? Math.cos(this.phase) * 0.025 : Math.sin(this.breath * 0.23) * 0.012;
+    this.feet(walking);
     if (this.singing) {
       this.singT += dt * 7;
-      this.mouth.scale.set(1, 1 + 2.6 * Math.abs(Math.sin(this.singT)), 1);
+      const open = Math.abs(Math.sin(this.singT));
+      this.mouth.scale.set(1, 1 + 3.2 * open, 1);
+      this.lowerLip.position.y = -0.057 - open * 0.007;
       this.head.rotation.x = Math.sin(this.singT * 0.25) * 0.05;
     } else {
       this.mouth.scale.set(1, 1, 1);
+      this.lowerLip.position.y = -0.057;
       this.head.rotation.x = 0;
     }
-    this.head.rotation.y = this.headYaw;
+    this.head.rotation.y = this.headYaw - twist * 0.8;
+    this.blink(dt);
+  }
+
+  // Feet stay level with the ground whatever the hip and knee are doing, then roll heel-to-toe in the stride.
+  feet(walking, keep = 1) {
+    for (const i of [0, 1]) {
+      const leg = this.legs[i].rotation.x;
+      this.ankles[i].rotation.x = -(leg + this.knees[i].rotation.x) * keep + (walking ? leg * 0.4 : 0);
+    }
+  }
+
+  // A blink every few seconds: the eyes close for a tenth of a second.
+  blink(dt) {
+    this.blinkIn -= dt;
+    if (this.blinkIn < -0.11) this.blinkIn = 2 + Math.random() * 4;
+    const y = this.blinkIn < 0 ? 0.12 : 1;
+    this.eyes[0].scale.y = y;
+    this.eyes[1].scale.y = y;
   }
 
   // Tilt the upper body forward around the hips (the legs hang from the root, not from the body).
@@ -605,9 +876,14 @@ export class NPC {
       this.arms[i].rotation.x = -1.05;
       this.elbows[i].rotation.x = -0.35;
     }
+    this.body.rotation.y = 0;
+    this.body.rotation.z = 0;
+    this.feet(false, 0.7);
     this.mouth.scale.set(1, 1, 1);
+    this.lowerLip.position.y = -0.057;
     this.head.rotation.x = -0.25;
     this.head.rotation.y = 0;
+    this.blink(dt);
   }
 
   // Drive this model from the player (third-person avatar).

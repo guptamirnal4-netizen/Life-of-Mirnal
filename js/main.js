@@ -8,7 +8,7 @@ import { Cinematic } from './cinematic/cinematic.js';
 import { GraphicsEngine } from './graphics/GraphicsEngine.js';
 import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
-import { NPC, NPCManager, Ball, studentHeight, RIDE_LIFT } from './world/npcs.js';
+import { NPC, NPCManager, Ball, studentHeight, RIDE_LIFT, setDetailViewer } from './world/npcs.js';
 import { ANTHEM_LINES, ANTHEM_DURATION, ANTHEM_AUDIO_URL, LYRIC_WORDS } from '../data/anthem.js';
 import { openAnthemPractice } from './ui/anthempractice.js';
 import { createState, ensureYear, activeClassmates, adjustFriend, newDay, newSem, TIME_SPEEDS, FAST_FORWARD } from './core/state.js';
@@ -35,6 +35,7 @@ const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 300);
+setDetailViewer(camera.position); // faces and shirt trims are drawn only near the camera
 // Pixel ratio, resizing, tone mapping, shadows and quality profiles: js/graphics/ (created below, once the campus exists).
 
 initUI();
