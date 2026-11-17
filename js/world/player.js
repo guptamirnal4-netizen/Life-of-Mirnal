@@ -170,8 +170,9 @@ export class Player {
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }
 
+  // groundAt(x, z): the bare ground's height (0, or lower in a sunken court); set by the world in use.
   floorAt(colliders) {
-    let floor = 0;
+    let floor = this.groundAt ? this.groundAt(this.pos.x, this.pos.z) : 0;
     for (const c of colliders) {
       if (!c.walkable || !c.enabled) continue;
       if (this.pos.x > c.minX && this.pos.x < c.maxX && this.pos.z > c.minZ && this.pos.z < c.maxZ && this.pos.y >= c.maxY - 0.7) {

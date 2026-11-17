@@ -12,6 +12,8 @@ import { Hostel, WALK_IN, entranceOrder, mergeShells } from './hostel.js';
 import { CombHostel, COMB } from './comb-hostel.js';
 import { COUNTER_FOOD } from '../../data/mess.js';
 import { crownGeometry } from './foliage.js';
+import { BUILDING_MODULES } from './buildings/registry.js';
+import { Kit, fitFrame } from './buildings/kit.js';
 
 const CHUNK = 150;
 const chunkKey = (x, z) => `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
@@ -238,17 +240,22 @@ export class BitsCampus extends Campus {
     this.roadGrid = new Map();
     for (const s of this.roadSegs) this.gridInsert(this.roadGrid, bbox([s.a, s.b]), s, 40);
 
-    this.buildGround();
-    this.buildAreas();
-    this.buildRoads();
+    this.pits = [];
+    const q = typeof location === 'undefined' ? new URLSearchParams() : new URLSearchParams(location.search);
+    const only = q.get('only')?.split(',');
+    this.activeModules = q.has('nomodules') ? [] : BUILDING_MODULES.filter((m) => m.enabled && (!only || only.includes(m.id)));
     this.placeRooms();
     this.planPassages();
     for (const H of this.hostels) H.build();
     mergeShells(this.hostels, this.root);
+    this.buildModules();
+    this.buildGround();
+    this.buildAreas();
+    this.buildRoads();
     this.buildBuildings();
     this.buildPassages();
-    this.buildRotunda();
-    this.buildClockTowerAt();
+    if (!this.owned.has('rotunda')) this.buildRotunda();
+    if (!this.owned.has('clockTower')) this.buildClockTowerAt();
     this.buildTemple();
     this.buildShivGanga();
     this.buildGymkhana();
@@ -395,13 +402,14 @@ export class BitsCampus extends Campus {
     return g;
   }
 
+  // The ground plane, with a hole over every sunken court (pits) the detailed buildings dig.
   buildGround() {
-    const g = new THREE.PlaneGeometry(3400, 3600);
+    const [x0, x1, z0, z1] = [140 - 1700, 140 + 1700, 500 - 1800, 500 + 1800];
+    const g = this.pits.length ? this.flatShape([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], this.pits.map((p) => p.poly), 0, 1) : new THREE.PlaneGeometry(3400, 3600).rotateX(-Math.PI / 2).translate(140, 0, 500);
     const uv = g.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * 3400) / TEX_SIZE.dirt, (uv.getY(i) * 3600) / TEX_SIZE.dirt);
+    const pos = g.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / TEX_SIZE.dirt, -pos.getZ(i) / TEX_SIZE.dirt);
     const m = new THREE.Mesh(g, tiledMaterial('dirt', '#f0dcb4'));
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(140, 0, 500);
     m.receiveShadow = true;
     this.root.add(m);
   }
@@ -413,7 +421,10 @@ export class BitsCampus extends Campus {
       const key = a.kind === 'pitch' && COURT_SPORTS.has(a.sport) ? 'court' : a.kind;
       const [cx, cz] = centroid(a.poly);
       const tile = key === 'track' ? TEX_SIZE.dirt : TEX_SIZE.grass;
-      this.addShape(key, cx, cz, this.flatShape(a.poly, [], Y[a.kind] ?? 0.02, tile));
+      const holes = this.pits.filter((p) => p.poly.every(([x, z]) => inPoly(x, z, a.poly))).map((p) => p.poly);
+      const cut = this.pits.filter((p) => !holes.includes(p.poly) && (p.poly.some(([x, z]) => inPoly(x, z, a.poly)) || a.poly.some(([x, z]) => inPoly(x, z, p.poly))));
+      if (cut.length) console.warn(`[pits] area ${a.name || a.kind} partly overlaps a sunken court; drawn whole`);
+      this.addShape(key, cx, cz, this.flatShape(a.poly, holes, Y[a.kind] ?? 0.02, tile));
     }
   }
 
@@ -462,7 +473,8 @@ export class BitsCampus extends Campus {
   // Place an axis-aligned room inside the host so its door wall sits just inside the host's facade.
   // The facade is measured on the door's own line (doorOff from the room's corner), the corridor from the door
   // to the facade must stay inside the host, and the door must open onto open ground, not another building.
-  fitRoom(host, w, d, side, used, doorOff) {
+  // prefer: a point [x, z] to place the room near (along the facade) instead of the middle.
+  fitRoom(host, w, d, side, used, doorOff, prefer = null) {
     const bb = host.bb;
     const ok = (x0, z0) => {
       for (let t = 0; t <= 1.0001; t += 0.125) {
@@ -474,7 +486,7 @@ export class BitsCampus extends Campus {
     };
     let best = null;
     const along = side === 'south' || side === 'north' ? [bb.minX, bb.maxX] : [bb.minZ, bb.maxZ];
-    const mid = (along[0] + along[1]) / 2;
+    const mid = prefer ? (side === 'south' || side === 'north' ? prefer[0] : prefer[1]) : (along[0] + along[1]) / 2;
     const cands = [];
     for (let v = along[0] + 1; v <= along[1] - 1; v += 1) cands.push(v);
     cands.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
@@ -517,17 +529,21 @@ export class BitsCampus extends Campus {
     const usedByHost = new Map();
     const school = Object.fromEntries([...ROOMS, ...BITS_ROOMS].map((r) => [r.id, r]));
     this.rooms = {};
-    for (const [id, cfg] of Object.entries(ROOM_HOSTS)) {
+    // A detailed building module may move a gameplay room (rooms: { id: { host, near: [x, z], y } }); y lowers it
+    // into a sunken floor (the module digs the pit it stands in).
+    const moved = Object.fromEntries(this.activeModules.flatMap((m) => Object.entries(m.rooms || {})));
+    for (const [id, base] of Object.entries(ROOM_HOSTS)) {
+      const cfg = { ...base, ...(moved[id] || {}) };
       const s = school[id];
       const host = this.findBuilding(cfg.host);
       const w = s.x1 - s.x0; const d = s.z1 - s.z0;
       const used = usedByHost.get(host) || [];
       const horizDoor = s.door.side === 'south' || s.door.side === 'north';
-      const fit = this.fitRoom(host, w, d, s.door.side, used, s.door.at - (horizDoor ? s.x0 : s.z0));
+      const fit = this.fitRoom(host, w, d, s.door.side, used, s.door.at - (horizDoor ? s.x0 : s.z0), cfg.near);
       if (!fit) throw new Error(`Room ${id} does not fit in ${cfg.host}`);
       const dx = fit.x0 - s.x0; const dz = fit.z0 - s.z0;
       const horiz = s.door.side === 'south' || s.door.side === 'north';
-      const r = { ...s, name: cfg.name, x0: fit.x0, x1: fit.x0 + w, z0: fit.z0, z1: fit.z0 + d, door: { side: s.door.side, at: s.door.at + (horiz ? dx : dz) }, host: cfg.host };
+      const r = { ...s, name: cfg.name, y0: cfg.y || 0, x0: fit.x0, x1: fit.x0 + w, z0: fit.z0, z1: fit.z0 + d, door: { side: s.door.side, at: s.door.at + (horiz ? dx : dz) }, host: cfg.host };
       used.push(r);
       usedByHost.set(host, used);
       this.rooms[id] = r;
@@ -548,7 +564,7 @@ export class BitsCampus extends Campus {
       r.exit = new THREE.Vector3(ex[0], 0, ex[1]);
       this.hostCuts.get(host).push(cut);
     }
-    for (const r of this.roomList) this.buildRoom(r);
+    for (const r of this.roomList) this.withOffset(0, 0, () => this.buildRoom(r), r.y0);
     // Interiors (school coordinates) moved into place
     const interior = { classroom: 'interiorClassroomDado', staffroom: 'interiorStaffroom', principal: 'interiorPrincipal', library: 'interiorLibrary', sciencelab: 'interiorLab', complab: 'interiorComplab', auditorium: 'interiorAuditorium', reception: 'interiorReception', classroomB: 'interiorClassroomB' };
     for (const [id, fn] of Object.entries(interior)) {
@@ -556,7 +572,7 @@ export class BitsCampus extends Campus {
       this.withOffset(dx, dz, () => {
         this.roomLights(school[id]);
         this[fn]();
-      });
+      }, this.rooms[id].y0);
     }
     this.interiorMess(this.rooms.mess);
     this.roomRefs = this.rooms;
@@ -707,19 +723,19 @@ export class BitsCampus extends Campus {
   }
 
   // Run school-coordinate building code, then shift everything it created by (dx, dz).
-  withOffset(dx, dz, fn) {
+  withOffset(dx, dz, fn, dy = 0) {
     const prev = this.scene;
     const g = new THREE.Group();
-    g.position.set(dx, 0, dz);
+    g.position.set(dx, dy, dz);
     prev.add(g);
     this.scene = g;
     const c0 = this.colliders.length;
     const i0 = this.interactables.length;
     const before = new Map(Object.entries(this.spots));
     try { fn(); } finally { this.scene = prev; }
-    for (const c of this.colliders.slice(c0)) { c.minX += dx; c.maxX += dx; c.minZ += dz; c.maxZ += dz; }
-    for (const it of this.interactables.slice(i0)) { it.pos.x += dx; it.pos.z += dz; }
-    const shift = (v) => { if (v instanceof THREE.Vector3) { v.x += dx; v.z += dz; } else if (Array.isArray(v)) v.forEach(shift); };
+    for (const c of this.colliders.slice(c0)) { c.minX += dx; c.maxX += dx; c.minZ += dz; c.maxZ += dz; c.minY += dy; c.maxY += dy; }
+    for (const it of this.interactables.slice(i0)) { it.pos.x += dx; it.pos.z += dz; it.pos.y += dy; }
+    const shift = (v) => { if (v instanceof THREE.Vector3) { v.x += dx; v.y += dy; v.z += dz; } else if (Array.isArray(v)) v.forEach(shift); };
     for (const [k, v] of Object.entries(this.spots)) if (before.get(k) !== v) shift(v);
     return g;
   }
@@ -758,10 +774,47 @@ export class BitsCampus extends Campus {
   }
 
   // ---------- buildings ----------
+  // The detailed buildings (js/world/buildings/registry.js). ?nomodules leaves them all as plain blocks and
+  // ?only=<id,id> builds just those. A module that fails falls back to its plain block, so the campus still loads.
+  buildModules() {
+    this.modules = [];
+    this.owned = new Set();
+    for (const m of this.activeModules) {
+      const bs = m.osm.map((n) => this.findBuilding(n));
+      if (bs.some((b) => !b)) { console.error(`[building ${m.id}] missing OSM footprint`, m.osm); continue; }
+      const kit = new Kit(this, m.id, m.frame ? m.frame(bs) : fitFrame(bs[0].outer));
+      const c0 = this.colliders.length; const i0 = this.interactables.length; const p0 = this.pits.length;
+      const ctx = { campus: this, buildings: bs, rooms: this.roomList.filter((r) => m.osm.includes(r.host)), cuts: bs.flatMap((b) => this.hostCuts.get(b) || []), passages: this.passages.filter((p) => m.osm.includes(p.host)), D };
+      try {
+        m.build(kit, ctx);
+        kit.finish();
+      } catch (e) {
+        console.error(`[building ${m.id}] failed, using the plain block:`, e);
+        this.colliders.length = c0; this.interactables.length = i0; this.pits.length = p0;
+        for (const g of [...Object.values(kit.groups), ...(kit.sprites || [])]) g.removeFromParent();
+        continue;
+      }
+      for (const b of bs) b.module = m.id;
+      for (const o of m.owns || []) this.owned.add(o);
+      this.modules.push({ m, kit });
+    }
+  }
+
+  // Height of the bare ground at (x, z): 0, or the floor of a sunken court.
+  groundAt(x, z) {
+    for (const p of this.pits) if (x > p.minX && x < p.maxX && z > p.minZ && z < p.maxZ && inPoly(x, z, p.poly)) return p.y;
+    return 0;
+  }
+
+  // The detailed building (module and kit) whose footprint holds (x, z), if any.
+  moduleAt(x, z, pad = 0) {
+    return (this.modules || []).find(({ kit }) => kit.distance(x, z) <= pad) || null;
+  }
+
   buildBuildings() {
     const skip = new Set(['Saraswati Temple']);
     for (const b of this.buildings) {
-      if (skip.has(b.name)) continue;
+      if (skip.has(b.name) || b.module) continue;
       const kind = facadeOf(b);
       const fac = facadeMaterial(kind);
       const h = b.inCampus ? b.h : Math.min(b.h, 7);
@@ -1688,6 +1741,7 @@ export class BitsCampus extends Campus {
   buildNav() {
     this.nav = new NavGraph(D.roads, (x, z) => this.npcBlocked(x, z));
     for (const p of this.passages) this.nav.addLink(p.a, p.b);
+    for (const { kit } of this.modules) for (const [a, b] of kit.navLinks) this.nav.addLink(a, b);
     // Everywhere people stand or arrive, plus the straight line to their road, stays free of trees.
     const spots = [];
     const visit = (v) => { if (v instanceof THREE.Vector3) spots.push(v); else if (Array.isArray(v)) v.forEach(visit); };
@@ -1720,6 +1774,7 @@ export class BitsCampus extends Campus {
     }
     this.nearPos = playerPos;
     for (const H of this.hostels) H.update(dt, playerPos);
+    for (const { kit } of this.modules) kit.update(dt, playerPos);
     // clustered tree crowns within ~70 m of the camera, the simple ones beyond
     for (const c of this.treeChunks || []) {
       const b = c.box;
@@ -1733,6 +1788,14 @@ export class BitsCampus extends Campus {
       this.indoorLight.position.set(playerPos.x, playerPos.y + 2.6, playerPos.z);
       this.indoorLight.intensity = hs === 'hostelroom' && !this.hostel.lightOn ? 1.2 : 10;
       this.indoorLight.distance = 9;
+    } else if (!this.roomAt(playerPos.x, playerPos.z) && playerPos.y < 30) {
+      // inside a detailed building the same light follows you
+      const mod = this.moduleAt(playerPos.x, playerPos.z);
+      if (mod && mod.kit.zones.some((zn) => zn.group.visible)) {
+        this.indoorLight.position.set(playerPos.x, playerPos.y + 2.6, playerPos.z);
+        this.indoorLight.intensity = 10;
+        this.indoorLight.distance = 10;
+      }
     }
   }
 
@@ -1801,15 +1864,17 @@ export class BitsCampus extends Campus {
 
   rebuildClassroom(classNum, title) {
     const { dx, dz } = this.roomOffset.classroom;
-    if (!this.board) this.withOffset(dx, dz, () => this.ensureBoard());
-    this.classroomGroup.position.set(dx, 0, dz);
+    const dy = this.rooms.classroom.y0 || 0;
+    if (!this.board) this.withOffset(dx, dz, () => this.ensureBoard(), dy);
+    this.classroomGroup.position.set(dx, dy, dz);
     const keep = this.setClassroomLabel;
     this.setClassroomLabel = () => {};
     super.rebuildClassroom(Math.max(13, classNum), title);
     this.setClassroomLabel = keep;
-    for (const c of this.classroomColliders) { c.minX += dx; c.maxX += dx; c.minZ += dz; c.maxZ += dz; }
-    for (const s of this.seats) { s.pos.x += dx; s.pos.z += dz; s.desk.x += dx; s.desk.z += dz; }
+    for (const c of this.classroomColliders) { c.minX += dx; c.maxX += dx; c.minZ += dz; c.maxZ += dz; c.minY += dy; c.maxY += dy; }
+    for (const s of this.seats) { s.pos.x += dx; s.pos.y += dy; s.pos.z += dz; s.desk.x += dx; s.desk.y += dy; s.desk.z += dz; }
     this.spots.teacherFront.x += dx;
+    this.spots.teacherFront.y += dy;
     this.spots.teacherFront.z += dz;
   }
 

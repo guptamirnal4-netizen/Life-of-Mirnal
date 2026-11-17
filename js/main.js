@@ -106,6 +106,7 @@ function useWorld(kind) {
     addMainInteractables(bitsCampus, { x: 15.5 + dx, z: 38 + dz });
   }
   campus = college ? bitsCampus : schoolCampus;
+  player.groundAt = campus.groundAt ? (x, z) => campus.groundAt(x, z) : null;
   schoolRoot.visible = !college;
   if (bitsRoot) bitsRoot.visible = college;
   deskInteract = campus.deskInteract;
