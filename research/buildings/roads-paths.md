@@ -235,12 +235,12 @@ The game today renders `steps` as **flat grey path strips** with no risers [veri
 | 10 | Tour, other panoramas captured (Main Gate, Patel, Gandhi, Faculty Housing, C'not, Nagarji ki Redi, LTC, NAB, Post Office, RP Redi, Library, Admin connecting) | same | Various | Not all were inspected in detail. Patel and Gandhi were read through `gates-landmarks.md` | `RP/tour-*-strip.jpg` |
 | 11 | OSM diary, ajithranka "BITS Pilani" | https://www.openstreetmap.org/user/ajithranka/diary/38752 | Text | Roads were mapped by another contributor; trees line the roads | — |
 | 12 | OSM data in the repo | `data/bits-campus.js` | 223 ways | All coordinates, kinds, names and widths | analysis scripts: `scratchpad/rp-scripts/roads*.mjs`, `junc.mjs` |
-| 13 | Game code | `js/world/bits-world.js` `buildRoads()` (l.423), `buildLampPosts()` (l.1479), `material()` | Code | Widths, kerb, colours, lamp filter | — |
+| 13 | Game code | `js/world/bits-world.js` `buildRoads()` (l.431), `buildLampPosts()` (l.1494), `material()` | Code | Widths, kerb, colours, lamp filter | — |
 | 14 | The game, `?explore` | http://localhost:8080/?explore | Explorer overviews and walks | Current look; `lampCount = 16` | `RP/game-rotunda-overview.png`, `RP/game-bits-clock-tower-overview.png`, `RP/game-patel-overview.png`, `RP/game-gandhi-overview.png`, `RP/game-walk-ringroad-north.png`, `RP/game-walk-krishna-marg.png`, `RP/game-walk-bhagirath-marg.png`, `RP/game-walk-gate-avenue.png`, `RP/game-walk-snake-path.png` |
 
 **Not accessed:**
 
-- YouTube campus tours. No frames were sampled for this report; `hostels-krishna-gandhi.md` sampled XkDvacBC7zA and notes a cycle-lined road at 0:36.
+- YouTube campus tours. A re-check on 2026-11-17 (about 21:54) loaded https://www.youtube.com/watch?v=XkDvacBC7zA ("BITS PILANI CAMPUS TOUR (2025-2026)", 8:28), but the player showed "Something went wrong" on every seek, so no usable frame was captured and the frames were deleted. `hostels-krishna-gandhi.md` sampled the same video earlier and notes a cycle-lined road at 0:36.
 - Google Maps and Google Earth.
 - An official campus road map with road names. A web search found none.
 
@@ -261,7 +261,7 @@ The game today renders `steps` as **flat grey path strips** with no risers [veri
 
 **What is wrong:**
 
-1. **Lamp posts: 16 in the whole world.** `buildLampPosts()` skips `service`, and every in-campus road is `service`. The posts it does place are a generic 6.6 m grey pole with an arm. The real campus has 8–10 m grey avenue poles about every 30–40 m on both or alternate sides, plus white lantern posts at junctions and hostel fronts [verified].
+1. **Lamp posts: 16 in the whole world.** `buildLampPosts()` skips `service`, and every in-campus road is `service`. The posts it does place are a generic 6.6 m grey pole with an arm, and the head is warm (`#fff4d6`, emissive `#6b5a2a`) where the real night view is cool-white [verified: code l.1516–1521]. The real campus has 8–10 m grey avenue poles about every 30–40 m on both or alternate sides, plus white lantern posts at junctions and hostel fronts [verified].
 2. **Main avenues are too narrow and have no footpaths.** They are 3.3 m of asphalt in the game against about 6–7 m, plus 2–2.5 m paver footpaths on each side [visual estimate].
 3. **Kerbs are flat paint strips on every road.** The real kerbs are raised blocks of about 0.15 m on the avenues only. Minor lanes have no kerb.
 4. **No road markings:** no dashed centre line, no zebra crossings and no stop lines at junctions.

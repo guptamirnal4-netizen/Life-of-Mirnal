@@ -2,19 +2,17 @@
 
 Reviewer: central research reviewer. Date: 2026-11-17. Research only; no game code was changed.
 
-Inputs read: [COORDINATES.md](COORDINATES.md), [campus-master-index.md](campus-master-index.md) and all 14 reports in [buildings/](buildings/).
+Inputs read: [COORDINATES.md](COORDINATES.md), [campus-master-index.md](campus-master-index.md) and all 16 reports in [buildings/](buildings/). `messes.md` and `roads-paths.md` arrived late and were added to this review in a second pass the same day.
 
 ## 0. Is the research complete?
 
-**No. 14 of the 16 expected reports exist.**
+**Yes in coverage: all 16 expected reports now exist.** Some hand-offs are still open.
 
-- **Missing: `messes.md` and `roads-paths.md`.** The brief said "missing: none", but neither file is in `research/buildings/`. Many reports send hand-offs to these two owners, and nobody has picked them up:
-  - the mess blocks (VKB, RP, Ram-Budh, Shankar-Vyas, Malviya, Boys Canteen), the ANC, C'not and Redi kiosks, and Looters;
-  - the NAB portal stairs and the sunken Snake Path;
-  - the Main Building driveway loop and the Rotunda ramps;
-  - the library forecourt pavers;
-  - the Shiv Ganga ring walk and bridges.
-- **Some captures are gone.** The scratchpad no longer holds capture folders for `fd1`, `fd2-fd3`, `nab` and `sac`. Their claims still cite public URLs, so they can be re-checked at the source, but the local evidence a builder would open is gone. `fd1` already notes that its YouTube captures were missing.
+- **`messes.md` and `roads-paths.md` are now written** (an earlier version of this review listed them as missing). Here is what happened to the hand-offs other reports sent to them:
+  - **Picked up:** the five boys' mess blocks (VKB, RP, Ram-Budh, Shankar-Vyas, Malviya), the Boys Canteen (outside the boundary, left unresearched), ANC, C'not and the Redis by `messes`; the road network, kerbs, lamps, the driveway arc and the main axis by `roads-paths`.
+  - **Sent back to other owners:** Looters goes to `sac`. The NAB portal stairs, the Snake Path bollards and the south ramp go to `nab`. The Rotunda tiers, ramps and driveway planting go to `main-building`. The Shiv Ganga walks and steps go to `landscape-water`. The SR Bhawan mess and the CV Raman redi go to `hostels-newer`. These owners have already written their reports, so this work has no live owner (see section 3).
+  - **Not picked up by anyone:** the library forecourt pavers. `library` describes them ("grey octagonal and red square interlocking pavers"), but `roads-paths` does not cover them.
+- **Some captures are gone.** The scratchpad no longer holds capture folders for `fd1`, `fd2-fd3`, `nab` and `sac`. Their claims still cite public URLs, so they can be re-checked at the source, but the local evidence a builder would open is gone. `fd1` already notes that its YouTube captures were missing. The new `messes` (64 files) and `roads-paths` (52 files) capture folders are present, but they sit in the same session scratchpad and are just as likely to be lost.
 - **Every report is complete in structure.** Each one has sections A to I: identification, exterior, layout, stairs, interior, gameplay, sources, comparison with the game, and uncertainties.
 
 ---
@@ -30,7 +28,8 @@ Inputs read: [COORDINATES.md](COORDINATES.md), [campus-master-index.md](campus-m
 | What the "Admin Block 1/2" panoramas show | `main-building`: the foyer and inner hall under the Clock Tower. | `fd2-fd3`: "a modern admin building, location unknown". | **Leaning `main-building`.** In its capture `tour-admin-block-1.jpg`, a white temple spire is visible through the porch on the axis, which fits the Clock Tower → Saraswati Temple view. Mark it "probable", not "verified". |
 | Where the indoor sports rooms are (badminton, TT, squash, gym, snooker, martial arts) | `sac`: in the SAC west block and pavilions. The tour hotspots link every one of them to "SAC inside". | `sports`: location unknown; the unnamed OSM building at x 235…269, z 335…361 is a candidate. | **Accept `sac`.** The hotspot adjacency is stronger evidence. `sports` should drop the Gymkhana candidate. |
 | Srinivasa Ramanujan Bhawan | `workshops-halls`: a hostel with no OSM footprint (POI only). | `hostels-newer`: OSM relation 5372462 exists (x −171…13, z −303…−198) but is missing from `data/bits-campus.js`. | **Accept `hostels-newer`.** Move SR from `workshops-halls` to `hostels-newer` in the index. |
-| Looters, TOTT and −301°F | `sac` describes them as part of the SAC kiosk grid. | The index gives the food courts to `messes`, which has no report. | **Interim:** `sac` keeps TOTT and −301°F. Looters waits for `messes`. |
+| Looters, TOTT and −301°F | `sac` describes them as part of the SAC kiosk grid. | The index gives the food courts to `messes`. `messes` gives Looters back to `sac`, using the tour "Eatery - Looters" panorama (tent canopy, TOTT next door). | **Resolved: `sac` owns Looters, TOTT and −301°F.** Both reports agree. |
+| Other eateries (Food Ministry, Sky Lab, Paradise Cafe, Da Cloud Cafe, Institute Canteen) | `messes` captured their tour panoramas "as hand-off context only". It sends the Institute Canteen to `main-building`. | No other report covers the rest. | **Unowned.** Add them to the index's unowned row. |
 | Bhagirath Bhawan occupancy | Index, COORDINATES.md and the game: a girls' hostel, kept closed. | `hostels-newer`: the SWD 2026 notice lists its warden under BOYS (medium-high confidence). | Needs an orchestrator or design decision. The evidence leans "boys". |
 | Budh Bhawan occupancy | Game and index: a boys' walk-in. The tour tooltip (2024) and Wikipedia also say boys. | `hostels-ram-budh`: the SWD 2023 allocation guidelines put f2022 girls in Budh. | **Unresolved.** Flag it. Keep Budh walk-in for now. |
 
@@ -39,9 +38,13 @@ Inputs read: [COORDINATES.md](COORDINATES.md), [campus-master-index.md](campus-m
 | Topic | Conflict | Suggested value |
 |---|---|---|
 | How deep the Rotunda is sunk | `main-building`: about 3 m (plaza y ≈ −3; wall 3–3.5 m). `nab`: −4.5 m (about 25 risers from the Rotunda to the Clock Tower forecourt). The NAB north courtyard must match the Rotunda floor. | Both are visual estimates; no section drawing exists. Pick one value for both owners. **−4.5 m** is better supported, because it comes from a riser count. Use −3 m only if the engine cost of depth matters. |
-| How far south the tower block and porch reach | `main-building`: porch steps at z ≈ −47, foyer z −55…−65. `fd2-fd3`: the porch projects about 20 m south of the strip's south edge (z −55), so it ends near z −35 to −40, close to the ring road. | Set the porch front at **z ≈ −40 ±5**. Both reports put the entry on the x ≈ −9 axis. |
+| How far south the tower block and porch reach | `main-building`: porch steps at z ≈ −47, foyer z −55…−65. `fd2-fd3`: the porch projects about 20 m south of the strip's south edge (z −55), so it ends near z −35 to −40, close to the ring road. | Both reports put the entry on the x ≈ −9 axis. **Revised after `roads-paths`:** the OSM driveway arc (way 8) runs (66,−9) → (9,−37) → (−62,9), so its centreline reaches z −37 at its northern apex. At about 7 m wide, its north kerb is at about z −40.5. `main-building`'s own sketch puts the loop at z ≈ −45, which does not match OSM. Set the porch front at **z ≈ −42** (range −47…−42), not −40 ±5. Keep the arc where OSM has it. |
+| Main Building driveway edges | `main-building`: a semicircular drive in front of a porte-cochère with cannons. | `roads-paths`: the same arc, edged with **clipped hedges and bougainvillea beds**, not black-and-white kerbs, with a dashed centre line. | Compatible. Use the `roads-paths` edge treatment. `main-building` owns the planting. |
+| How you get into the NAB | `nab`: four portals, the Rotunda (north) and the South side ramp at about (55, 349). | `roads-paths` section F: "the four NAB stairs are the only crossings into the NAB". | **Accept `nab`.** The `roads-paths` line ignores the Rotunda and the south ramp, and the nav grid needs all six entrances. |
+| Where the ANC Circle is | `roads-paths`: the 4-way junction at (215, 323) [approximation]. | `messes`: the ANC POI at (233, 343) is "near the ANC Circle", with hostel facades on two corners. | Consistent. Gandhi (NW), Bhagirath (NE) and Shankar (SW) all sit within about 25 m of (215, 323). Use it, still tagged [approximation]. Where the "NCC Circle" is remains unknown. |
 | Lecture Theatre Complex extent (not in OSM) | `fd1`: x 281…346, z −229…−135. `workshops-halls`: x 292…347, z −232…−136. | They differ by about 11 m on the west edge, within the imagery error. Use **x 285…347, z −231…−135** until it is traced. |
-| M Lawns | `main-building`: "in front of the East Wing" (taken from the POI). `landscape-water`: x 65–130, z −25…18. | Use the `landscape-water` outline. It overlaps the East Wing's south edge by about 4 m, so clip it at z −21. |
+| M Lawns | `main-building`: "in front of the East Wing" (taken from the POI). `landscape-water`: x 65–130, z −25…18. | Use the `landscape-water` outline. It overlaps the East Wing's south edge by about 4 m, so clip it at z −21. **Also (from `roads-paths`):** the east turning loop (centre (72, −13), r ≈ 6 m) and its spur (68, −7) → (76, 42) cut through the lawn's west edge (x 65). Start the lawn at about x 82, or cut the loop and spur out of the polygon. S Lawns (x −140…−95) stays clear of the west loop at (−68, 8). |
+| Avenue width against nearby buildings | `roads-paths` proposes avenues of 6.5 m asphalt plus a 2.2 m footpath and a 0.3 m kerb on each side, about 11.5 m in all, on every named Marg. | `nab` proposes outer light-wells 3–6 m wide outside its roof slabs. Krishna Marg (76, 42) → (123, 328) runs between the NAB east block (bounds to x 89) and Krishna Bhawan (from x 97). | **Unchecked.** Nobody has tested the wider section against the light-wells or the hostel forecourts. Check the clearance along Krishna Marg and Ram Marg before widening. Where it does not fit, use footpaths on one side only. |
 | FD-III courtyards | `fd1` (a hand-off note): FD III and FD II each have one large courtyard. `fd2-fd3`: the FD III plan shows two courts with an inner cross range. | **Accept `fd2-fd3`.** It is a direct plan reading; the `fd1` remark was in passing. |
 
 ### 1.3 Floor counts and heights
@@ -52,6 +55,7 @@ Inputs read: [COORDINATES.md](COORDINATES.md), [campus-master-index.md](campus-m
 | Main Building and FD floor-to-floor | `main-building` gives about 4.5 m for the wings and 4.2 m for the central block. `fd2-fd3` puts the first floor at about 5.0 m. `fd1` uses about 5.0 m. **Use 4.5 m for the wings and spine, and 5.0 m for FD-I.** All of these are visual estimates. |
 | Heritage hostel floor height | Game FH = 3.3 m. `hostels-krishna-gandhi` and `hostels-shankar-vyas-vk`: 3.8–4.2 m. `hostels-ram-budh`: 9–10 m parapet over 2 floors. `hostels-newer` (the comb hostels): 3.3–3.6 m. **Split:** about 4.0 m for the courtyard (日-plan) Bhawans; keep 3.3–3.6 m for the combs. |
 | Clock Tower | `main-building`: 40–45 m in reality, about 57 m in the game. No other report disagrees, but no published height exists. |
+| Mess halls | OSM `h` 3.3 m everywhere. `messes` gives two heights. The Type A hall is 4.2–4.8 m clear, about 5–6 m to the parapet. The Type B hall is 6–7 m clear (double height, jali clerestory), so its parapet would be about 7.5–8 m. The report then proposes 5.5 m for the VKB hall. **That fits Type A only.** It is consistent because the report leans to Type A for VKB, but which tour hall belongs to which Bhawan is unknown. Use 5.5 m for all the halls until a mess exterior photo is found. |
 
 ### 1.4 Measurements that disagree with OSM
 
@@ -89,6 +93,14 @@ All three are approximations inferred from the roof mumties. One rule should be 
 | `gates-landmarks` | Floral tributes at the G.D. Birla statue "opposite Saraswati Mandir" | Search snippet only. The temple's 110 ft height and "70 pillars" come from secondary sources, which the report notes. |
 | `fd1` | CRISS Robotics is "in the Workshop" | The panorama shows a sawtooth interior, but the tour gives no building. It is a strong inference, not a sighting. |
 | `fd1`, `fd2-fd3`, `nab`, `sac` | Every [verified] tag that cites a local capture | The capture folders no longer exist in the scratchpad. The claims can only be re-checked at the source URLs. |
+| `messes` | The nearby RP **and Shankar** Bhawans use cream walls with maroon bands [verified, tour "RP Redi"] | The RP Redi panorama shows only Rana Pratap's wall. For Shankar the support is `hostels-shankar-vyas-vk` (drone: cream with a maroon parapet line), which the tag does not cite. The fact stands, but it should cite both sources. |
+| `messes` | Shankar-Vyas Mess has "a dining hall for 400" [verified] | This is second-hand, taken from the `hostels-shankar-vyas-vk` report. The same `messes` report says the SWD Bhawan pages refused connection this session. Tag it [verified via another report]. |
+| `messes` | The ANC hall exterior: a tall stone building of about 8–10 m, a canopy about 3 m high, a wall of "about 1 m + 1 m" [verified] | The presence of these is verified from the night panorama, but the sizes are estimates. They should be tagged [visual estimate]. |
+| `messes` | VKB, RP and Shankar-Vyas are a twin or copied plan type; the hall/kitchen split | This rests on roof texture in Esri imagery only. The report tags it honestly [visual estimate], but the whole gameplay plan for the `mess` room (hall in the west wing, hatches in the east wall) depends on it. |
+| `roads-paths` | Night lighting is "cool-white (about 5000–6000 K)" [verified] | The drone night view verifies continuous lighting. A colour temperature cannot be read from a compressed panorama; it should be [visual estimate]. |
+| `roads-paths` | T-lawns walk "red sandstone with cream inlays and white ornamental railings"; Patel and Gandhi roundabout kiosks [verified] | Second-hand from `gates-landmarks`, not re-captured. The report says so, but it still tags them [verified]. |
+| `roads-paths` | "Footway in front of FD-II": (−24,10) → (−62,47) and (26,3) → (72,11) | Mislabelled. Both paths lie **south** of the Rotunda (z > 0), towards S and M Lawns. FD-II is at z −92…−55. The coordinates are right; the label is wrong. |
+| `roads-paths` | Avenue width 6–7 m, footpaths 2–2.5 m, poles 30–40 m apart | Correctly tagged [visual estimate], but the ranked fixes (6.5 m, 2.2 m, 35 m) then use these as build values. They come from three panoramas (ANC, NCC, Gate avenue), not from any measurement. |
 | `fd2-fd3` | YouTube XkDvacBC7zA 3:03–3:12 shows the library foyer | The cited frames are gone. The `library` agent could not reproduce them, although its own panorama shows the same twin stairs. |
 
 The reports are otherwise careful. Most of them use [visual estimate] and [approximation] honestly. The `library`, `hostels-krishna-gandhi` and `hostels-ram-budh` reports are the most disciplined.
@@ -118,7 +130,28 @@ The reports are otherwise careful. Most of them use [visual estimate] and [appro
   - Which NAB hall is the J.C. Chaudhry Auditorium is unknown.
   - The FD-I first-floor classrooms were never photographed.
 - **Section and depth data:** NAB −4.5/−9.0 and Rotunda −3/−4.5 are both estimates. This blocks the most expensive engine change, ground below y = 0.
-- **Video:** YouTube frame capture failed for almost every agent. The two campus-tour videos are effectively unused.
+- **Video:** YouTube frame capture failed for almost every agent. The two campus-tour videos are effectively unused. `roads-paths` retried XkDvacBC7zA at about 21:54 on 2026-11-17 and got "Something went wrong" on every seek. `messes` did use one video, the SR Bhawan tour, for the SR mess only.
+- **Messes:**
+  - No exterior photo of any mess exists. Door positions, facades and heights are all inferred.
+  - "Student Mess 1" and "Student Mess 2" are not tied to a Bhawan.
+  - No floor plan of a kitchen.
+  - The official site says there are "seven messes", but only five boys' mess footprints are identified. The girls' mess (inside Meera) and the SR mess are not covered.
+  - The ANC has no outline.
+  - The CVR and Nagarji redi panoramas were captured but not analysed.
+- **Roads and paths:**
+  - No measured road widths; the OSM widths are defaults by kind.
+  - Which roads count as avenues was confirmed at only three junctions; the rest is inferred.
+  - No speed-breaker evidence either way.
+  - Signboard text is unreadable.
+  - The NCC Circle is not located.
+  - Not covered by anyone: the library forecourt pavers, the S/M Lawns footways' surface, and the minor-lane edges around the messes ("dirt service tracks", per `messes`).
+- **Hand-offs with no live owner:** `messes` and `roads-paths` sent work back to `sac`, `nab`, `main-building`, `landscape-water`, `gates-landmarks`, `hostels-newer` and the `hostels-*` owners. Those owners have already written their reports. The orchestrator should assign this work, either to a follow-up pass or to the builders of each area. The main items:
+  - Looters (`sac`);
+  - the Institute Canteen interior (`main-building`);
+  - the SR mess and the CV Raman redi (`hostels-newer`);
+  - the Rotunda-rim bougainvillea and driveway hedges (`main-building`, `landscape-water`);
+  - trunk paint (`landscape-water`);
+  - hostel forecourt pavers (`hostels-*`).
 - **Unowned areas:**
   - the Medical Centre (it has tour panoramas);
   - the unnamed 20 × 38 m block at (−57, 210);
@@ -150,6 +183,10 @@ The reports are otherwise careful. Most of them use [visual estimate] and [appro
 | Courts | Basketball and tennis are undercounted: OSM has 2 and 1, the panoramas show 4 or more of each. | `sports` |
 | Missing from data or OSM | Malviya-B (relation 5372379); SR Bhawan (relation 5372462); the Meera relation 20803053 (about 80 m north of the POI); the three CV Raman footprints (present but unnamed); LTC; VFAST; M and S Lawns (POIs only); the Econ POI, about 45 m south of room 6165. | `hostels-newer`, `fd1`, `workshops-halls`, `landscape-water`, `nab` |
 | Birla Museum group | Which footprint is the museum, the Science Centre or the gallery is unknown. | `gates-landmarks` |
+| All five mess blocks | `h` 3.3 m is too low. Halls are about 5–7 m and kitchens about 4 m. The Esri imagery sits about 4–6 m south-east of OSM here too; keep OSM. | `messes` |
+| ANC | No OSM building. Imagery suggests a long roof at about x 240…265, z 330…345. | `messes` |
+| "Boys Canteen" | Kind `food`, outside the boundary at x 379…400, z −501…−460. No source confirms it is a canteen. | `messes` |
+| Road network | Every road inside the campus is tagged `service` (46 ways). The widths are defaults by kind (service 4 m), not measured. The game's lamp filter skips `service`, so the whole world has only 16 lamps. This is a code fix, not a data patch. | `roads-paths` |
 
 **Rule reminder:** none of these outlines should be moved silently. The orchestrator should approve a data patch: the Vyas extension, the FD-I east projection, the LTC, Malviya-B, SR and the Workshop trim.
 
@@ -296,9 +333,9 @@ Scale: **ready**, **ready with approximations**, **blocked**.
 - **Blocker:** the `sciencelab` room overlaps the Clock Tower entrance collider by 3.4 m, and two NPC spots sit inside solid geometry. Fix this first by moving the lab to the west range (x −52…−40).
 - **Build spec:**
   - **Floors and heights:** wings and spine 2 floors at 4.5 m (parapet about 10.5 m); tower block 3 stepped tiers (13–14 m); tower about 42 m; Auditorium ridge about 16 m.
-  - **Footprint:** use the OSM wing rings. Rebuild the spine 15–17 m deep and treat the rest of the strip as garden. Extend the porch to z ≈ −40.
+  - **Footprint:** use the OSM wing rings. Rebuild the spine 15–17 m deep and treat the rest of the strip as garden. Extend the porch to z ≈ −42, which keeps it clear of the OSM driveway arc (see 1.2).
   - **Entrances:**
-    - porch on the axis at about (−9, −40) up to a foyer at y ≈ 0.9;
+    - porch on the axis at about (−9, −42) up to a foyer at y ≈ 0.9;
     - arcade verandahs along the courtyards and the spine front;
     - one arch passage through each wing's south range;
     - Rotunda NE and NW doorways and terraces.
@@ -323,7 +360,7 @@ Scale: **ready**, **ready with approximations**, **blocked**.
 
 ## 6. Status updates for campus-master-index.md
 
-1. Add a **Status** column: `library`, `nab`, `hostels-krishna-gandhi` and `main-building` are researched pilots; 10 more are researched; `messes` and `roads-paths` have **no report**. Done in the index.
+1. Add a **Status** column: `library`, `nab`, `hostels-krishna-gandhi` and `main-building` are researched pilots; the other 12 are researched, including `messes` and `roads-paths`, which arrived in a second pass. Done in the index.
 2. Correct "In game today" where the reports measured it:
    - FD-I has four window rows and full PV;
    - the SAC is a 3-row box;
@@ -336,4 +373,6 @@ Scale: **ready**, **ready with approximations**, **blocked**.
 4. Move the SR Bhawan POI from `workshops-halls` to `hostels-newer`. Add the LTC (`workshops-halls` researched it), VFAST and the Medical Centre (unowned).
 5. Flag Bhagirath (SWD 2026 says boys) and Budh (SWD 2023 says girls) for a design decision.
 6. Note the OSM data patches waiting for approval: Vyas outline, FD-I east projection, LTC, Malviya-B, SR, the Workshop/FD-I gap, Shiv Ganga water radius, M and S Lawns.
-7. Re-run `messes` and `roads-paths`, and re-capture the evidence folders for `fd1`, `fd2-fd3`, `nab` and `sac`.
+7. Re-capture the evidence folders for `fd1`, `fd2-fd3`, `nab` and `sac`. Copy the `messes` and `roads-paths` capture folders somewhere durable before the scratchpad is cleared.
+8. Give Looters to `sac`. Add Food Ministry, Sky Lab, Paradise Cafe and Da Cloud Cafe to the unowned row. Assign the open hand-offs listed in section 3.
+9. Approve the proposed `h` change for the mess blocks (halls about 5.5 m) and the bigger `mess` room (15 × 28 m, keeping its door and exit). Note the lamp-filter bug in `buildLampPosts()` (it skips `service`) for the builders.
