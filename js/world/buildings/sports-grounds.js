@@ -213,7 +213,8 @@ function goal(K, cu, v, dir, w, h, depth, { post = M.white } = {}) {
   g.rotateX(-Math.PI / 2 + Math.atan2(h * 0.2, depth) * -dir); g.translate(cu, h * 0.9, v - dir * depth / 2);
   const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / TILE.netW, uv.getY(i) * depth / TILE.netW);
   K.geo(M.netW, g);
-  K.col(cu - w / 2, cu + w / 2, Math.min(v, vb) - 0.05, Math.max(v, vb) + 0.05, 0, 0.0 + 0.3).walkable = false;
+  K.col(cu - w / 2, cu + w / 2, vb - 0.04, vb + 0.04, 0, h * 0.8); // the back net
+  for (const s of [-1, 1]) K.col(cu + s * w / 2 - 0.04, cu + s * w / 2 + 0.04, Math.min(v, vb), Math.max(v, vb), 0, h);
 }
 
 // ---------- the module ----------
@@ -336,21 +337,36 @@ function buildTrack(site, track, field, kit, clear) {
   T.ovalDist = (u, v) => (Math.abs(v) <= Sx ? Math.abs(u) : Math.hypot(u, Math.abs(v) - Sx));
   clear.push(oval(Ro + 3, 20).map(([u, v]) => { const p = T.world(u, v); return [p.x, p.z]; }));
 
-  // the infield grass round the (axis-aligned) football field: 1 m world cells inside the inner kerb, in row runs
+  // the infield grass (football pitch included): 1 m world cells inside the inner kerb, in row runs
   const tris = [];
   const x0 = field.minX - Math.ceil((field.minX - (O.x - R - 20)) / 1); const z0 = field.minZ - Math.ceil((field.minZ - (O.z - R - Sx - 20)) / 1);
   for (let z = z0; z < O.z + R + Sx + 20; z += 1) {
     let run = null;
     for (let x = x0; x < O.x + R + 20; x += 1) {
       const [u, v] = T.local(x + 0.5, z + 0.5);
-      const inField = x + 0.5 > field.minX && x + 0.5 < field.maxX && z + 0.5 > field.minZ && z + 0.5 < field.maxZ;
-      const ok = !inField && T.ovalDist(u, v) < Ri + 0.55;
+      const ok = T.ovalDist(u, v) < Ri + 0.55;
       if (ok && run === null) run = x;
       if (!ok && run !== null) { tris.push(...rectTris(run, x, z, z + 1, 0.045)); run = null; }
     }
     if (run !== null) tris.push(...rectTris(run, O.x + R + 20, z, z + 1, 0.045));
   }
   kit.geo(S('t:grass:#bfe89a', 9), flatGeo(tris, TEX_SIZE.grass));
+  // the football pitch's markings over that grass (bits-world's plain field plane loses to the sandy track area under
+  // it): touch and goal lines, halfway line, centre circle, penalty and goal areas, penalty spots and arcs
+  {
+    const { minX: x0, maxX: x1, minZ: z0, maxZ: z1 } = field; const cx = (x0 + x1) / 2; const cz = (z0 + z1) / 2; const y = 0.049; const w = 0.12;
+    const F = [...outlineTris(x0, x1, z0, z1, w, y), ...segTris([x0, cz], [x1, cz], w, y), ...ringTris(cx, cz, 9.15 - w / 2, 9.15 + w / 2, 0, Math.PI * 2, y, 48), ...discTris(cx, cz, 0.18, 0, Math.PI * 2, y, 10)];
+    for (const [zg, s] of [[z0, 1], [z1, -1]]) {
+      for (const [hw, d] of [[20.16, 16.5], [9.16, 5.5]]) {
+        const zi = zg + s * d;
+        F.push(...segTris([cx - hw, zi], [cx + hw, zi], w, y), ...segTris([cx - hw, zg], [cx - hw, zi], w, y), ...segTris([cx + hw, zg], [cx + hw, zi], w, y));
+      }
+      F.push(...discTris(cx, zg + s * 11, 0.15, 0, Math.PI * 2, y, 10));
+      const a = Math.acos(5.5 / 9.15); const mid = s > 0 ? Math.PI / 2 : -Math.PI / 2; // the D outside the box
+      F.push(...ringTris(cx, zg + s * 11, 9.15 - w / 2, 9.15 + w / 2, mid - (Math.PI / 2 - a), mid + (Math.PI / 2 - a), y, 16));
+    }
+    kit.geo(LINE, flatGeo(F, 1));
+  }
 
   // two training goals in the north and south D's, and the floodlights round the track
   for (const s of [-1, 1]) goal(T, 0, s * (Sx + Ri * 0.55), -s, 5, 2, 1.2);
@@ -792,7 +808,7 @@ function buildPool(site, pool, clear) {
     const u = W0 + k * (12.5 / 6);
     for (let v = P0, i = 0; v < P1 - 0.01; v += 0.25, i++) {
       const key = v < P0 + 5 || v > P1 - 5 ? M.ropeRed : i % 2 ? M.white : M.ropeBlue;
-      K.box(u - 0.05, u + 0.05, v + 0.02, v + 0.23, -0.19, -0.1, key, { collide: false });
+      K.box(u - 0.06, u + 0.06, v + 0.02, v + 0.23, -0.2, -0.08, key, { collide: false });
     }
   }
   for (const v of [P0 + 5, P1 - 5]) {
@@ -963,7 +979,7 @@ function buildMedC(G, medc, clear) {
     for (const v of [v0 + 0.3, v1 - 0.3]) slab(G, u1 + 1.65, u1 + 1.95, v - 0.15, v + 0.15, F, R, M.creamW, { walkable: false });
     roofEdge(G, u0, u1 + 2, v0, v1, R, { over: 0.1, parapet: 0.5 });
     G.sign('MED-C GROUND · SCORE 000/0 · OVERS 00.0', u1 + 0.01, v0 + 7, R - 0.9, [1, 0], { width: 3.6, height: 0.5, bg: '#1d2420', fg: '#f2d64b', font: 'bold 52px monospace' });
-    G.box(u1 + 0.6, u1 + 1.0, v0 + 1, v0 + 6, F + 0.42, F + 0.47, M.wood, { collide: false }); G.col(u1 + 0.6, u1 + 1.0, v0 + 1, v0 + 6, F, F + 0.47);
+    G.box(u1 + 0.6, u1 + 1.0, v0 + 4.8, v0 + 9.4, F + 0.42, F + 0.47, M.wood, { collide: false }); G.col(u1 + 0.6, u1 + 1.0, v0 + 4.8, v0 + 9.4, F, F + 0.47); // bench under the window, clear of the door
     G.tubeLight(u1 + 1.0, v0 + 5, R, [0, 1]);
     G.layer('medc-hut', () => {
       G.box(u0 + 0.23, u1 - 0.23, v0 + 0.23, v1 - 0.23, R - 0.12, R - 0.07, M.ceil, { collide: false });
