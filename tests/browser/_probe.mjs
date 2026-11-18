@@ -1,0 +1,10 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+page.setDefaultTimeout(60000);
+page.on('console', (m) => { const t = m.text(); if (/ROOM|error|warn|NAB|nab/i.test(t)) console.log(m.type(), t.slice(0, 400)); });
+page.on('pageerror', (e) => console.log('PAGEERR', e.message));
+await page.goto('http://localhost:8092/?explore&only=nab', { waitUntil: 'load' });
+await page.waitForFunction(() => window.__game?.explorer && window.__game.campus?.modules, null, { timeout: 60000 });
+console.log(await page.evaluate(() => JSON.stringify(window.__game.campus.modules.map((m) => m.m.id))));
+await browser.close();
