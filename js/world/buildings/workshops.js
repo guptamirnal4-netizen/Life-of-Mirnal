@@ -793,10 +793,284 @@ function buildRKIC(kit) {
   kit.floors.push({ y: LV[0], name: 'Ground (arcade, Maker Space, reception)' }, { y: LV[1], name: 'Level 1 (labs)' }, { y: LV[2], name: 'Level 2 (co-working, TEC)' });
 }
 
+// ================================================================ 4. Lecture Theatre Complex (not in OSM)
+// Footprint from research (review.md: x 285...347, z -231...-135; kept 12 m clear of FD-I's east projection).
+// Pink and cream: a ring of single-storey arcades (semicircular arches on square piers) round a long lawn with a raised
+// circular stage; three raked lecture theatres under sloped roofs on the west; two-storey classroom blocks on the north,
+// east and south, their first floors opening onto the arcade roofs. Ramps and steps with steel railings.
+const LTC = { O: [288, -231], eu: [1, 0], U: 59, V: 96, G: 0.45, FH: 4.2 };
+function buildLTC(kit, campus) {
+  const { G, FH } = LTC; const F1 = G + FH; const R = F1 + FH; const T = 0.3;
+  const K = { wall: 't:plaster:#efd9cc', int: 't:plaster:#f3ece4', pink: 'c:#cf8f86', pinkD: 'c:#b8766d', cope: 'c:#f5e9df', frame: 'c:#5a3e2e', floor: 't:tiles:#a8ada4', arc: 't:paving:#b9aea2', ceil: 'c:#f6f3ee', roof: 't:concrete:#cbbfb4', grass: 't:grass:#7fae55', rail: 'm:#9aa1a6', seat: 't:wood:#8a5f3a' };
+  const L = (axis, c, out) => line(kit, axis, c, out);
+  const CT = { u0: 25, u1: 43, v0: 16, v1: 80 }; // the lawn
+  const ARC = [[21, 25, 12, 84], [25, 47, 12, 16], [25, 47, 80, 84], [43, 47, 16, 80]];
+  // ---- arcade floors, roofs (the first-floor verandah), ceilings
+  for (const [u0, u1, v0, v1] of ARC) {
+    kit.box(u0, u1, v0, v1, 0, G, K.arc, { walkable: true });
+    kit.box(u0, u1, v0, v1, F1 - 0.25, F1, 'c:#e9e1d8', { walkable: true });
+    kit.box(u0, u1, v0, v1, F1, F1 + 0.01, K.arc, { collide: false });
+    ceiling(kit, u0, u1, v0, v1, F1 - 0.255, K.ceil);
+  }
+  // ---- arcade fronts on the lawn
+  const spring = G + 2.2; const atop = F1 - 0.25;
+  const fronts = [[L('v', CT.u0, 1), CT.v0, CT.v1], [L('u', CT.v0, 1), CT.u0, CT.u1], [L('v', CT.u1, -1), CT.v0, CT.v1], [L('u', CT.v1, -1), CT.u0, CT.u1]];
+  const steps = [];
+  for (const [Lf, s0, s1] of fronts) {
+    const n = Math.round((s1 - s0) / 3.9); const bay = (s1 - s0) / n; const w = bay - 0.8;
+    for (let k = 0; k <= n; k++) {
+      const s = s0 + k * bay;
+      Lf.box(s - 0.4, s + 0.4, -0.35, 0.35, G, atop, K.wall, { collide: true });
+      for (const y of [G + 0.9, G + 1.5]) Lf.box(s - 0.42, s + 0.42, -0.37, 0.37, y, y + 0.1, K.pink);
+      Lf.box(s - 0.45, s + 0.45, -0.4, 0.4, spring - 0.15, spring, K.pinkD);
+      Lf.box(s - 0.42, s + 0.42, -0.37, 0.37, 0, G + 0.35, K.pinkD);
+    }
+    for (let k = 0; k < n; k++) {
+      const sm = s0 + (k + 0.5) * bay;
+      extrude(kit, Lf, shift(spandrel(w, spring, atop), sm), -0.35, 0.35, K.wall);
+      for (const [d0, d1] of [[0.35, 0.38], [-0.38, -0.35]]) extrude(kit, Lf, shift(archRing(w, spring, 0.26), sm), d0, d1, K.pink);
+      Lf.box(sm - 0.14, sm + 0.14, -0.4, 0.4, spring + w / 2 - 0.05, spring + w / 2 + 0.32, K.pinkD);
+    }
+    // cornice at the slab, the verandah parapet over it
+    Lf.box(s0 - 0.4, s1 + 0.4, -0.45, 0.45, atop - 0.05, F1 + 0.05, K.pink);
+    Lf.box(s0 - 0.4, s1 + 0.4, -0.15, 0.15, F1, F1 + 1.0, K.wall, { collide: true });
+    Lf.box(s0 - 0.4, s1 + 0.4, -0.2, 0.2, F1 + 1.0, F1 + 1.08, K.cope);
+    // the steps down to the lawn in the middle bay; a ramp near one end
+    const sm = s0 + (Math.floor(n / 2) + 0.5) * bay;
+    steps.push([Lf, sm, w]);
+  }
+  for (const [Lf, sm, w] of steps) {
+    for (const [d0, d1, top] of [[0.35, 0.65, 0.3], [0.65, 0.95, 0.15]]) Lf.box(sm - w / 2, sm + w / 2, d0, d1, 0, top, K.arc, { collide: true, walkable: true });
+  }
+  {
+    // ramp from the lawn up to the west arcade, steel railings both sides (1:12)
+    const Lr = L('v', CT.u0, 1); const a = 22; const len = 5.4; const n = 9;
+    for (let k = 0; k < n; k++) { const top = G - ((k + 1) * G) / (n + 1); Lr.box(a + (k * len) / n, a + ((k + 1) * len) / n, 0.35, 1.75, 0, Math.max(0.03, top + G / (n + 1) / 2), K.arc, { collide: true, walkable: true }); }
+    for (const d of [0.4, 1.7]) { const [u, v0] = Lr.P(a, d); bar(kit, [u, G + 0.95, v0], [u, 0.95, v0 + len], 0.05, K.rail); for (let k = 0; k <= 3; k++) { const v = v0 + (k * len) / 3; kit.box(u - 0.025, u + 0.025, v - 0.025, v + 0.025, 0, G + 0.95 - (k * G) / 3, K.rail, { collide: false }); } kit.col(u - 0.05, u + 0.05, v0, v0 + len, 0, 1.4); }
+  }
+  // ---- the lawn, the paths, the raised circular stage with shrubs
+  kit.box(CT.u0 + 0.35, CT.u1 - 0.35, CT.v0 + 0.35, CT.v1 - 0.35, -0.02, 0.03, K.grass, { collide: false });
+  kit.box(33, 35, CT.v0 + 0.35, CT.v1 - 0.35, -0.02, 0.035, 't:paving:#c9b8a8', { collide: false });
+  kit.box(CT.u0 + 0.35, CT.u1 - 0.35, 47, 49, -0.02, 0.036, 't:paving:#c9b8a8', { collide: false });
+  const SC = [34, 58];
+  kit.cyl(SC[0], SC[1], 0, 4.5, 0.6, 't:paving:#c4b4a4', { seg: 36 });
+  kit.cyl(SC[0], SC[1], 0.6, 4.55, 0.06, K.pink, { seg: 36 });
+  kit.col(SC[0] - 3.2, SC[0] + 3.2, SC[1] - 3.2, SC[1] + 3.2, 0, 0.66, true);
+  for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2; if (Math.abs(Math.sin(a)) < 0.25 && Math.cos(a) < 0) continue; kit.cyl(SC[0] + Math.cos(a) * 5.1, SC[1] + Math.sin(a) * 5.1, 0, 0.45, 0.7, 'c:#4f8a3e', { seg: 8, rTop: 0.3 }); kit.cyl(SC[0] + Math.cos(a) * 5.1, SC[1] + Math.sin(a) * 5.1, 0.55, 0.22, 0.2, 'c:#d0457a', { seg: 6 }); }
+  for (let k = 0; k < 2; k++) kit.box(SC[0] - 4.9 + k * 0.3 - 0.3, SC[0] - 4.9 + k * 0.3, SC[1] - 1, SC[1] + 1, 0, 0.2 * (k + 1), 't:paving:#c4b4a4', { walkable: true });
+
+  // ---- the theatres (west): raked rows rising westwards, the stage at the arcade end, sloped roofs
+  const theatres = [{ id: 'LT1', name: 'Lecture Theatre 1 (400 seats)', a: 13, b: 39 }, { id: 'LT2', name: 'Lecture Theatre 2 (150 seats)', a: 44, b: 62 }, { id: 'LT3', name: 'Lecture Theatre 3 (150 seats)', a: 67, b: 83 }];
+  const HB = 10.6; const HF = 7.4; // roof top at the back (u 0) and the front (u 21)
+  const roofY = (u) => HB - ((HB - HF) * u) / 21;
+  for (const th of theatres) {
+    const { a, b } = th; const vm = (a + b) / 2;
+    // side walls (trapezoids) with high windows, back wall, front wall on the arcade with two double doors
+    for (const [v, out] of [[a + T / 2, -1], [b - T / 2, 1]]) {
+      const Ls = L('u', v, out);
+      const wins = [4, 8, 12, 16].map((s) => ({ at: s, width: 2.0, bottom: 5.4, top: 6.6 }));
+      Ls.wall(0, 21, 0, 5.0, K.wall, T, []);
+      Ls.wall(0, 21, 5.0, 6.9, K.wall, T, wins);
+      for (const o of wins) glaze(Ls, o.at, o.width, 5.4, 1.2, T, { frame: K.frame, mull: 1, sill: K.pink });
+      extrude(kit, Ls, shapeOf([[0, 6.9], [21, 6.9], [21, HF], [0, HB]]), -T / 2, T / 2, K.wall);
+      for (const y of [1.2, 3.2, 6.9]) Ls.box(0, 21, T / 2 - 0.01, T / 2 + 0.06, y, y + 0.14, K.pink);
+      Ls.box(0, 21, T / 2 - 0.01, T / 2 + 0.06, 0, 0.6, K.pinkD);
+    }
+    const Lb = L('v', T / 2, -1);
+    Lb.wall(a + T, b - T, 0, HB, K.wall, T);
+    for (const y of [1.2, 3.2, 6.9]) Lb.box(a, b, T / 2 - 0.01, T / 2 + 0.06, y, y + 0.14, K.pink);
+    Lb.box(a, b, T / 2 - 0.01, T / 2 + 0.06, 0, 0.6, K.pinkD);
+    const doors = [a + 1.8, b - 1.8];
+    const Lfw = L('v', 21 - T / 2, 1);
+    Lfw.wall(a + T, b - T, 0, HF, K.wall, T, doors.map((s) => ({ at: s, width: 2.0, bottom: G, top: G + 2.6 })));
+    for (const s of doors) { for (const k of [-1, 1]) kit.door(false, s + k * 0.5, 21 - T / 2, G, 0.95, { height: 2.55, thick: T, side: 1, frame: K.frame, leaf: 't:wood:#7a5232' }); }
+    // sloped roof slab with a pink fascia and a parapet at the back
+    bar(kit, [-0.4, HB + 0.1, vm], [21.3, HF + 0.1, vm], 0.22, K.roof, b - a + 0.6);
+    for (const v of [a - 0.3, b + 0.3]) bar(kit, [-0.4, HB + 0.1, v], [21.3, HF + 0.1, v], 0.4, K.pink, 0.08);
+    kit.box(-0.1, 0.3, a, b, HB, HB + 0.8, K.wall, { collide: false });
+    kit.box(-0.15, 0.35, a - 0.05, b + 0.05, HB + 0.8, HB + 0.88, K.cope, { collide: false });
+    kit.sign(th.id, 21.2, vm, 4.9, [1, 0], { width: 2.4, height: 0.9, bg: '#b8766d', fg: '#fff6ee', font: 'bold 96px Georgia, serif' });
+    // the interior
+    kit.layer(th.id, () => {
+      const y0 = G; const front = 15.6; const rowD = 0.95; const rise = 0.2;
+      const rows = Math.floor((front - T - 0.4) / rowD);
+      kit.box(front, 21 - T, a + T, b - T, 0, y0, K.floor, { walkable: true });
+      kit.box(front, 21 - T, a + T, b - T, y0, y0 + 0.01, 't:tiles:#8f9a92', { collide: false });
+      for (let r = 0; r < rows; r++) {
+        const u1 = front - r * rowD; const u0 = u1 - rowD; const top = y0 + (r + 1) * rise;
+        kit.box(u0, u1, a + T, b - T, 0, top, K.floor, { walkable: true });
+        kit.box(u0, u1, a + T, b - T, top, top + 0.008, 't:tiles:#8f9a92', { collide: false });
+        // bench desks fanned towards the stage, side aisles 1.3 m
+        const w = b - a - 2 * T - 2.6; const nd = Math.max(1, Math.floor(w / 1.9));
+        for (let k = 0; k < nd; k++) {
+          const v = a + T + 1.3 + (w * (k + 0.5)) / nd; const u = u0 + 0.5;
+          const du = 19.5 - u; const dv = vm - v; const d = Math.hypot(du, dv);
+          kit.benchDesk(u, v, top, [du / d, dv / d], { w: 1.8, top: K.seat, frame: 'm:#3f4449' });
+        }
+      }
+      const backTop = y0 + rows * rise; const uBack = front - rows * rowD;
+      kit.box(T, uBack, a + T, b - T, 0, backTop, K.floor, { walkable: true });
+      kit.rail(T + 0.4, a + T + 0.1, T + 0.4, b - T - 0.1, backTop, K.rail);
+      // stage, lecture table, lectern, boards, screen, the red LED clock
+      kit.box(18.2, 21 - T, a + 3.2, b - 3.2, y0, y0 + 0.45, 't:wood:#7a5232', { walkable: true });
+      kit.box(17.9, 18.2, a + 3.2, b - 3.2, y0, y0 + 0.22, 't:wood:#7a5232', { walkable: true });
+      kit.box(18.9, 19.9, vm - 1.6, vm + 1.6, y0 + 0.45, y0 + 1.27, 't:wood:#6d4528');
+      piece(kit, 19.2, vm + 2.6, y0 + 0.45, [-1, 0], [[-0.3, 0.3, 0, 1.15, -0.22, 0.22, 't:wood:#6d4528'], [-0.33, 0.33, 1.15, 1.22, -0.3, 0.25, 't:wood:#5d3a20']], 0.6, 0.5, 1.2);
+      for (const dv of [-1, 1]) kit.board(21 - T - 0.02, vm + dv * ((b - a) / 4 + 0.6), y0 + 0.45, [-1, 0], { w: Math.min(4.2, (b - a) / 4), h: 1.4, key: 'c:#2f4a3a', frame: 'c:#6b5a43' });
+      kit.box(21 - T - 0.05, 21 - T - 0.02, vm - 1.9, vm + 1.9, y0 + 1.5, y0 + 4.0, 'e:#e9eef2', { collide: false });
+      kit.box(21 - T - 0.08, 21 - T - 0.02, vm - 0.5, vm + 0.5, y0 + 4.4, y0 + 4.8, 'c:#1a1a1a', { collide: false });
+      kit.box(21 - T - 0.09, 21 - T - 0.08, vm - 0.4, vm + 0.4, y0 + 4.47, y0 + 4.73, 'e:#ff3a2a', { collide: false });
+      // stepped white grid ceiling, fans and tube lights
+      const steps = [[0, 5.5, 9.4], [5.5, 11, 8.6], [11, 16, 7.8], [16, 21, 6.8]];
+      for (const [u0, u1, y] of steps) {
+        ceiling(kit, u0 + (u0 === 0 ? T : 0), u1 - (u1 === 21 ? T : 0), a + T, b - T, y, K.ceil);
+        for (let v = a + T + 1.2; v < b - T; v += 1.2) kit.box(u0, u1, v - 0.03, v + 0.03, y - 0.06, y, 'c:#d9d5cc', { collide: false });
+        for (let u = u0 + 1.2; u < u1; u += 1.2) kit.box(u - 0.03, u + 0.03, a + T, b - T, y - 0.06, y, 'c:#d9d5cc', { collide: false });
+        for (let v = a + 2.5; v < b - 2; v += 3.4) { rodLight(kit, (u0 + u1) / 2 - 1.2, v, y - 0.06, 0.02, [0, 1]); kit.fan((u0 + u1) / 2 + 1.2, v + 1.2, y); }
+        if (u1 < 21) kit.box(u1 - 0.05, u1 + 0.05, a + T, b - T, steps.find((q) => q[0] === u1)[2], y, K.ceil, { collide: false });
+      }
+      // dado
+      for (const [v, s] of [[a + T + 0.01, 1], [b - T - 0.01, -1]]) kit.box(T, 21 - T, v - 0.01, v + 0.01 * s, 0, y0 + 1.2, 'c:#b8a99a', { collide: false });
+    });
+    kit.room(th.id, th.name, T, 21 - T, a + T, b - T, 0, HF);
+    kit.entrance(`${th.id} doors`, 23, a + 1.8, [1, 0]);
+  }
+  // the passages between the theatres: steps up to the arcade
+  for (const [a, b] of [[39, 44], [62, 67], [12, 13], [83, 84]]) {
+    if (b - a > 2) for (const [u0, u1, top] of [[20.4, 21, 0.3], [19.8, 20.4, 0.15]]) kit.box(u0, u1, a, b, 0, top, K.arc, { walkable: true });
+    // first floor: parapet along the open west edge of the arcade roof
+    kit.box(21, 21.3, a, b, F1, F1 + 1.0, K.wall); kit.box(20.95, 21.35, a, b, F1 + 1.0, F1 + 1.08, K.cope, { collide: false });
+  }
+  // the west arcade's verandah: a parapet along the theatre fronts above their roofs' low edge is not needed (walls)
+
+  // ---- the two-storey blocks: north, east, south
+  const blocks = [
+    { id: 'N', u0: 21, u1: 47, v0: 0, v1: 12, arc: 'v1', rooms: [[[21.3, 32, 'C1'], [32, 36, 'pass'], [36, 46.7, 'C2']], [[21.3, 34, 'C3'], [34, 46.7, 'C4']]] },
+    { id: 'S', u0: 21, u1: 47, v0: 84, v1: 96, arc: 'v0', rooms: [[[21.3, 32, 'C5'], [32, 36, 'pass'], [36, 46.7, 'C6']], [[21.3, 34, 'C7'], [34, 46.7, 'C8']]] },
+    { id: 'E', u0: 47, u1: 59, v0: 12, v1: 84, arc: 'u0', rooms: [[[12.3, 28, 'C9'], [28, 34, 'stair'], [34, 46, 'C10'], [46, 50, 'pass'], [50, 66, 'C11'], [66, 83.7, 'Office']], [[12.3, 28, 'C12'], [28, 34, 'stair'], [34, 50, 'C13'], [50, 66, 'C14'], [66, 83.7, 'C15']]] },
+  ];
+  const plates = []; const pIdx = {};
+  for (const B of blocks) for (const fl of B.rooms) for (const [, , id] of fl) if (!['pass', 'stair'].includes(id)) { pIdx[id] = plates.length; plates.push(id === 'Office' ? ['LTC Office', 'Time Table · AUGSD'] : [`LTC ${id}`, '80-seat classroom']); }
+  kit.texture('ltcplates', () => plateAtlas(plates, { cols: 4, cw: 256, ch: 64, bg: '#7a4a44', fg: '#fff6ee', sub: '#f1d6cf' }));
+  let stairHole = null;
+  for (const B of blocks) {
+    const alongU = B.arc[0] === 'v'; // rooms run along u
+    const arcC = B[B.arc]; const arcOut = B.arc.endsWith('1') ? 1 : -1; // outward of the block on the arcade side
+    const [s0, s1] = alongU ? [B.u0, B.u1] : [B.v0, B.v1];
+    const [d0, d1] = alongU ? [B.v0, B.v1] : [B.u0, B.u1];
+    const backC = arcOut > 0 ? d0 : d1;
+    const LA = L(alongU ? 'u' : 'v', arcC - arcOut * T / 2, arcOut); // arcade-side wall
+    const LB = L(alongU ? 'u' : 'v', backC + arcOut * T / 2, -arcOut); // the back (outer) wall
+    const ends = [[s0 + T / 2, -1], [s1 - T / 2, 1]].map(([c, o]) => L(alongU ? 'v' : 'u', c, o));
+    // stair (east block)
+    if (B.id === 'E') stairHole = dogleg(kit, 49.0, 58.6, 28.15, 33.85, G, F1, { along: 'u', key: 't:terrazzo:#c4b8ab', name: 'LTC east stair' });
+    // floors
+    kit.box(B.u0, B.u1, B.v0, B.v1, 0, G, K.floor, { walkable: true });
+    kit.slab(B.u0, B.u1, B.v0, B.v1, F1, 'c:#e9e1d8', { thick: 0.25, holes: B.id === 'E' ? [stairHole] : [] });
+    kit.slab(B.u0, B.u1, B.v0, B.v1, F1 + 0.01, K.floor, { thick: 0.008, holes: B.id === 'E' ? [stairHole] : [], walkable: false, collide: false });
+    kit.slab(B.u0, B.u1, B.v0, B.v1, R, K.roof, { thick: 0.25, walkable: false, collide: false });
+    ceilRects(kit, [[B.u0, B.u1, B.v0, B.v1]], B.id === 'E' ? [stairHole] : [], F1 - 0.255, K.ceil);
+    ceilRects(kit, [[B.u0, B.u1, B.v0, B.v1]], [], R - 0.255, K.ceil);
+    for (const f of [0, 1]) {
+      const y0 = f === 0 ? 0 : F1; const fl = f === 0 ? G : F1; const y1 = f === 0 ? F1 : R;
+      const list = B.rooms[f];
+      // arcade side: a door per room, windows between, the passage open
+      const opsA = []; const winsA = [];
+      for (const [a, b, id] of list) {
+        if (id === 'pass') { opsA.push({ at: (a + b) / 2, width: b - a - 0.4, bottom: 0, top: fl - y0 + 3.0 }); continue; }
+        const dAt = id === 'stair' ? a + 1.3 : b - 1.4;
+        opsA.push({ at: dAt, width: 1.4, bottom: fl - y0, top: fl - y0 + 2.5, door: id });
+        if (id !== 'stair') for (let s = a + 1.8; s < b - 3.0; s += 3.2) winsA.push(s);
+      }
+      for (const s of winsA) opsA.push({ at: s, width: 1.5, bottom: fl - y0 + 1.0, top: fl - y0 + 2.6 });
+      wall2(kit, LA, s0, s1, y0, y1, K.wall, K.int, T, opsA);
+      for (const s of winsA) glaze(LA, s, 1.5, fl + 1.0, 1.6, T, { frame: K.frame, mull: 1, sill: K.pink });
+      for (const o of opsA.filter((q) => q.door)) {
+        kit.door(alongU, o.at, LA.c, fl, 1.3, { height: 2.45, thick: T, side: -arcOut, frame: K.frame, leaf: 't:wood:#7a5232' });
+        if (pIdx[o.door] !== undefined) { const [pu, pv] = LA.P(o.at + 1.05, T / 2 + 0.006); plate(kit, 'ltcplates', pIdx[o.door], pu, pv, fl + 1.75, 0.7, 0.18, LA.dir); }
+      }
+      // back wall: windows with pink arched hoods; the passage open on the ground floor
+      const opsB = []; const winsB = [];
+      for (let s = s0 + 2; s < s1 - 1.5; s += 3.2) if (!list.some(([a, b, id]) => (id === 'pass' || id === 'stair') && s > a - 1 && s < b + 1)) winsB.push(s);
+      for (const s of winsB) opsB.push({ at: s, width: 1.4, bottom: fl - y0 + 1.0, top: fl - y0 + 2.8 });
+      for (const [a, b, id] of list) if (id === 'pass') opsB.push({ at: (a + b) / 2, width: b - a - 0.4, bottom: 0, top: fl - y0 + 3.0 });
+      wall2(kit, LB, s0, s1, y0, y1, K.wall, K.int, T, opsB);
+      for (const s of winsB) { glaze(LB, s, 1.4, fl + 1.0, 1.8, T, { frame: K.frame, mull: 1, sill: K.pink }); extrude(kit, LB, shift(archRing(1.4, fl + 2.85, 0.22), s), T / 2, T / 2 + 0.06, K.pink); }
+      for (const Le of ends) {
+        const ws = []; for (let s = d0 + 2.5; s < d1 - 2; s += 3.4) ws.push(s);
+        wall2(kit, Le, d0, d1, y0, y1, K.wall, K.int, T, ws.map((s) => ({ at: s, width: 1.4, bottom: fl - y0 + 1.0, top: fl - y0 + 2.8 })));
+        for (const s of ws) { glaze(Le, s, 1.4, fl + 1.0, 1.8, T, { frame: K.frame, mull: 1, sill: K.pink }); extrude(kit, Le, shift(archRing(1.4, fl + 2.85, 0.22), s), T / 2, T / 2 + 0.06, K.pink); }
+      }
+      // bands
+      for (const Lx of [LB, ...ends]) {
+        const [p, q] = Lx === LB ? [s0, s1] : [d0, d1];
+        Lx.box(p, q, T / 2 - 0.01, T / 2 + 0.06, fl + 0.85, fl + 0.98, K.pink);
+        if (f === 1) Lx.box(p, q, T / 2 - 0.01, T / 2 + 0.08, F1 - 0.25, F1 + 0.05, K.pink);
+      }
+    }
+    for (const Lx of [LB, LA, ...ends]) {
+      const [p, q] = Lx === LB || Lx === LA ? [s0, s1] : [d0, d1];
+      if (Lx !== LA) Lx.box(p, q, T / 2 - 0.01, T / 2 + 0.07, 0, 0.75, K.pinkD);
+      Lx.box(p, q, T / 2 - 0.01, T / 2 + 0.3, R - 0.15, R + 0.1, K.pink);
+      Lx.box(p, q, -T / 2, T / 2, R, R + 0.9, K.wall);
+      Lx.box(p, q, -T / 2 - 0.05, T / 2 + 0.05, R + 0.9, R + 0.98, K.cope);
+    }
+    // the passage: arched heads on both faces, side walls
+    for (const [a, b, id] of B.rooms[0]) {
+      if (id !== 'pass') continue;
+      const w = b - a - 0.4; const sm = (a + b) / 2; const sp = G + 3.0 - w / 2;
+      for (const Lx of [LA, LB]) { extrude(kit, Lx, shift(spandrel(w, sp, G + 3.0), sm), -T / 2, T / 2, K.wall); extrude(kit, Lx, shift(archRing(w, sp, 0.3), sm), T / 2, T / 2 + 0.05, K.pink); }
+      ceiling(kit, alongU ? a : d0, alongU ? b : d1, alongU ? d0 : a, alongU ? d1 : b, G + 3.0, K.ceil);
+      rodLight(kit, alongU ? sm : (d0 + d1) / 2, alongU ? (d0 + d1) / 2 : sm, G + 3.0, 0.02, alongU ? [0, 1] : [1, 0]);
+    }
+    // partitions, furniture
+    for (const f of [0, 1]) {
+      const fl = f === 0 ? G : F1; const top = f === 0 ? F1 - 0.25 : R - 0.25;
+      kit.layer(`${B.id}${f}`, () => {
+        const list = B.rooms[f];
+        const cuts = [...new Set(list.slice(1).map(([a]) => a))];
+        for (const s of cuts) L(alongU ? 'v' : 'u', s, 1).wall(d0 + T, d1 - T, fl, top, K.int, 0.2);
+        for (const [a, b, id] of list) {
+          if (id === 'pass' || id === 'stair') continue;
+          const r = alongU ? [a, b, d0 + T, d1 - T] : [d0 + T, d1 - T, a, b];
+          furnishRoom(kit, r, fl, id === 'Office' ? 'cowork' : 'class', top);
+          kit.room(`ltc:${id}`, `LTC ${id === 'Office' ? 'Office' : id}`, r[0], r[1], r[2], r[3], fl, top, f);
+        }
+        if (B.id === 'E') rodLight(kit, 48.2, 31, top, 0.02);
+      });
+    }
+  }
+  // the east main entrance: outside steps, name over the arch, a paved forecourt
+  {
+    for (const [u0, u1, top] of [[59, 59.35, 0.3], [59.35, 59.7, 0.15]]) kit.box(u0, u1, 46.2, 49.8, 0, top, K.arc, { walkable: true });
+    kit.box(59.7, 64, 45, 51, -0.02, 0.025, 't:paving:#c9b8a8', { collide: false });
+    kit.sign('LECTURE THEATRE COMPLEX', 59.2, 48, G + 3.35, [1, 0], { width: 7.0, height: 0.6, bg: '#b8766d', fg: '#fff6ee', font: 'bold 64px Georgia, serif' });
+    for (const v of [44.6, 51.4]) kit.box(59.15, 59.6, v - 0.6, v + 0.6, 0, 3.8, K.pink);
+    for (const [u, v] of [[34, -1.2], [34, 97.2]]) for (const [a, b, top] of [[0, 0.35, 0.3], [0.35, 0.7, 0.15]]) kit.box(u - 1.8, u + 1.8, v < 0 ? v + 1.2 - b + 0 - 0 : v - 1.2 + a, v < 0 ? v + 1.2 - a : v - 1.2 + b, 0, top, K.arc, { walkable: true });
+  }
+  kit.entrance('East main entrance', 61.5, 48, [1, 0]);
+  kit.entrance('North passage', 34, -2, [0, -1]);
+  kit.entrance('South passage', 34, 98, [0, 1]);
+  // roof: water tanks and the telecom mast on the east block
+  for (const [u, v] of [[24, 4], [44, 4], [24, 92], [44, 92], [52, 20], [52, 76]]) { kit.box(u - 1.2, u + 1.2, v - 1.2, v + 1.2, R, R + 0.6, 'c:#d9cfc6', { collide: false }); kit.cyl(u, v, R + 0.6, 0.85, 1.5, 'c:#2a2c2e', { seg: 14 }); }
+  {
+    const [mu, mv] = [55, 60]; const H = 18; const b0 = 1.2; const b1 = 0.35;
+    const c = (t, sx, sz) => [mu + sx * (b0 + (b1 - b0) * t), R + H * t, mv + sz * (b0 + (b1 - b0) * t)];
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) bar(kit, c(0, sx, sz), c(1, sx, sz), 0.08, 'm:#a9afb3');
+    for (let k = 0; k < 6; k++) { const t0 = k / 6; const t1 = (k + 1) / 6; for (const [[ax, az], [bx, bz]] of [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]]]) { bar(kit, c(t0, ax, az), c(t1, bx, bz), 0.04, 'm:#a9afb3'); bar(kit, c(t1, ax, az), c(t1, bx, bz), 0.04, 'm:#a9afb3'); } }
+    for (const a of [0, 2.1, 4.2]) kit.box(mu + Math.cos(a) * 0.5 - 0.2, mu + Math.cos(a) * 0.5 + 0.2, mv + Math.sin(a) * 0.5 - 0.2, mv + Math.sin(a) * 0.5 + 0.2, R + H - 2, R + H - 0.6, 'c:#e8e8e2', { collide: false });
+  }
+  kit.room('ltcLawn', 'LTC lawn', CT.u0, CT.u1, CT.v0, CT.v1, 0, F1);
+  kit.room('ltcArcade', 'LTC arcade', 21, 25, 12, 84, G, F1);
+  kit.floors.push({ y: G, name: 'Arcades, theatres, ground-floor classrooms' }, { y: F1, name: 'First floor and the arcade-roof verandah' });
+  register(kit, campus, 'Lecture Theatre Complex', [[0, 13], [21, 13], [21, 0], [47, 0], [47, 12], [59, 12], [59, 84], [47, 84], [47, 96], [21, 96], [21, 83], [0, 83]], R);
+}
+
 // ================================================================ modules
 const mod = (name, osm, frame, build) => ({ id: 'workshops', name, category: 'academic', osm, floors: 1, enabled: true, research: 'mixed', frame: () => frame, build });
 export default [
   mod('BITS Workshop', ['BITS Workshop'], frameOf(WS.O, WS.eu, WS.U, WS.V), (kit, ctx) => { buildWorkshop(kit); ctx.buildings[0].h = WS.CREST; }),
   mod('New BITS Workshop (Central Workshop)', ['New BITS Workshop'], frameOf(NW.O, NW.eu, NW.U, NW.V), (kit, ctx) => { buildNewWorkshop(kit); ctx.buildings[0].h = 9.6; }),
+  mod('Lecture Theatre Complex', [], frameOf(LTC.O, LTC.eu, LTC.U, LTC.V), (kit, ctx) => buildLTC(kit, ctx.campus)),
   mod('Rakesh Kapoor Innovation Centre', ['Rakesh Kapoor Innovation Centre'], frameOf(RK.O, RK.eu, 38.1, 44.7), (kit, ctx) => { buildRKIC(kit); ctx.buildings[0].h = RK.G + 3 * RK.FH + 0.9; }),
 ];
