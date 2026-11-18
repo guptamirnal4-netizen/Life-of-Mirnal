@@ -132,12 +132,13 @@ function bayTexture(style = null) {
 
 // Courtyard screen bay: cusped arch, open (ground floor) or filled with a scrollwork grille above a sill; round: a
 // plain semicircular arch on piers (the middle-wing arcades of Ram, Budh, Shankar, Vyas and Vishwakarma).
-function archTexture(grille, round = false) {
+// pink: the same round arch in a salmon wall (the one doorway in a courtyard side without an arcade).
+function archTexture(grille, round = false, pink = false) {
   return canvas(512, 512, (g) => {
     const W = 512; const H = 512; const m = W / MOD; const y = (h) => H - h * (H / (FH - SLAB));
-    g.fillStyle = '#ecdcb9'; g.fillRect(0, 0, W, H);
-    g.fillStyle = '#e1cda4'; g.fillRect(0, 0, 0.32 * m, H); g.fillRect(W - 0.32 * m, 0, 0.32 * m, H);
-    g.fillStyle = '#d6bf92'; g.fillRect(0, y(0.15), W, 6);
+    g.fillStyle = pink ? '#e9b29a' : '#ecdcb9'; g.fillRect(0, 0, W, H);
+    g.fillStyle = pink ? '#e3a890' : '#e1cda4'; g.fillRect(0, 0, 0.32 * m, H); g.fillRect(W - 0.32 * m, 0, 0.32 * m, H);
+    g.fillStyle = pink ? '#d99c84' : '#d6bf92'; g.fillRect(0, y(0.15), W, 6);
     const x0 = 0.42 * m; const x1 = W - 0.42 * m; const cx = W / 2;
     const sill = grille ? 0.85 : 0; const spring = round ? 1.6 : 2.05; const apex = 2.72;
     const opening = () => {
@@ -156,7 +157,7 @@ function archTexture(grille, round = false) {
       g.lineTo(x1, y(sill)); g.closePath();
     };
     // moulding round the opening
-    g.save(); g.strokeStyle = '#cdb489'; g.lineWidth = 14; opening(); g.stroke(); g.restore();
+    g.save(); g.strokeStyle = pink ? '#f4ead8' : '#cdb489'; g.lineWidth = 14; opening(); g.stroke(); g.restore();
     g.save(); g.globalCompositeOperation = 'destination-out'; opening(); g.fill(); g.restore();
     if (grille) {
       g.save(); opening(); g.clip();
@@ -1018,9 +1019,9 @@ export class Hostel {
     else if (key.startsWith('g:')) m = new THREE.MeshStandardMaterial({ color: key.slice(2), roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.55 });
     else if (key.startsWith('x:')) {
       const name = key.slice(2);
-      const tex = name === 'bay' ? bayTexture() : name === 'bayK' ? bayTexture('k') : name === 'bayVer' ? bayTexture('ver') : name === 'bayPink' ? bayTexture('pink') : name === 'arch' ? archTexture(false) : name === 'rarch' ? archTexture(false, true) : name === 'grille' ? archTexture(true) : name === 'plates' ? this.plates.tex : name === 'platesK' ? this.platesK.tex
+      const tex = name === 'bay' ? bayTexture() : name === 'bayK' ? bayTexture('k') : name === 'bayVer' ? bayTexture('ver') : name === 'bayPink' ? bayTexture('pink') : name === 'arch' ? archTexture(false) : name === 'rarch' ? archTexture(false, true) : name === 'rarchPink' ? archTexture(false, true, true) : name === 'grille' ? archTexture(true) : name === 'plates' ? this.plates.tex : name === 'platesK' ? this.platesK.tex
         : name.startsWith('fac:') ? facadeTexture(name.slice(4)) : name.startsWith('front:') ? frontTexture(STYLE[name.slice(6)]) : TEXTURES[name]();
-      const cut = name === 'arch' || name === 'rarch' || name === 'grille' || name === 'courtWin' || name.startsWith('front:') || CUT.has(name);
+      const cut = name === 'arch' || name === 'rarch' || name === 'rarchPink' || name === 'grille' || name === 'courtWin' || name.startsWith('front:') || CUT.has(name);
       m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: cut ? THREE.DoubleSide : THREE.FrontSide, alphaTest: cut ? 0.5 : 0 });
     } else if (key.startsWith('facade:')) m = this.campus.material(key);
     else if (key === VC) m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
@@ -1295,16 +1296,19 @@ export class Hostel {
         const n = Math.max(1, Math.round((b - a) / MOD)); const bw = (b - a) / n;
         for (let j = 0; j < n; j++) {
           const m = a + (j + 0.5) * bw;
+          // a walled side still has one open arch in its middle on the ground floor, so every courtyard can be
+          // reached from the corridor round it
+          const door = !arcade && k === 0 && j === Math.floor(n / 2);
           const g = new THREE.PlaneGeometry(bw, FH - SLAB);
           if (axis === 'u') g.rotateY(Math.PI / 2);
           g.translate(axis === 'u' ? at : m, y0 + (FH - SLAB) / 2, axis === 'u' ? m : at);
-          this.geo(!arcade ? 'x:courtWin' : k === 0 ? ground : upper, g);
+          this.geo(door ? 'x:rarchPink' : !arcade ? 'x:courtWin' : k === 0 ? ground : upper, g);
           // piers
           const p0 = a + j * bw;
           const pier = (pa, pb) => (axis === 'u' ? this.box(at - SCREEN / 2, at + SCREEN / 2, pa, pb, y0, y1, pierKey, { collide: true }) : this.box(pa, pb, at - SCREEN / 2, at + SCREEN / 2, y0, y1, pierKey, { collide: true }));
           if (k === 0 && arcade) pier(Math.max(a, p0 - 0.4), p0 + 0.4);
           else if (!arcade) pier(Math.max(a, p0 - 0.25), Math.min(b, p0 + 0.25));
-          if (k > 0 || !arcade) { if (axis === 'u') this.col(at - 0.1, at + 0.1, p0, p0 + bw, y0, y1); else this.col(p0, p0 + bw, at - 0.1, at + 0.1, y0, y1); }
+          if ((k > 0 || !arcade) && !door) { if (axis === 'u') this.col(at - 0.1, at + 0.1, p0, p0 + bw, y0, y1); else this.col(p0, p0 + bw, at - 0.1, at + 0.1, y0, y1); }
         }
         if (k === 0 || !arcade) { const pb = b; const d = arcade ? 0.4 : 0.25; axis === 'u' ? this.box(at - SCREEN / 2, at + SCREEN / 2, pb - d, pb, y0, y1, pierKey) : this.box(pb - d, pb, at - SCREEN / 2, at + SCREEN / 2, y0, y1, pierKey); }
       }
@@ -2096,11 +2100,12 @@ export class Hostel {
   // ---------- Krishna Bhawan's outside ----------
   // A vertical quad in the local frame from p0 = [u, v] to p1, y0 to y1; it faces the side where, walking from p0
   // to p1, the outside is on your left. The texture repeats `rep` times across.
-  quad(key, p0, p1, y0, y1, rep = 1) {
+  // vt: how much of the texture's height the quad shows, from the bottom (a lower part of a taller painted face)
+  quad(key, p0, p1, y0, y1, rep = 1, vt = 1) {
     const g = new THREE.BufferGeometry();
     const P = [[p0[0], y0, p0[1]], [p1[0], y0, p1[1]], [p1[0], y1, p1[1]], [p0[0], y1, p0[1]]];
     const idx = [0, 1, 2, 0, 2, 3];
-    const UV = [[0, 0], [rep, 0], [rep, 1], [0, 1]];
+    const UV = [[0, 0], [rep, 0], [rep, vt], [0, vt]];
     const dx = p1[0] - p0[0]; const dz = p1[1] - p0[1]; const l = Math.hypot(dx, dz);
     const n = [-dz / l, 0, dx / l];
     g.setAttribute('position', new THREE.Float32BufferAttribute(idx.flatMap((i) => P[i]), 3));
@@ -2151,7 +2156,7 @@ export class Hostel {
     const gate = this.mine ? [ve - 4.9, ve - 2.6] : [b0 + 2.6, b0 + 4.9]; const door = [ve - 1.15, ve + 1.15];
     for (const [v0, v1] of [[b0 + 0.35, gate[0]], [gate[1], door[0]], [door[1], b1 - 0.35]]) this.box(f, f1, v0, v1, 0, 3.3, cream);
     this.quad(front, [f - 0.02, b0], [f - 0.02, b1], 0, fh);
-    this.quad(front, [f1 + 0.02, b1], [f1 + 0.02, b0], 0, block ? 3.3 : 4.4);
+    this.quad(front, [f1 + 0.02, b1], [f1 + 0.02, b0], 0, block ? 3.3 : 4.4, 1, block ? 3.3 / fh : 1);
     // the gate, shut
     this.quad('x:kgate', [f + 0.15, gate[0]], [f + 0.15, gate[1]], 0.28, 2.45);
     this.col(f, f1, gate[0], gate[1], 0, 2.5);
