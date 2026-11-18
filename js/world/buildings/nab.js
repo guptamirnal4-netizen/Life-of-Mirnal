@@ -24,13 +24,14 @@ const CH = 3.6; // clear height of the rooms (false ceiling)
 const TOEW = -8; const TOPW = -14; const TOEE = 88; const TOPE = 94; // light-well toes and embankment tops
 const WV0 = 2; const WV1 = 241; // light-wells run between these v
 const STAIR_TOP = 128; const STAIR_FOOT = 137; // the canopy stair between the courtyard levels
+const RSTAIR = [36.18, 41.69]; // the stair up to the at-grade Rotunda when main-building is not active (u)
 const RAMP_U0 = 32; const RAMP_U1 = 42.5; const RAMP_V1 = 300; // South side ramp
 
 // materials (research B3)
 const M = {
   buff: 't:plaster:#dcbf8c', buff2: 't:plaster:#e6cc9a', white: 't:plasterWhite:#f1eee6', col: 'c:#efe8d8',
   fascia: 'c:#f4f1ea', red: 'c:#c0302a', glass: 'g:#2c3640', steel: 'm:#8d9296', maroon: 'm:#8e2b25',
-  kota: 't:concrete:#b3bbb0', ochre: 'c:#d39a3c', pave: 't:paving:#b3ada2', sand: 't:paving:#b4553a',
+  kota: 't:concrete:#d2cdb8', ochre: 'c:#b98a4a', pave: 't:paving:#b3ada2', sand: 't:paving:#b4553a',
   grass: 't:grass:#9cc06a', lawn: 't:grass:#a9c97c', earth: 't:grass:#8fb35e', portal: 't:plaster:#e7c675',
   ptrim: 'c:#f5e7b8', wall: 't:plaster:#efe9dc', ceil: 'c:#ebe8e0', door: 't:wood:#d2a86a', ochreWall: 'c:#e8b84a',
   wood: 't:wood:#c8a06a', dark: 'c:#2a2d31', seat: 'c:#7f858c', stage: 't:wood:#8a5a32', panel: 't:wood:#c99a4a',
@@ -126,6 +127,23 @@ export default {
     const B = (u0, u1, v0, v1, y0, y1, key, o) => kit.box(u0, u1, v0, v1, y0, y1, key, o);
     const V = (u0, u1, v0, v1, y0, y1, key) => kit.box(u0, u1, v0, v1, y0, y1, key, { collide: false });
     const floorV = (u0, u1, v0, v1, y, key) => V(u0, u1, v0, v1, y - 0.03, y + 0.004, key);
+    // Thin overlays (lawns on the ground, paths on lawns, floor inlays) get a polygon offset so they win the depth
+    // test even from the 330 m campus-map camera, where a few centimetres are below the depth precision.
+    const inlayFrame = (u0, u1, v0, v1, y, w = 0.12) => {
+      if (u1 - u0 < 1 || v1 - v0 < 1) return;
+      const k = po(M.ochre); const [a, b] = [y + 0.004, y + 0.01];
+      V(u0, u1, v0, v0 + w, a, b, k); V(u0, u1, v1 - w, v1, a, b, k);
+      V(u0, u0 + w, v0 + w, v1 - w, a, b, k); V(u1 - w, u1, v0 + w, v1 - w, a, b, k);
+    };
+    const po = (key) => {
+      const k = `po:${key}`;
+      if (!kit.customMats[k]) {
+        const m = kit.material(key).clone();
+        Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
+        kit.customMats[k] = m;
+      }
+      return k;
+    };
 
     // gameplay rooms: keep their volume clear and give their door paths the right height
     const game = ctx.rooms.map((r) => {
@@ -267,19 +285,30 @@ export default {
     // ---------- roof lawns at grade over both blocks ----------
     for (const poly of [WB, EB]) {
       const sh = new THREE.Shape(poly.map(([u, v]) => new THREE.Vector2(u, -v)));
-      const slab = new THREE.ExtrudeGeometry(sh, { depth: -C1, bevelEnabled: false });
-      slab.rotateX(-Math.PI / 2); slab.translate(0, C1, 0);
+      // the white fascia: the slab's sides and underside only. Its top cap would lie a few cm under the lawn and
+      // tear through it at map distance (depth precision), and nobody can see it anyway.
+      const ext = new THREE.ExtrudeGeometry(sh, { depth: ROOF - C1, bevelEnabled: false });
+      ext.rotateX(-Math.PI / 2); ext.translate(0, C1, 0);
+      const src = ext.index ? ext.toNonIndexed() : ext;
+      const P = src.attributes.position; const keep = [];
+      for (let i = 0; i < P.count; i += 3) {
+        const atTop = [0, 1, 2].every((k) => Math.abs(P.getY(i + k) - ROOF) < 1e-4);
+        if (!atTop) for (let k = 0; k < 3; k++) keep.push(P.getX(i + k), P.getY(i + k), P.getZ(i + k));
+      }
+      const slab = new THREE.BufferGeometry(); slab.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
+      slab.setAttribute('uv', new THREE.Float32BufferAttribute(new Array((keep.length / 3) * 2).fill(0), 2));
+      slab.computeVertexNormals();
       kit.mesh(slab, M.fascia);
       const top = new THREE.ShapeGeometry(sh); top.rotateX(-Math.PI / 2); top.translate(0, ROOF, 0);
       const uv = top.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 4, uv.getY(i) / 4);
-      kit.mesh(top, M.lawn);
+      kit.mesh(top, po(M.lawn));
       for (const b of bands(poly)) fill(b.u0, b.u1, b.v0, b.v1, C1, ROOF);
     }
     // roof landscape: shrub beds, bougainvillea, gravel paths and skylights (research B3: green roof, skylights)
     for (const [poly, uc] of [[WB, 14], [EB, 63]]) {
       for (let v = 8; v < 238; v += 18) {
         if (!inPolyL(uc, v, poly)) continue;
-        V(uc - 5, uc + 5, v - 0.6, v + 0.6, ROOF, ROOF + 0.02, M.pave); // gravel path
+        V(uc - 5, uc + 5, v - 0.6, v + 0.6, ROOF, ROOF + 0.02, po(M.pave)); // gravel path
         const sk = (v / 18) % 2 < 1;
         if (sk && inPolyL(uc + 7, v + 4, poly)) { B(uc + 5.5, uc + 8.5, v + 3, v + 5, ROOF, 0.55, M.fascia, { collide: true }); V(uc + 5.7, uc + 8.3, v + 3.2, v + 4.8, 0.55, 0.62, M.glass); }
         if (inPolyL(uc - 8, v + 8, poly)) {
@@ -303,7 +332,16 @@ export default {
       for (let i = 0; i < vs.length; i += 2) {
         const [v0, v1] = [vs[i], vs[i + 1]];
         kit.mesh(quad([toe, Y1, v0], [toe, Y1, v1], [top, 0.02, v1], [top, 0.02, v0]), M.earth);
-        kit.col(Math.min(toe, top), Math.max(toe, top), v0, v1, Y2, 0, true);
+        // solid embankment: six terraces under the slope, 0.75 m apart (too tall to climb from the well). Each is a
+        // stack of walkable layers 0.6 m apart, so anything that ends up inside the bank (a respawn, a teleport)
+        // rises to its surface instead of dropping to the pit floor. The terrace at the toe stacks only below the
+        // well floor, so the well cannot climb it.
+        for (let i = 0; i < 6; i++) {
+          const ua = toe + ((top - toe) * i) / 6; const ub = toe + ((top - toe) * (i + 1)) / 6;
+          const [a0, a1] = [Math.min(ua, ub), Math.max(ua, ub)]; const h = Y1 + 0.75 * (i + 1);
+          kit.col(a0, a1, v0, v1, Y2, h, true);
+          for (let y = Y2 + 0.6; y < (i === 0 ? Y1 - 0.7 : h - 0.05); y += 0.6) kit.col(a0, a1, v0, v1, y - 0.1, y, true);
+        }
         rail(top - side * 0.1, v0, top - side * 0.1, v1, 0);
         // shrubs along the slope
         for (let v = v0 + 3; v < v1 - 2; v += 7) { const g = new THREE.SphereGeometry(0.8, 7, 5); g.scale(1.3, 0.7, 1); const u = toe + (top - toe) * 0.45; g.translate(u, Y1 + 4.5 * 0.45 + 0.2, v); kit.mesh(g, 'c:#557f34'); }
@@ -337,12 +375,32 @@ export default {
     }
     if (!this._mainActive) {
       // standalone (no sunken Rotunda yet): the old Rotunda sits at grade here, so the rim is a wall and rail
+      // (until main-building sinks it). A straight stair climbs from the courtyard up to the Rotunda's south
+      // opening, between buff cheek walls; the rest of the rim is a dressed retaining wall with a coping and rail.
+      const [G0, G1] = RSTAIR;
       for (let k = 0; k + 1 < this._arc.length; k++) {
         const [a, b] = [this._arc[k], this._arc[k + 1]];
-        const g = new THREE.BoxGeometry(Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.05, -Y1, 0.4); g.rotateY(-Math.atan2(b[1] - a[1], b[0] - a[0]));
-        g.translate((a[0] + b[0]) / 2, Y1 / 2, (a[1] + b[1]) / 2 - 0.2); kit.mesh(g, M.retain);
-        segRail([a[0], a[1] - 0.1], [b[0], b[1] - 0.1], 0.05);
+        if (a[0] >= G0 - 0.02 && b[0] <= G1 + 0.02) continue; // the stair opening
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.05; const ang = -Math.atan2(b[1] - a[1], b[0] - a[0]);
+        const piece = (h, d, y, dv, key) => { const g = new THREE.BoxGeometry(len, h, d); g.rotateY(ang); g.translate((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2 + dv); kit.mesh(g, key); };
+        piece(-Y1, 0.4, Y1 / 2, -0.2, M.retain);
+        piece(0.35, 0.5, -0.4, -0.15, M.buff); // buff string course under the coping
+        piece(0.12, 0.6, 0.06, -0.2, M.stone); // coping
+        for (const yy of [-3.2, -2.0]) piece(0.08, 0.44, yy, -0.2, M.stone); // horizontal rustication
+        segRail([a[0], a[1] - 0.1], [b[0], b[1] - 0.1], 0.12);
       }
+      const n = 30; const rise = -Y1 / n; const tread = 0.28; const mid = (G0 + G1) / 2;
+      const vTop = Math.max(this._arc.find((p) => p[0] >= G0 - 0.02)[1], this._arc.filter((p) => p[0] <= G1 + 0.02).pop()[1]) + 0.05;
+      const vFoot = vTop + n * tread;
+      kit.flight(mid, vFoot, Y1, [0, -1], n, rise, G1 - G0 - 0.8, M.stone);
+      B(G0 + 0.4, G1 - 0.4, vTop - 1.2, vTop, -0.2, 0.1, M.stone, { walkable: true }); // top landing onto the Rotunda
+      for (const [c0, c1] of [[G0 - 0.0, G0 + 0.4], [G1 - 0.4, G1]]) {
+        B(c0, c1, vTop - 0.4, vFoot, Y1, 0.05, M.buff); // cheek walls
+        B(c0 - 0.05, c1 + 0.05, vTop - 0.4, vFoot + 0.05, 0.05, 0.17, M.stone, { collide: false });
+        rail((c0 + c1) / 2, vTop, (c0 + c1) / 2, vFoot, 0.17);
+      }
+      kit.stairs.push({ name: 'Rotunda stair (courtyard to the Rotunda)', u0: G0, u1: G1, v0: vTop, v1: vFoot, y0: Y1, y1: 0 });
+      this._rotundaStair = { u: mid, vTop, vFoot };
     }
     // the south end of the lower courtyard: walls up to grade either side of the ramp
     for (const [u0, u1] of [[25.1, RAMP_U0], [RAMP_U1, 48.7]]) { B(u0, u1, 243, 243.4, Y2, 0.05, M.retain); rail(u0, 243.2, u1, 243.2, 0.05); }
@@ -362,7 +420,7 @@ export default {
       kit.stairs.push({ name: 'South side ramp', u0: RAMP_U0, u1: RAMP_U1, v0: 243, v1: RAMP_V1, y0: Y2, y1: 0 });
       // the lawns the ramp cuts through (the OSM lawn was dropped above) and the Snake Path to Gandhi Marg
       const lawns = [[[25.1, 243], [RAMP_U0, 243], [RAMP_U0, RAMP_V1], [31.98, RAMP_V1]], [[RAMP_U1, 243.1], [48.7, 243.1], [43.27, RAMP_V1], [RAMP_U1, RAMP_V1]], [[31.98, RAMP_V1], [43.27, RAMP_V1], [41.2, 321.8], [34.6, 321.7]]];
-      for (const p of lawns) { const g = new THREE.ShapeGeometry(new THREE.Shape(p.map(([u, v]) => new THREE.Vector2(u, -v)))); g.rotateX(-Math.PI / 2); g.translate(0, 0.03, 0); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 4, uv.getY(i) / 4); kit.mesh(g, M.grass); }
+      for (const p of lawns) { const g = new THREE.ShapeGeometry(new THREE.Shape(p.map(([u, v]) => new THREE.Vector2(u, -v)))); g.rotateX(-Math.PI / 2); g.translate(0, 0.05, 0); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 4, uv.getY(i) / 4); kit.mesh(g, po(M.grass)); }
       V(mid - 1.1, mid + 1.1, RAMP_V1, 322, 0.0, 0.06, M.pave);
       kit.entrance('South side ramp (Gandhi Marg)', mid, RAMP_V1 + 2, [0, 1]);
     }
@@ -373,7 +431,7 @@ export default {
         const [a, b] = [pts[i - 1], pts[i]];
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]); const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
         for (const [w, key, dy] of [[2.6, M.sand, 0.02], [2.0, M.stone, 0.035]]) {
-          const g = new THREE.BoxGeometry(len + w * 0.5, 0.03, w); g.rotateY(-ang); g.translate((a[0] + b[0]) / 2, y + dy, (a[1] + b[1]) / 2); kit.mesh(g, key);
+          const g = new THREE.BoxGeometry(len + w * 0.5, 0.03, w); g.rotateY(-ang); g.translate((a[0] + b[0]) / 2, y + dy, (a[1] + b[1]) / 2); kit.mesh(g, po(key));
         }
         for (let s = 3; s < len; s += 9) { // bollard lights
           const u = a[0] + ((b[0] - a[0]) * s) / len; const v = a[1] + ((b[1] - a[1]) * s) / len;
@@ -387,14 +445,14 @@ export default {
     for (const b of bands([...this._arc.map(([u, v]) => [u, Math.max(v, -40)]), [47.5, 0.3], [47.5, STAIR_TOP], [30, STAIR_TOP]])) floorV(b.u0, b.u1, b.v0, b.v1, Y1, M.pave);
     for (const b of bands(WB)) if (b.v0 < STAIR_TOP) floorV(b.u1, 30, b.v0, Math.min(b.v1, STAIR_TOP), Y1, M.pave);
     for (const b of bands(EB)) if (b.v0 < STAIR_TOP) floorV(47.5, b.u0, b.v0, Math.min(b.v1, STAIR_TOP), Y1, M.pave);
-    snake([[39.6, -5.5], [39.1, 8.2], [34.1, 30.9], [40, 50], [39.4, 60.7], [36, 70.4], [33.4, 91.8], [35.9, 116.4], [37.5, 127.5]], Y1);
+    snake([this._rotundaStair ? [38.9, this._rotundaStair.vFoot + 0.3] : [39.6, -5.5], [39.1, 8.2], [34.1, 30.9], [40, 50], [39.4, 60.7], [36, 70.4], [33.4, 91.8], [35.9, 116.4], [37.5, 127.5]], Y1);
     // lower courtyard (-9), including the colonnades under the galleries
     for (const [v0, v1] of [[STAIR_FOOT, 186.3], [186.3, 190.3], [190.3, 201.3], [201.3, 243]]) floorV(Rw(v0 + 0.1), Re(v0 + 0.1), v0, v1, Y2, M.pave);
     snake([[39, STAIR_FOOT + 0.5], [41.5, 148.1], [39.8, 168.8], [40.6, 183.2], [43.2, 198.5], [43.2, 207.2], [37.6, 218.3], [36.2, 229.4], [37.5, 243.5]], Y2);
     // planting beds (raised, walkable kerbs) with tall clumps and grasses, both levels
     const bed = (u0, u1, v0, v1, y) => {
       B(u0, u1, v0, v1, y, y + 0.4, M.stone, { walkable: true });
-      V(u0 + 0.12, u1 - 0.12, v0 + 0.12, v1 - 0.12, y + 0.4, y + 0.42, M.grass);
+      V(u0 + 0.12, u1 - 0.12, v0 + 0.12, v1 - 0.12, y + 0.4, y + 0.42, po(M.grass));
       for (let u = u0 + 0.8; u < u1 - 0.5; u += 1.6) {
         for (let v = v0 + 0.8; v < v1 - 0.5; v += 1.7) {
           const k = Math.round(u * 7 + v * 3) % 3;
@@ -677,8 +735,8 @@ export default {
         }
       }
       if (d.floor) floorV(u0, u1, v0, v1, y, M.kota);
-      // ochre inlay strips in the Kota floor
-      for (let u = u0 + 1.5; u < u1 - 1; u += 3) V(u - 0.04, u + 0.04, v0 + 0.5, v1 - 0.5, y + 0.004, y + 0.012, M.ochre);
+      // a continuous ochre border band inset in the Kota floor
+      inlayFrame(u0 + 0.6, u1 - 0.6, v0 + 0.6, v1 - 0.6, y);
       V(u0, u1, v0, v1, ceil, ceil + 0.04, M.ceil);
       lights(u0, u1, v0, v1, ceil);
       kit.room(`nab-${n}`, `${d.title || 'Room'} ${n}`, u0, u1, v0, v1, y, ceil, y === Y1 ? -1 : -2);
@@ -757,7 +815,7 @@ export default {
       for (const v of [v0, v1]) kit.wall(west ? u0 + 0.2 : end(v), v, west ? end(v) : u1 - 0.2, v, Y1, C1, M.wall, { thick: 0.25 });
       const a = west ? u0 + 0.2 : end(v0); const b = west ? end(v0) : u1 - 0.2;
       lights(a, b, v0 + 1, v1 - 1, C1);
-      for (let u = a + 1, k = 0; u < b - 1; u += 1.6, k++) { const vm = (v0 + v1) / 2 + (k % 2 ? 1.1 : -1.1); V(u - 0.5, u + 0.5, vm - 0.05, vm + 0.05, Y1 + 0.004, Y1 + 0.012, M.ochre); }
+      inlayFrame(a + 0.5, b - 0.5, v0 + 0.6, v1 - 0.6, Y1); // continuous border bands, as in the rooms
       plate(k.name.replace(/ \(.*/, ''), west ? a + 0.6 : b - 0.6, v0 + 0.15, Y1 + 2.3, [0, 1], 1.4, 0.3, '#7a2622', '#f6ecd2');
     };
     for (const [zone, list] of [...westRooms, ...eastRooms]) kit.layer(zone, () => { for (const r of list) if (roomBox(r)) room(r); });

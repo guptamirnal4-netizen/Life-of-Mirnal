@@ -1,5 +1,5 @@
 // New Academic Block walk test: in through the portals (down to level -01), along the courtyard, down and up
-// every stair (portal stairs, the canopy stair, the two dog-legs to level -02, the South side ramp), into the key
+// every stair (portal stairs, the Rotunda stair, the canopy stair, the two dog-legs to level -02, the South side ramp), into the key
 // rooms and both gameplay rooms, and against walls and rails. Real key presses; positions in the NAB frame.
 // node tests/browser/nab.mjs [OUTDIR] [URL]   (dev server: PORT=8092 node dev/server.mjs)
 import { chromium } from 'playwright-core';
@@ -117,6 +117,30 @@ w = await route([[37.25, 270], [37.25, 303]]);
 check(w.y > -0.05 && w.v > 300, `South side ramp up to grade ${JSON.stringify(w)}`);
 w = await route([[37.25, 270], [37.25, 238]]);
 check(near(w.y, -9), `South side ramp back down ${JSON.stringify(w)}`);
+
+// ---- Rotunda stair (only while main-building is not active): courtyard up to the at-grade Rotunda and back ----
+const rs = await g((K) => { const kit = eval(K); return kit.stairs.find((s) => /Rotunda stair/.test(s.name)) || null; }, K);
+if (rs) {
+  const mu = (rs.u0 + rs.u1) / 2;
+  await at(mu, rs.v1 + 4, -4.5, 0, -1);
+  w = await route([[mu, rs.v1 + 1], [mu, rs.v0 + 0.5], [mu, rs.v0 - 3]]);
+  check(w.y > -0.05 && w.v < rs.v0 - 2, `Rotunda stair up to the Rotunda ${JSON.stringify(w)}`);
+  await shot('test-rotunda-stair');
+  w = await route([[mu, rs.v0 + 0.5], [mu, rs.v1 + 1], [mu, rs.v1 + 4]]);
+  check(near(w.y, -4.5), `Rotunda stair back down to the courtyard ${JSON.stringify(w)}`);
+  await at(33, 2, -4.5, 0, -1);
+  w = await go(33, -8, { ms: 3000 });
+  check(near(w.y, -4.5) && w.v > -5.4, `the rim wall blocks beside the Rotunda stair ${JSON.stringify(w)}`);
+} else console.log('SKIP Rotunda stair (main-building active)');
+
+// ---- the embankments are solid: something placed inside one does not drop to the pit floor ----
+await at(-10, 4, -4.5, 0, 1);
+await page.waitForTimeout(1500);
+w = await where();
+check(w.y > -4.6, `west embankment is solid (start at u -10 inside the slope) ${JSON.stringify(w)}`);
+await at(-5.5, 40, -4.5, 0, 1);
+w = await go(-10, 40, { ms: 2500 });
+check(near(w.y, -4.5) && w.u > -9, `the embankment toe blocks from the light-well ${JSON.stringify(w)}`);
 
 // ---- key rooms ----
 await at(28, 13.8, -4.5, -1, 0);
