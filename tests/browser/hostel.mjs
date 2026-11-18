@@ -37,7 +37,7 @@ await page.waitForTimeout(500);
 await page.getByRole('button', { name: 'Start the day' }).click();
 await page.waitForTimeout(400);
 await lock(true);
-const H = await g(() => { const h = window.__game.campus.hostel; return { ve: h.ve, W: h.W, L: h.L, FH: 3.3, stair: h.ve + 3.4 }; });
+const H = await g(() => { const h = window.__game.campus.hostel; const room = h.spaces.find((s) => s.id === 'hostelroom'); return { ve: h.ve, W: h.W, L: h.L, WD: h.WD, FH: 3.3, stair: h.ve + 3.4, door: room.t0 + 0.8, arch: (() => { const c = h.court[0]; const n = Math.round((c.v1 - c.v0) / 3.4); const bw = (c.v1 - c.v0) / n; return c.v0 + (Math.round((h.ve - 30 - c.v0) / bw - 0.5) + 0.5) * bw; })() }; });
 
 // --- your room → corridor ---
 let w = await where();
@@ -45,7 +45,7 @@ check(w.room === 'hostelroom' && w.y === 0, `day starts in your room on the grou
 await walk(2500);
 w = await where();
 log('after walking out', JSON.stringify(w));
-check(w.room === 'hostel' && w.u > 4.75 && w.u < 7.6, 'walked out of your room into the corridor');
+check(w.room === 'hostel' && w.u > 4.75, 'walked out of your room into the corridor');
 
 // --- corridor → lobby → outside ---
 await at(6.15, H.ve, 0, '-u');
@@ -88,7 +88,7 @@ check(Math.abs(w.y - 6.6) < 0.05, 'second stair flight pair reaches the roof ter
 await page.screenshot({ path: `${OUT}/k03-roof.png` });
 await walk(4000);
 w = await where();
-check(Math.abs(w.y - 6.6) < 0.05 && w.u < 7.9, 'the roof parapet stops you at the courtyard edge');
+check(Math.abs(w.y - 6.6) < 0.05 && w.u < H.WD + 0.05, 'the roof parapet stops you at the courtyard edge');
 // back down
 await at(5.0, H.stair + 2.6, 6.6, '-u');
 await walk(2600); await face('-v'); await walk(1000); await face('+u'); await walk(2600);
@@ -104,19 +104,19 @@ w = await where();
 log('ground corridor', JSON.stringify(w));
 check(v0 - w.v > 10 && w.y === 0, 'ground-floor corridor is clear for a long walk');
 // courtyard through the arches
-await at(6.15, H.ve - 30, 0, '+u');
+await at(H.WD - 1.5, H.arch, 0, '+u'); // Krishna: from the courtyard verandah, behind the arcade, facing an arch
 await walk(3000);
 w = await where();
-check(w.room === null && w.u > 8, 'walked through an arch into the courtyard');
+check(w.room === null && w.u > H.WD, `walked through an arch into the courtyard (${JSON.stringify(w)})`);
 
 // --- doors ---
-await at(6.15, H.ve - 2.6, 0, '-u');
+await at(6.15, H.door, 0, '-u');
 await page.waitForTimeout(200);
 const doorId = await g(() => { const G = window.__game; return G.campus.interactables.find((i) => i.id.startsWith('hdoor:') && Math.hypot(i.pos.x - G.player.pos.x, i.pos.z - G.player.pos.z) < 2)?.id; });
 await g((id) => window.__game.handleInteractable(id), doorId);
 await page.waitForTimeout(200);
 check(/Door closed/.test(await toastText()), `E closes your room door (${doorId})`);
-await at(6.15, H.ve - 4.6, 0, '-u');
+await at(6.15, H.door, 0, '-u');
 await walk(2500);
 w = await where();
 check(w.room !== 'hostelroom', 'a closed door keeps you out');

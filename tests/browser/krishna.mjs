@@ -170,6 +170,16 @@ for (const id of ['hlight', 'almirah', 'gate', 'studydesk', 'tt', 'tv', 'sofa', 
 await g(() => window.__game.handleInteractable('hlight')); await page.waitForTimeout(150);
 check((await g(() => window.__game.campus.hostel.lightOn)) === false, 'your light switch works');
 await g(() => window.__game.handleInteractable('hlight'));
+await g(() => window.__game.handleInteractable('almirah')); await page.waitForTimeout(150);
+check(/almirah/i.test(await page.locator('#toast').innerText()), 'your almirah opens');
+await g(() => window.__game.handleInteractable('almirah'));
+// your door: shut it from the corridor and it keeps you out; open it and you can walk in
+await at(6.15, H.room.t0 + 0.8, 0, '-u'); await page.waitForTimeout(200);
+const doorId = await g(() => { const G = window.__game; return G.campus.interactables.find((i) => i.id.startsWith('hdoor:') && Math.hypot(i.pos.x - G.player.pos.x, i.pos.z - G.player.pos.z) < 2)?.id; });
+await g((id) => window.__game.handleInteractable(id), doorId); await walk(1500); w = await where();
+check(!!doorId && w.room !== 'hostelroom', `your shut door keeps you out (${doorId}, ${JSON.stringify(w)})`);
+await g((id) => window.__game.handleInteractable(id), doorId); await walk(1500); w = await where();
+check(w.room === 'hostelroom', 'opened again, you walk in');
 await at(2.6, H.room.t1 - 0.6, 0, '-v'); await g(() => { window.__game.player.yaw += 0.7; }); await page.waitForTimeout(300); await shot('k-room-alcove');
 await at(6.15, H.common.t0 + 6.8, 0, '-u'); await walk(1500); w = await where();
 check(w.room === 'hostel' && w.u < 4.5, `walked into the common room (${JSON.stringify(w)})`);
@@ -193,7 +203,44 @@ await g(() => { window.__game.state.settings.view = 'first'; window.__game.state
 // --- from far outside, no interior is drawn ---
 await at(-120, H.ve, 0, '+u'); await page.waitForTimeout(500);
 check(await g(() => !window.__game.campus.hostel.g.visible), 'far outside: Krishna\'s interior is not drawn');
+await at(-8, H.ve - 40, 0, '+u'); await page.waitForTimeout(300);
+check(await g(() => !window.__game.campus.hostel.g.visible), 'beside the opaque outer face: the interior is not drawn');
+await at(-8, H.ve, 0, '+u'); await page.waitForTimeout(300);
+check(await g(() => window.__game.campus.hostel.g.visible), 'in front of the entrance bay: the interior is drawn (seen through the arch)');
 await at(-30, H.ve - 4, 0, '+u'); await g(() => { window.__game.player.pitch = 0.12; }); await page.waitForTimeout(500); await shot('k-front');
+
+// --- sleep in your bed at night and wake up there ---
+await g(() => { const G = window.__game; G.player.place(G.campus.bedSpot.clone(), 0); G.state.day.clock = 21 * 60 + 5; });
+await page.waitForTimeout(500);
+await g(() => window.__game.handleInteractable('gate'));
+await page.locator('#overlay button', { hasText: 'Sleep → next day' }).click();
+await page.waitForTimeout(600);
+w = await where();
+check(w.room === 'hostelroom', `you sleep in your bed and wake up in your room (${JSON.stringify(w)})`);
+
+// --- aerial and drone-angle views from the campus map (explore mode) ---
+const map = await browser.newPage({ viewport: { width: 1400, height: 860 } });
+map.setDefaultTimeout(90000);
+map.on('pageerror', (e) => errors.push(e.message));
+map.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+await map.goto(`${URL}?explore`, { waitUntil: 'load' });
+await map.waitForFunction(() => window.__game?.explorer?.campus?.hostel);
+await map.evaluate(() => { document.querySelector('.ex-panel')?.classList.add('folded'); const s = document.querySelector('.ex-time input'); if (s) { s.value = 600; s.dispatchEvent(new Event('input')); } });
+// [name, camera (u, v, y), target (u, v, y)] in Krishna's local frame
+for (const [name, c, t] of [
+  ['k-aerial', [31, 81, 190], [31, 81, 0]],
+  ['k-drone-west', [-60, 180, 70], [25, 70, 0]], // the research drone shot of the west face, from the south-west
+  ['k-oblique', [-50, 20, 40], [30, 90, 3]],
+  ['k-court-aerial', [5, 40, 25], [30, 60, 0]],
+  ['k-entrance-bay', [-22, 70, 6], [0, 81, 4]],
+]) {
+  await map.evaluate(([c, t]) => {
+    const E = window.__game.explorer; const H = E.campus.hostel;
+    E.fly = null; E.camera.position.copy(H.world(...c)); E.controls.target.copy(H.world(...t)); E.controls.update();
+  }, [c, t]);
+  await map.waitForTimeout(1500);
+  await map.screenshot({ path: `${OUT}/${name}.png` });
+}
 
 log('ERRORS', JSON.stringify(errors));
 log(fails.length || errors.length ? `FAILED ${fails.length}: ${fails.join(' | ')}` : 'ALL PASS');

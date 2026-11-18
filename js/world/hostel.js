@@ -682,6 +682,10 @@ export class Hostel {
   box(u0, u1, v0, v1, y0, y1, key, { collide = true, walkable = false } = {}) {
     if (u1 < u0) [u0, u1] = [u1, u0];
     if (v1 < v0) [v0, v1] = [v1, v0];
+    // anything built up from below to the roof level stops just under the roof's surface, or its top z-fights with
+    // the roof (salmon stripes along the roof in the aerial view)
+    const R = FLOORS * FH;
+    if (y0 < R - 0.1 && y1 > R - 0.03 && y1 < R + 0.01) y1 = R - 0.03;
     const w = u1 - u0; const d = v1 - v0; const h = y1 - y0;
     if (w <= 0 || d <= 0 || h <= 0) return;
     const tex = key.startsWith('t:') ? key.split(':')[1] : null;
@@ -1858,7 +1862,14 @@ export class Hostel {
     this.time += dt;
     if (playerPos) {
       // from outside, the facade hides the interior except through the entrance
-      this.g.visible = this.distance(playerPos.x, playerPos.z) < 15 && playerPos.y < 30;
+      let near = this.distance(playerPos.x, playerPos.z) < 15 && playerPos.y < 30;
+      // Krishna's outer face is opaque (painted windows), so from outside only the entrance bay looks in
+      if (near && this.mine) {
+        const [u, v] = this.local(playerPos.x, playerPos.z);
+        const inside = u > -0.2 && u < this.W + 0.2 && v > -0.2 && v < this.L + 0.2;
+        near = inside || (u < 0 && Math.abs(v - this.ve) < 14);
+      }
+      this.g.visible = near;
     }
     if (this.ttBall && this.ttBall.visible) {
       const [a, b] = this.ttEnds;
