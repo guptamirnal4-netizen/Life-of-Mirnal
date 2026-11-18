@@ -544,8 +544,8 @@ function buildPavilion(site, G, clear) {
   K.box(-0.62, 9.02, -0.02, L + 0.02, 0, 0.12, M.dado, { collide: false }); // plinth band
   K.stairs.push({ name: 'pavilion front steps', u0: -0.6, u1: 0, v0: 0, v1: L, y0: 0, y1: F });
   // colonnade
-  for (let i = 0; i <= 6; i++) {
-    const v = 0.4 + (i * (L - 0.8)) / 6;
+  for (let i = 0; i <= 7; i++) { // seven bays: the middle one (on the entrance axis, v 12) is open
+    const v = 0.4 + (i * (L - 0.8)) / 7;
     slab(K, 0.1, 0.5, v - 0.2, v + 0.2, F, ROOF, M.creamW, { walkable: false });
     K.box(0.04, 0.56, v - 0.26, v + 0.26, F, F + 0.25, M.trim, { collide: false });
     K.box(0.04, 0.56, v - 0.26, v + 0.26, ROOF - 0.3, ROOF - 0.18, M.trim, { collide: false });
@@ -906,14 +906,14 @@ function buildPool(site, pool, clear) {
       // lockers on the outer wall, benches down the middle, three showers against the partition
       for (let k = 0; k < 9; k++) slab(K, Math.min(edge, edge + s * 0.45), Math.max(edge, edge + s * 0.45), v0 + 1.2 + k * 0.6, v0 + 1.78 + k * 0.6, DECK, DECK + 1.9, M.locker, { walkable: false });
       for (const vb of [v0 + 3, v0 + 5.5]) { K.box(Math.min(edge + s * 2.4, edge + s * 4.8), Math.max(edge + s * 2.4, edge + s * 4.8), vb - 0.2, vb + 0.2, DECK + 0.42, DECK + 0.47, M.wood, { collide: false }); K.col(Math.min(edge + s * 2.4, edge + s * 4.8), Math.max(edge + s * 2.4, edge + s * 4.8), vb - 0.2, vb + 0.2, DECK, DECK + 0.47); }
-      slab(K, Math.min(inner, inner - s * 3.2), Math.max(inner, inner - s * 3.2), v0 + 0.3, v1 - 0.3, DECK, DECK + 0.02, 't:tiles:#c9d6d6', { collide: false });
-      for (let k = 0; k < 3; k++) {
-        const vs = v0 + 1.5 + k * 1.9;
+      slab(K, Math.min(inner, inner - s * 1.6), Math.max(inner, inner - s * 1.6), v0 + 0.3, v0 + 5.1, DECK, DECK + 0.02, 't:tiles:#c9d6d6', { collide: false });
+      for (let k = 0; k < 3; k++) { // three stalls against the partition, south of its door
+        const vs = v0 + 0.3 + k * 1.6;
         K.box(Math.min(inner, inner - s * 1.6), Math.max(inner, inner - s * 1.6), vs - 0.04, vs + 0.04, DECK, DECK + 2.1, M.tileW);
-        K.cyl(inner - s * 0.2, vs + 0.95, DECK + 2.0, 0.07, 0.04, M.steel, { seg: 8 });
-        K.box(Math.min(inner, inner - s * 0.22), Math.max(inner, inner - s * 0.22), vs + 0.93, vs + 0.97, DECK + 2.02, DECK + 2.06, M.steel, { collide: false });
+        K.cyl(inner - s * 0.2, vs + 0.8, DECK + 2.0, 0.07, 0.04, M.steel, { seg: 8 });
+        K.box(Math.min(inner, inner - s * 0.22), Math.max(inner, inner - s * 0.22), vs + 0.78, vs + 0.82, DECK + 2.02, DECK + 2.06, M.steel, { collide: false });
       }
-      K.box(Math.min(inner, inner - s * 1.6), Math.max(inner, inner - s * 1.6), v0 + 1.5 + 3 * 1.9 - 0.04, v0 + 1.5 + 3 * 1.9 + 0.04, DECK, DECK + 2.1, M.tileW);
+      K.box(Math.min(inner, inner - s * 1.6), Math.max(inner, inner - s * 1.6), v0 + 0.3 + 3 * 1.6 - 0.04, v0 + 0.3 + 3 * 1.6 + 0.04, DECK, DECK + 2.1, M.tileW);
     }
     K.sign('GENTS', uM - 0.08, v0 + 5.6 + 0.23, DECK + 2.25, [-1, 0], { width: 0.9, height: 0.25, bg: '#1d3f8a', fg: '#fff', font: 'bold 56px sans-serif' });
     K.sign('GENTS', uM + 0.08, v0 + 5.6 + 0.23, DECK + 2.25, [1, 0], { width: 0.9, height: 0.25, bg: '#1d3f8a', fg: '#fff', font: 'bold 56px sans-serif' });
@@ -924,7 +924,7 @@ function buildPool(site, pool, clear) {
     K.box(DOOR + 1.55, DOOR + 3.65, v0 + 2.95, v0 + 3.65, DECK + 1.0, DECK + 1.05, 't:wood:#6b4a2a', { collide: false });
     K.box(DOOR + 2.2, DOOR + 2.6, v0 + 3.2, v0 + 3.5, DECK + 1.05, DECK + 1.09, 'c:#2f4f8c', { collide: false });
     K.chair(DOOR + 2.6, v0 + 2.4, DECK, [0, 1]);
-    K.box(DOOR - 3.5, DOOR - 3.1, v0 + 2, v0 + 5.5, DECK + 0.42, DECK + 0.47, M.wood, { collide: false }); K.col(DOOR - 3.5, DOOR - 3.1, v0 + 2, v0 + 5.5, DECK, DECK + 0.47);
+    K.box(DOOR - 3.5, DOOR - 3.1, v0 + 1.2, v0 + 4.4, DECK + 0.42, DECK + 0.47, M.wood, { collide: false }); K.col(DOOR - 3.5, DOOR - 3.1, v0 + 1.2, v0 + 4.4, DECK, DECK + 0.47);
     K.board(uW - 0.08, v0 + 2.2, DECK, [-1, 0], { w: 1.4, h: 0.9, key: 'c:#6b4f35', frame: 'c:#3b2f22' });
     K.fan(DOOR, (v0 + v1) / 2, CEIL);
     K.sign('Timings 6-8 am · 4-7 pm', DOOR - 1.8, v0 + 0.27, DECK + 1.6, [0, 1], { width: 1.6, height: 0.3, bg: '#f4ecd6', fg: '#1d3f8a', font: 'bold 44px sans-serif' });
