@@ -336,8 +336,202 @@ function buildWorkshop(kit) {
   kit.floors.push({ y: 0, name: 'Machine hall' });
 }
 
+// ================================================================ 2. New BITS Workshop ("CENTRAL WORKSHOP")
+// Two tall machine halls (north: lathes, the mezzanine and its stair; south: mills, drills, CNC room) and a two-storey
+// entrance and admin block on the east with the recessed glazed entrance in its ochre frame.
+const NW = { O: [37.4, -188.5], eu: [0.9881, -0.1539], U: 60.4, V: 41.4, HH: 8.0, AU: 47, FH: 4.4 };
+function buildNewWorkshop(kit) {
+  const { U, V, HH, AU, FH } = NW;
+  const T = 0.3; const RF = 2 * FH; // admin roof 8.8
+  const K = { ext: 't:plaster:#f2f0ea', int: 't:plaster:#eeece4', ochre: 'c:#c97d2c', ochreDark: 'c:#a8631f', frame: 'm:#2b2f33', truss: 'c:#b0302a', sheet: 'c:#c9cdcf', floor: 't:concrete:#9c9d99', floor1: 't:terrazzo:#c9c6bd', ceil: 'c:#f1efe9', coping: 'c:#e2ded4', rail: 'c:#1d1f21' };
+  const L = (axis, c, out) => line(kit, axis, c, out);
+  const bays = (s0, s1, n) => Array.from({ length: n }, (_, i) => s0 + ((s1 - s0) * (i + 0.5)) / n);
+  // ---- hall walls: lower windows, a continuous clerestory band, pilasters, ochre base band
+  const hallSides = [
+    { L: L('u', T / 2, -1), s0: 0, s1: AU, doors: [{ at: 22, width: 1.8, top: 2.7, fire: true }] },
+    { L: L('u', V - T / 2, 1), s0: 0, s1: AU, doors: [] },
+    { L: L('v', T / 2, -1), s0: T, s1: V - T, doors: [{ at: 31, width: 4.4, top: 4.6, shutter: true }] },
+  ];
+  for (const sd of hallSides) {
+    const n = Math.round((sd.s1 - sd.s0) / 6);
+    const B = bays(sd.s0, sd.s1, n); const bw = (sd.s1 - sd.s0) / n;
+    const lows = B.filter((s) => !sd.doors.some((d) => Math.abs(d.at - s) < d.width / 2 + 1.4));
+    const ops = [...lows.map((s) => ({ at: s, width: 2.4, bottom: 1.2, top: 3.4 })), ...B.map((s) => ({ at: s, width: bw - 0.8, bottom: 6.0, top: 7.3 })), ...sd.doors.map((d) => ({ at: d.at, width: d.width, bottom: 0, top: d.top }))];
+    wall2(kit, sd.L, sd.s0, sd.s1, 0, HH, K.ext, K.int, T, ops);
+    for (const s of lows) glaze(sd.L, s, 2.4, 1.2, 2.2, T, { frame: K.frame, mull: 1, sill: 'c:#d8d4ca' });
+    for (const s of B) glaze(sd.L, s, bw - 0.8, 6.0, 1.3, T, { frame: K.frame, mull: 3, transom: 0.99, sill: null });
+    for (let k = 0; k <= n; k++) { const s = sd.s0 + k * bw; sd.L.box(s - 0.3, s + 0.3, T / 2 - 0.01, T / 2 + 0.15, 0, HH, K.ext); }
+    let s = sd.s0;
+    for (const d of [...sd.doors].sort((a, b) => a.at - b.at)) { sd.L.box(s, d.at - d.width / 2, T / 2, T / 2 + 0.17, 0, 0.9, K.ochre); s = d.at + d.width / 2; }
+    sd.L.box(s, sd.s1, T / 2, T / 2 + 0.17, 0, 0.9, K.ochre);
+    sd.L.box(sd.s0 - (sd.L.axis === 'v' ? T : 0), sd.s1, -T / 2, T / 2, HH, HH + 1.2, K.ext);
+    sd.L.box(sd.s0 - (sd.L.axis === 'v' ? T : 0), sd.s1, -T / 2 - 0.05, T / 2 + 0.05, HH + 1.2, HH + 1.28, K.coping);
+    for (const d of sd.doors) {
+      if (d.fire) kit.door(true, d.at, sd.L.c, 0, d.width - 0.1, { height: d.top - 0.05, thick: T, side: 1, frame: 'c:#3f7a4a', leaf: 'c:#a8322b' });
+      if (d.shutter) { sd.L.box(d.at - d.width / 2 - 0.2, d.at + d.width / 2 + 0.2, T / 2, T / 2 + 0.45, d.top, d.top + 0.55, K.frame); sd.L.box(d.at - d.width / 2 - 0.12, d.at - d.width / 2, T / 2, T / 2 + 0.12, 0, d.top, K.frame); sd.L.box(d.at + d.width / 2, d.at + d.width / 2 + 0.12, T / 2, T / 2 + 0.12, 0, d.top, K.frame); }
+    }
+  }
+  // ---- admin block walls (two storeys), the recessed entrance in its ochre frame
+  const EV0 = 15.7; const EV1 = 25.7; const EU = 57.5; // the recess
+  const adminSides = [
+    { L: L('u', T / 2, -1), s0: AU, s1: U, wins: [50, 54.5, 58.3] },
+    { L: L('u', V - T / 2, 1), s0: AU, s1: U, wins: [50, 54.5, 58.3] },
+    { L: L('v', U - T / 2, 1), s0: T, s1: V - T, wins: [3.2, 7.6, 12.0, 29.4, 33.8, 38.2], gap: [EV0, EV1] },
+  ];
+  for (const sd of adminSides) {
+    for (const f of [0, 1]) {
+      const y0 = f * FH;
+      const ops = sd.wins.map((s) => ({ at: s, width: 2.4, bottom: 1.0, top: 3.2 }));
+      if (sd.gap) ops.push({ at: (sd.gap[0] + sd.gap[1]) / 2, width: sd.gap[1] - sd.gap[0], bottom: 0, top: f === 0 ? FH + 1 : 3.6 });
+      wall2(kit, sd.L, sd.s0, sd.s1, y0, y0 + FH, K.ext, K.int, T, ops);
+      for (const s of sd.wins) glaze(sd.L, s, 2.4, y0 + 1.0, 2.2, T, { frame: K.frame, mull: 1, sill: 'c:#d8d4ca' });
+      sd.L.box(sd.s0, sd.s1, T / 2 - 0.01, T / 2 + 0.6, y0 + 3.5, y0 + 3.62, K.coping); // sunshade
+    }
+    if (!sd.gap) sd.L.box(sd.s0, sd.s1, T / 2, T / 2 + 0.17, 0, 0.9, K.ochre);
+    else for (const [a, b] of [[sd.s0, sd.gap[0] - 1], [sd.gap[1] + 1, sd.s1]]) sd.L.box(a, b, T / 2, T / 2 + 0.17, 0, 0.9, K.ochre);
+    sd.L.box(sd.s0 - (sd.L.axis === 'v' ? T : 0), sd.s1 + (sd.L.axis === 'v' ? T : 0), -T / 2, T / 2, RF, RF + 0.9, K.ext);
+    sd.L.box(sd.s0 - (sd.L.axis === 'v' ? T : 0), sd.s1 + (sd.L.axis === 'v' ? T : 0), -T / 2 - 0.05, T / 2 + 0.05, RF + 0.9, RF + 0.98, K.coping);
+  }
+  {
+    // the ochre frame, the white mass over the recess, the sign
+    const Le = L('v', U - T / 2, 1);
+    Le.box(EV0 - 1.0, EV0, -T / 2, T / 2 + 0.7, 0, 8.3, K.ochre); Le.box(EV1, EV1 + 1.0, -T / 2, T / 2 + 0.7, 0, 8.3, K.ochre);
+    Le.box(EV0 - 1.0, EV1 + 1.0, -T / 2, T / 2 + 0.7, 7.1, 8.3, K.ochre);
+    Le.box(EV0 - 1.05, EV1 + 1.05, T / 2 + 0.7, T / 2 + 0.75, 0, 0.12, K.ochreDark);
+    Le.box(EV0, EV1, -T / 2, T / 2, 8.3, RF + 0.9, K.ext, { collide: false });
+    kit.sign('CENTRAL WORKSHOP', U + 0.72, (EV0 + EV1) / 2, 7.35, [1, 0], { width: 9.0, height: 0.75, bg: '#c97d2c', fg: '#ffffff', font: 'bold 72px Arial, sans-serif' });
+    // recess side walls and the glazed screen with its doors
+    for (const v of [EV0, EV1]) L('u', v, v === EV0 ? -1 : 1).wall(EU, U - T, 0, 7.1, K.ext, 0.3);
+    const Lg = L('v', EU, 1);
+    Lg.wall(EV0 + 0.15, EV1 - 0.15, 0, 7.1, K.ext, 0.2, [{ at: 18.6, width: 3.4, bottom: 0.3, top: 6.8 }, { at: 22.8, width: 3.4, bottom: 0.3, top: 6.8 }, { at: 20.7, width: 1.8, bottom: 0, top: 6.8 }]);
+    for (const s of [18.6, 22.8]) glaze(Lg, s, 3.4, 0.3, 6.5, 0.2, { frame: K.frame, mull: 2, transom: 0.4, sill: null });
+    glaze(Lg, 20.7, 1.8, 2.6, 4.2, 0.2, { frame: K.frame, mull: 0, transom: 0.5, sill: null });
+    kit.door(false, 20.7, EU, 0, 1.7, { height: 2.55, thick: 0.2, side: -1, frame: K.frame, leaf: 'g:#9fbfcc' });
+    kit.box(EU, U + 0.8, EV0 + 0.15, EV1 - 0.15, 0, 0.06, 't:paving:#b6aea0', { collide: false });
+    ceiling(kit, EU, U - T, EV0, EV1, 7.1, K.ceil);
+    rodLight(kit, 59, 20.7, 7.1, 0.3, [0, 1]);
+    // approach: paved drive with low ochre walls
+    kit.box(U + 0.8, U + 14, 17.2, 24.2, -0.02, 0.025, 't:paving:#a99f8e', { collide: false });
+    for (const v of [16.9, 24.5]) kit.box(U + 1.5, U + 13, v - 0.15, v + 0.15, 0, 0.6, K.ochre);
+  }
+  kit.entrance('Main entrance (east)', U + 2.5, 20.7, [1, 0]);
+  kit.entrance('Hall 2 loading door (west)', -1.6, 31, [-1, 0]);
+  kit.entrance('Hall 1 fire door (north)', 22, -1.6, [0, -1]);
+  // ---- roofs: hall roofs (low-pitch sheets behind the parapet, red trusses), admin roof slab, PV
+  const halls = [[T, 20.575], [20.825, V - T]];
+  for (const [a, b] of halls) {
+    const m = (a + b) / 2; const eave = HH - 0.2; const ridge = HH + 0.75;
+    for (const [p, q] of [[a, m], [m, b]]) bar(kit, [AU / 2, (p === a ? eave : ridge) + 0.08, p], [AU / 2, (q === b ? eave : ridge) + 0.08, q], AU - 0.3, K.sheet, 0.06);
+    for (let u = 6; u < AU - 1; u += 6) {
+      const bc = HH - 1.2;
+      bar(kit, [u, bc, a + 0.1], [u, bc, b - 0.1], 0.14, K.truss);
+      bar(kit, [u, eave, a + 0.05], [u, ridge, m], 0.14, K.truss); bar(kit, [u, ridge, m], [u, eave, b - 0.05], 0.14, K.truss);
+      for (const f of [0.17, 0.33, 0.5, 0.67, 0.83]) {
+        const v = a + (b - a) * f; const top = eave + (ridge - eave) * (1 - Math.abs(v - m) / (m - a));
+        bar(kit, [u, bc, v], [u, top - 0.05, v], 0.07, K.truss);
+        if (f !== 0.5) bar(kit, [u, bc, v], [u, eave + (ridge - eave) * (1 - Math.abs(v + (v < m ? 1 : -1) * (b - a) / 6 - m) / (m - a)) - 0.05, v + (v < m ? 1 : -1) * (b - a) / 6], 0.06, K.truss);
+      }
+      bar(kit, [u, bc, a + 0.1], [u, eave, a + 0.1], 0.14, K.truss); bar(kit, [u, bc, b - 0.1], [u, eave, b - 0.1], 0.14, K.truss);
+    }
+    for (const v of [a + 2, m - 3, m, m + 3, b - 2]) kit.box(T, AU, v - 0.06, v + 0.06, HH - 0.1 + (HH + 0.75 - (HH - 0.2)) * (1 - Math.abs(v - m) / (m - a)) - 0.12, HH - 0.1 + (HH + 0.75 - (HH - 0.2)) * (1 - Math.abs(v - m) / (m - a)) - 0.02, K.truss, { collide: false });
+  }
+  kit.slab(AU, U - T, T, V - T, RF, 't:concrete:#c9c4b8', { thick: 0.25, walkable: false, collide: false });
+  for (let k = 0; k < 6; k++) { const v = 4 + k * 6; for (let j = 0; j < 4; j++) { const u = 48.5 + j * 2.6; quad(kit, [[u - 1.1, RF + 0.2, v + 0.8], [u + 1.1, RF + 0.2, v + 0.8], [u + 1.1, RF + 0.75, v - 0.8], [u - 1.1, RF + 0.75, v - 0.8]], 'm:#26355c'); kit.box(u - 1.0, u + 1.0, v - 0.75, v - 0.7, RF, RF + 0.75, 'm:#9aa1a6', { collide: false }); } }
+  for (const v of [8, 33]) kit.cyl(58.5, v, RF, 0.8, 1.6, 'c:#2a2c2e', { seg: 14 });
+  // admin first floor: slabs round the recess, ceilings
+  for (const [u0, u1, v0, v1] of [[AU, U - T, T, EV0], [AU, EU, EV0, EV1], [AU, U - T, EV1, V - T]]) {
+    kit.slab(u0, u1, v0, v1, FH, 'c:#ece7dc', { thick: 0.22 });
+    kit.slab(u0, u1, v0, v1, FH + 0.012, K.floor1, { thick: 0.01, walkable: false, collide: false });
+    ceiling(kit, u0, u1, v0, v1, FH - 0.225, K.ceil);
+    ceiling(kit, u0, u1, v0, v1, RF - 0.255, K.ceil);
+  }
+  // the dividing wall between the halls (two wide openings) and the wall between the halls and the admin block
+  L('u', 20.7, 1).wall(T, AU, 0, HH, K.int, 0.25, [{ at: 12, width: 4.2, bottom: 0, top: 4.4 }, { at: 30, width: 4.2, bottom: 0, top: 4.4 }]);
+  L('v', AU, 1).wall(T, V - T, 0, HH + 1.2, K.int, 0.3, [{ at: 18.0, width: 2.4, bottom: 0, top: 3.0 }, { at: 23.4, width: 2.4, bottom: 0, top: 3.0 }, { at: 8.0, width: 1.6, bottom: FH, top: FH + 2.4 }]);
+  // ---- the mezzanine in hall 1 (concrete walls under it, black railings) and its stair along the north wall
+  const MZ = { u0: 41.0, u1: AU - 0.15, v0: T, v1: 20.575 };
+  kit.slab(MZ.u0, MZ.u1, MZ.v0, MZ.v1, FH, 'c:#bdbab2', { thick: 0.3 });
+  kit.box(MZ.u0 - 0.05, MZ.u0, MZ.v0, MZ.v1, FH - 0.3, FH + 0.02, K.ochre, { collide: false });
+  L('v', MZ.u0 + 0.15, -1).wall(1.75, MZ.v1, 0, FH - 0.3, 't:concrete:#b9b5aa', 0.3, [{ at: 11, width: 1.6, bottom: 0, top: 2.4 }]);
+  kit.door(false, 11, MZ.u0 + 0.15, 0, 1.5, { height: 2.35, thick: 0.3, side: -1, frame: 'c:#3f7a4a', leaf: 'c:#a8322b' });
+  kit.rail(MZ.u0 + 0.05, 1.62, MZ.u0 + 0.05, MZ.v1 - 0.05, FH, K.rail);
+  const steps = Math.ceil(FH / RISE_MAX); const rise = FH / steps; const run = steps * 0.28;
+  const s0 = MZ.u0 - run;
+  kit.flight(s0, 0.95, 0, [1, 0], steps, rise, 1.2, 'c:#6c7378');
+  for (let j = 0; j <= steps; j += 4) { const u = s0 + j * 0.28 + 0.14; const y = Math.min(FH, (j + 1) * rise); kit.box(u - 0.02, u + 0.02, 1.53, 1.57, y, y + 1.0, K.rail, { collide: false }); }
+  bar(kit, [s0 + 0.14, rise + 1.0, 1.55], [MZ.u0, FH + 1.0, 1.55], 0.05, K.rail);
+  kit.stairs.push({ name: 'Mezzanine stair', u0: s0, u1: MZ.u0, v0: 0.35, v1: 1.55, y0: 0, y1: FH, along: 'u' });
+  kit.sign('CENTRAL WORKSHOP · Hall 1', 24, 20.575 - 0.14, 4.6, [0, -1], { width: 5, height: 0.5, bg: '#2f3b46', fg: '#f4efe2', font: 'bold 56px Arial, sans-serif' });
+
+  // ---- interiors
+  kit.layer('halls', () => {
+    kit.box(T, AU - 0.15, T, V - T, -0.05, 0.03, K.floor, { collide: false });
+    for (const v of [4.0, 16.8, 24.4, 37.0]) kit.box(1.5, 40, v - 0.05, v + 0.05, 0.03, 0.036, M.yellow, { collide: false });
+    for (const u of [1.5, 40]) kit.box(u - 0.05, u + 0.05, 4.0, 16.8, 0.03, 0.036, M.yellow, { collide: false });
+    for (let u = 6; u < AU - 1; u += 6) for (const v of [5.2, 15.4, 26, 36]) { rodLight(kit, u + 3, v, HH - 1.2, 1.5); kit.cyl(u + 3, v, HH - 2.75, 0.35, 0.18, 'c:#4a5056', { seg: 12, rTop: 0.12 }); }
+    // hall 1: two rows of lathes, benches along the dividing wall
+    for (let u = 4; u < 38; u += 3.6) { lathe(kit, u, 7.0, 0.03, [0, 1]); lathe(kit, u, 13.6, 0.03, [0, -1]); }
+    for (let u = 4; u < 30; u += 5) workbench(kit, u, 19.6, 0.03, [0, -1], { w: 2.4 });
+    for (const v of [4, 9, 14]) toolBoard(kit, 1.0, v, 0.03, [1, 0]);
+    // under the mezzanine: tool crib with shelves
+    for (const v of [3, 5.2, 7.4, 13.5, 15.7, 17.9]) kit.shelf(AU - 0.55, v, 0.03, [-1, 0], { w: 2.0, books: ['c:#8a8f94', 'c:#6f6253', 'c:#2f5d8a', 'c:#a8a08f'] });
+    rodLight(kit, 44, 6, FH - 0.3, 0.05); rodLight(kit, 44, 15, FH - 0.3, 0.05);
+    // hall 2: mills, drills, perforated tool benches, the glazed CNC room in the SW corner
+    for (let u = 16; u < 40; u += 3.2) { mill(kit, u, 25.6, 0.03, [0, 1]); drill(kit, u + 1.6, 28.8, 0.03, [0, 1]); }
+    for (let u = 18; u < 40; u += 4.6) workbench(kit, u, 35.6, 0.03, [0, -1], { w: 2.6, top: M.grey });
+    for (const u of [20, 26, 32, 38]) toolBoard(kit, u, V - T - 0.45, 0.03, [0, -1]);
+    const C = { u0: 1.0, u1: 13.0, v0: 30.5, v1: V - T };
+    kit.box(C.u0, C.u1, C.v0 + 0.02, C.v0 + 0.05, 0.03, 3.2, 'g:#cfe0ea', { collide: false });
+    kit.col(C.u0, C.u1 - 2.0, C.v0, C.v0 + 0.08, 0, 3.2); kit.col(C.u1 - 0.8, C.u1, C.v0, C.v0 + 0.08, 0, 3.2);
+    for (let u = C.u0; u <= C.u1 + 1e-6; u += 1.2) kit.box(u - 0.03, u + 0.03, C.v0, C.v0 + 0.08, 0.03, 3.2, 'm:#b8bec2', { collide: false });
+    kit.box(C.u0, C.u1, C.v0, C.v0 + 0.08, 3.2, 3.3, 'm:#b8bec2', { collide: false });
+    L('v', C.u1, 1).wall(C.v0, C.v1, 0, 3.3, 'm:#b8bec2', 0.08, [{ at: 34, width: 2.4, bottom: 0.9, top: 3.2 }, { at: 38.5, width: 2.4, bottom: 0.9, top: 3.2 }]);
+    kit.box(C.u0, C.u1 + 0.04, C.v0, C.v1, 3.3, 3.35, K.ceil, { collide: false });
+    kit.box(C.u1 - 2.0, C.u1 - 0.8, C.v0, C.v0 + 0.08, 2.3, 3.2, 'c:#3f7a4a', { collide: false });
+    cnc(kit, 4.0, 36.5, 0.03, [0, -1]); cnc(kit, 8.5, 36.5, 0.03, [0, -1]);
+    pcDesk(kit, 10.6, 32.2, 0.03, [0, -1]);
+    kit.box(C.u0 + 0.02, C.u1, C.v0, C.v1, 0.036, 0.04, 'c:#3f6fa8', { collide: false });
+    kit.sign('MECHANICAL ENGG · CNC LAB', (C.u0 + C.u1) / 2, C.v0 - 0.01, 2.4, [0, -1], { width: 4.6, height: 0.4, bg: '#2f3b46', fg: '#f4efe2', font: 'bold 56px Arial, sans-serif' });
+    rodLight(kit, 4, 34, 3.3, 0.02); rodLight(kit, 9, 34, 3.3, 0.02);
+  });
+  kit.layer('admin0', () => {
+    kit.box(AU + 0.15, U - T, T, V - T, -0.05, 0.03, K.floor1, { collide: false });
+    kit.box(AU + 0.15, EU - 0.1, EV0, EV1, -0.04, 0.035, 't:terrazzo:#b8b2a4', { collide: false });
+    // lobby walls and rooms each side
+    for (const v of [EV0, EV1]) { L('u', v, 1).wall(AU + 0.15, EU - 0.1, 0, FH - 0.22, K.int, 0.2, [{ at: 52.5, width: 1.2, bottom: 0, top: 2.4 }, { at: 55.5, width: 2.4, bottom: 0.9, top: 2.4 }]); kit.door(true, 52.5, v, 0, 1.1, { height: 2.35, thick: 0.2, side: v === EV0 ? -1 : 1, frame: 'c:#3f7a4a', leaf: 'c:#a8322b' }); glaze(L('u', v, v === EV0 ? -1 : 1), 55.5, 2.4, 0.9, 1.5, 0.2, { frame: 'm:#b8bec2', mull: 1, sill: null }); }
+    counter(kit, 51.5, 20.7, 0.03, [1, 0], 3.6);
+    kit.chair(50.6, 20.7, 0.03, [1, 0]);
+    kit.board(AU + 0.2, 20.7, 0.03, [1, 0], { w: 2.6, h: 1.2, key: 'c:#2f4a6a' });
+    sofa(kit, 55.5, 16.6, 0.03, [0, 1]);
+    for (const [u, v] of [[50, 5], [54, 5], [50, 10], [54, 10]]) pcDesk(kit, u, v, 0.03, [0, -1]);
+    for (const v of [28, 31, 34, 37]) kit.shelf(AU + 0.55, v + 0.5, 0.03, [1, 0], { w: 2.2, books: ['c:#8a8f94', 'c:#6f6253', 'c:#a8a08f'] });
+    confTable(kit, 52, 57, 31, 36, 0.03);
+    for (const [u, v] of [[50, 8], [55, 8], [51, 20.7], [55, 20.7], [50, 33], [55, 33]]) rodLight(kit, u, v, FH - 0.225, 0.05);
+  });
+  kit.layer('admin1', () => {
+    for (const v of [EV0, EV1]) { L('u', v, 1).wall(AU + 0.15, v === EV0 ? U - T : U - T, FH, RF - 0.25, K.int, 0.2, [{ at: 50, width: 1.2, bottom: 0, top: 2.4 }]); kit.door(true, 50, v, FH, 1.1, { height: 2.35, thick: 0.2, side: v === EV0 ? 1 : -1, frame: 'c:#3f7a4a', leaf: 'c:#a8322b' }); }
+    kit.rail(EU - 0.05, EV0 + 0.15, EU - 0.05, EV1 - 0.15, FH, K.rail);
+    // drafting room (north), CAD lab (south)
+    for (let u = 49; u < 59; u += 2.6) for (const v of [3, 6.4, 9.8, 13.0]) { kit.desk(u, v, FH, [0, -1], { w: 1.4, d: 0.9, top: 't:wood:#b08a5c' }); kit.chair(u, v + 0.7, FH, [0, -1]); }
+    for (let u = 49.5; u < 59; u += 2.4) for (const v of [28.5, 32, 35.5, 39]) pcDesk(kit, u, v, FH, [0, -1]);
+    kit.board(AU + 0.2, 8.0 + 3.5, FH, [1, 0], { w: 3.0, h: 1.2, key: 'c:#f2f2ee', frame: 'c:#9aa0a3' });
+    for (const [u, v] of [[50, 4], [56, 4], [50, 11], [56, 11], [52, 20.7], [50, 30], [56, 30], [50, 37], [56, 37]]) rodLight(kit, u, v, RF - 0.255, 0.05);
+    // mezzanine furniture
+    for (const v of [5, 10, 15]) { kit.desk(44, v, FH, [-1, 0], { w: 1.6, d: 0.9, top: 't:wood:#b08a5c' }); kit.chair(44.6, v, FH, [-1, 0]); }
+    lockers(kit, AU - 0.4, 18.5, FH, [-1, 0], 4);
+  });
+  kit.room('nwHall1', 'Central Workshop · Hall 1 (turning)', T, AU, T, 20.7, 0, HH);
+  kit.room('nwHall2', 'Central Workshop · Hall 2 (milling)', T, AU, 20.7, V - T, 0, HH);
+  kit.room('nwLobby', 'Central Workshop · entrance lobby', AU, EU, EV0, EV1, 0, FH);
+  kit.room('nwMezz', 'Central Workshop · mezzanine', MZ.u0, AU, T, 20.7, FH, HH, 1);
+  kit.room('nwDrafting', 'Central Workshop · drafting room', AU, U, T, EV0, FH, RF, 1);
+  kit.room('nwCad', 'Central Workshop · CAD lab', AU, U, EV1, V, FH, RF, 1);
+  kit.floors.push({ y: 0, name: 'Halls and lobby' }, { y: FH, name: 'Mezzanine and first floor' });
+}
+
 // ================================================================ modules
 const mod = (name, osm, frame, build) => ({ id: 'workshops', name, category: 'academic', osm, floors: 1, enabled: true, research: 'mixed', frame: () => frame, build });
 export default [
-  mod('BITS Workshop', ['BITS Workshop'], frameOf(WS.O, WS.eu, WS.U, WS.V), (kit) => buildWorkshop(kit)),
+  mod('BITS Workshop', ['BITS Workshop'], frameOf(WS.O, WS.eu, WS.U, WS.V), (kit, ctx) => { buildWorkshop(kit); ctx.buildings[0].h = WS.CREST; }),
+  mod('New BITS Workshop (Central Workshop)', ['New BITS Workshop'], frameOf(NW.O, NW.eu, NW.U, NW.V), (kit, ctx) => { buildNewWorkshop(kit); ctx.buildings[0].h = 9.6; }),
 ];
