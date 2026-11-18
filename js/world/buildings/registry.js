@@ -20,6 +20,7 @@
 import library from './library.js';
 import nab from './nab.js';
 import fd1 from './fd1.js';
+import workshops from './workshops.js';
 import mainBuilding from './main-building.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding, fd1];
+export const BUILDING_MODULES = [library, nab, mainBuilding, fd1, ...workshops];
