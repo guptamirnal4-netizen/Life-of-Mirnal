@@ -67,6 +67,31 @@ const route = async (name, pts, expect) => {
 const near = (a, b, e = 0.06) => Math.abs(a - b) < e;
 const shot = (n) => page.screenshot({ path: `${OUT}/test-${n}.png` });
 
+// ---------- 0. the doorways are open to the eye too (colliders aside): cast rays through them ----------
+// first visible mesh hit from local (u, v, y) along local (du, dv); returns the distance
+const sight = (u, v, y, du, dv, world = false) => g(async ([u, v, y, du, dv, world]) => {
+  const THREE = await import('three');
+  const k = window.__lib; const root = window.__game.campus.root;
+  const o = world ? new THREE.Vector3(u, y, v) : k.world(u, v, y);
+  const p = world ? { x: u + du, z: v + dv } : k.world(u + du, v + dv, y);
+  const d = new THREE.Vector3(p.x - o.x, 0, p.z - o.z).normalize();
+  const rc = new THREE.Raycaster(new THREE.Vector3(o.x, y, o.z), d, 0, 60);
+  root.updateMatrixWorld(true);
+  const vis = (m) => { for (let q = m; q; q = q.parent) if (!q.visible) return false; return true; };
+  const meshes = []; root.traverse((m) => { if (m.isMesh && !m.isInstancedMesh && vis(m) && !m.material?.transparent) meshes.push(m); });
+  const hit = rc.intersectObjects(meshes, false)[0];
+  return hit ? hit.distance : 99;
+}, [u, v, y, du, dv, world]);
+{
+  const d = await sight(-46, 0, G + 1.6, 1, 0); // portico -> doors at u -43.7 -> foyer
+  check(d > 5, `west doorway is see-through from the portico (first hit ${d.toFixed(2)} m)`);
+  const d2 = await sight(-40, 0, G + 1.6, -1, 0); // foyer -> doors -> forecourt
+  check(d2 > 6, `west doorway is see-through from the foyer (first hit ${d2.toFixed(2)} m)`);
+  const R0 = await g(() => { const r = window.__game.campus.rooms.library; return { exit: [r.exit.x, r.exit.z] }; });
+  const d3 = await sight(R0.exit[0], R0.exit[1] + 3, 1.5, 0, -1, true); // outside the south door -> into the reading room
+  check(d3 > 6, `reading room south door is see-through (first hit ${d3.toFixed(2)} m)`);
+}
+
 // ---------- 1. the west entrance: forecourt, fan steps, portico, doors, foyer ----------
 await at(-62, 0, 0, 1, 0);
 await page.waitForTimeout(800);

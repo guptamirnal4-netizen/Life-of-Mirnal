@@ -41,7 +41,7 @@ const K = {
   glassOut: 'c:#33414c', glassIn: 'e:#d4e6ee', glass: 'g:#cfe3ec', roof: 'c:#d3ccc1', ceiling: 'c:#f3f0ea',
   pv: 'm:#24324f', green: 'c:#3f7a3a', gmarble: 'c:#2f5a49', gravel: 'x:gravel', spines: 'x:spines', signs: 'x:signs',
   pavers: 'x:pavers', diamond: 'x:diamond', lamp: 'e:#fff1c9', canopy: 'c:#f6f4ef', navy: 'c:#2b3a5c', red: 'c:#9b1c1c',
-  sofa: 'c:#2f4fa0', chair: 'c:#3f5f8a', metal: 'm:#4a4f55',
+  sofa: 'c:#2f4fa0', pmarble: 'c:#ebe5d9', chair: 'c:#3f5f8a', metal: 'm:#4a4f55',
 };
 
 function inPoly(u, v, poly) {
@@ -296,7 +296,8 @@ function buildLibrary(kit, ctx) {
   };
   // spandrel above an arch: the area between an arch (springing at ys, rising `rise`) and the top yt, width w.
   // cusps > 0 scallops the arch (the Rajput cusped arch of the rotunda)
-  const spandrel = (w, ys, rise, yt, cusps = 0) => {
+  const spandrel = (w, ys, rise0, yt, cusps = 0) => {
+    const rise = Math.min(rise0, yt - ys - 0.08); // the crown never touches the top (a degenerate shape tears)
     const s = new THREE.Shape();
     s.moveTo(-w / 2, yt); s.lineTo(-w / 2, ys);
     const N = 48; const a = w / 2;
@@ -305,7 +306,7 @@ function buildLibrary(kit, ctx) {
       const k = cusps ? 0.9 + 0.1 * Math.abs(Math.sin(cusps * t)) : 1;
       s.lineTo(Math.cos(t) * a * k, ys + Math.sin(t) * rise * k);
     }
-    s.lineTo(w / 2, yt); s.closePath();
+    s.lineTo(w / 2, ys); s.lineTo(w / 2, yt); s.closePath();
     return s;
   };
   // walls along u or v in the local frame, with openings { at (absolute u or v), w, bot, top (absolute y) }
@@ -455,7 +456,13 @@ function buildLibrary(kit, ctx) {
       seg(0, L, 0, 0.1, R - 0.2, R, K.cream);
       seg(0, L, -FAC - 0.05, 0.08, R + PAR, R + PAR + 0.1, K.cream);
       // inner lining (white plaster) from the ground floor to the roof
-      kit.layer('structure', () => seg(0, L, -FAC - 0.02, -FAC, G, R - 0.3, K.white));
+      // (split round the openings like the core, so the doorways stay open)
+      kit.layer('structure', () => {
+        const lin = (s0, s1, y0, y1) => { if (s1 - s0 > 0.01 && y1 - y0 > 0.01) seg(s0, s1, -FAC - 0.02, -FAC, y0, y1, K.white); };
+        let ls = 0;
+        for (const o of ops) { lin(ls, o.s0, G, R - 0.3); lin(o.s0, o.s1, Math.max(G, o.top), R - 0.3); lin(o.s0, o.s1, G, Math.min(o.bot, R - 0.3)); ls = o.s1; }
+        lin(ls, L, G, R - 0.3);
+      });
       // crenellations: clusters of small merlons on the parapet
       const clusters = L > 18 ? [L / 4, L / 2, (3 * L) / 4] : L > 5 ? [L / 2] : [];
       for (const c of clusters) for (let k = -2; k <= 2; k++) seg(c + k * 0.6 - 0.15, c + k * 0.6 + 0.15, -FAC + 0.05, 0, R + PAR + 0.1, R + PAR + 0.45, K.pink);
@@ -487,8 +494,16 @@ function buildLibrary(kit, ctx) {
         }
       }
     }
-    // piers at the corners
-    for (const [u, v] of P) B(u - 0.25, u + 0.25, v - 0.25, v + 0.25, 0, R + PAR + 0.1, K.cream);
+    // piers at the corners, turned to the bisector of the two walls so they sit flush over the joint
+    for (let i = 0; i < n; i++) {
+      const pa = P[(i + n - 1) % n]; const pb = P[i]; const pc = P[(i + 1) % n];
+      const la = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]); const lc = Math.hypot(pc[0] - pb[0], pc[1] - pb[1]);
+      if (la < 0.05 || lc < 0.05) continue;
+      let tu = (pb[0] - pa[0]) / la + (pc[0] - pb[0]) / lc; let tv = (pb[1] - pa[1]) / la + (pc[1] - pb[1]) / lc;
+      const tl = Math.hypot(tu, tv); if (tl < 1e-3) continue; tu /= tl; tv /= tl;
+      let nu = tv; let nv = -tu; if (inPoly(pb[0] + nu * 0.3, pb[1] + nv * 0.3, P)) { nu = -nu; nv = -nv; }
+      obox(pb[0] - nu * 0.12, pb[1] - nv * 0.12, tu, tv, 0.6, 0.54, 0, R + PAR + 0.1, K.cream);
+    }
 
     // ---------- roof ----------
     const SKY = [[-37.5, 0], [-29.5, 0], [-17.2, 0], [17.5, 0], [26.5, 0]];
@@ -572,13 +587,13 @@ function buildLibrary(kit, ctx) {
       B(u0 + 0.06, u0 + 0.84, v - 0.04, v + 0.04, G + 0.1, G + 0.9, colr);
     }
     // landing (portico floor), the two straight steps and the semicircular platform and fan steps
-    B(-46.5, -43.3, -3.4, 3.4, 0, G, K.marble);
-    B(-47.0, -46.5, -3.4, 3.4, 0, G - 0.1, K.marble);
+    B(-46.5, -43.3, -3.4, 3.4, 0, G, K.pmarble);
+    B(-47.0, -46.5, -3.4, 3.4, 0, G - 0.1, K.pmarble);
     B(-47.0, -46.5, -3.4, 3.4, G - 0.13, G - 0.1, K.nosing);
-    B(-47.0, -46.0, -6.0, -3.4, 0, 0.4, K.marble); B(-47.0, -46.0, 3.4, 6.0, 0, 0.4, K.marble);
+    B(-47.0, -46.0, -6.0, -3.4, 0, 0.4, K.pmarble); B(-47.0, -46.0, 3.4, 6.0, 0, 0.4, K.pmarble);
     {
       const fan = (r, h, key) => { const g = new THREE.CylinderGeometry(r, r, h, 40, 1, false, Math.PI, Math.PI); g.translate(-47, h / 2, 0); add(key, g); };
-      fan(7.2, 0.1, 'c:#b9705a'); fan(6.8, 0.2, 'c:#b9705a'); fan(6.4, 0.3, 'c:#b9705a'); fan(6.0, 0.4, K.marble);
+      fan(7.2, 0.1, 'c:#b9705a'); fan(6.8, 0.2, 'c:#b9705a'); fan(6.4, 0.3, 'c:#b9705a'); fan(6.0, 0.4, K.pmarble);
       for (const [r, h] of [[7.2, 0.1], [6.8, 0.2], [6.4, 0.3]]) { const g = new THREE.CylinderGeometry(r, r, 0.03, 40, 1, false, Math.PI, Math.PI); g.translate(-47, h - 0.01, 0); add(K.nosing, g); }
       const inlay = new THREE.RingGeometry(5.6, 5.8, 32, 1, Math.PI / 2, Math.PI); inlay.rotateX(-Math.PI / 2); inlay.translate(-47, 0.405, 0); add(K.gmarble, inlay);
     }
@@ -587,7 +602,7 @@ function buildLibrary(kit, ctx) {
       const A = [-46.9, s * 6.0]; const Bp = [-43.5, s * 14.4];
       const L = Math.hypot(Bp[0] - A[0], Bp[1] - A[1]); const tu = (Bp[0] - A[0]) / L; const tv = (Bp[1] - A[1]) / L;
       bar([A[0], 0.25, A[1]], [Bp[0], -0.15, Bp[1]], 1.5, 0.3, 'c:#b9705a');
-      bar([A[0], 0.405, A[1]], [Bp[0], 0.005, Bp[1]], 1.3, 0.01, K.marble);
+      bar([A[0], 0.405, A[1]], [Bp[0], 0.005, Bp[1]], 1.3, 0.01, K.pmarble);
       const nu = -tv * s; const nv = tu * s; // outward: away from the wing walls
       const off = (p, d) => [p[0] - nv * 0 + (s > 0 ? -1 : -1) * Math.abs(nu) * d, p[1] - Math.sign(s) * 0 + 0 * d];
       void off;
