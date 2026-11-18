@@ -529,9 +529,274 @@ function buildNewWorkshop(kit) {
   kit.floors.push({ y: 0, name: 'Halls and lobby' }, { y: FH, name: 'Mezzanine and first floor' });
 }
 
+// ================================================================ 3. Rakesh Kapoor Innovation Centre
+// Three levels of labs round an open courtyard (3 steps down from the arcade), grey round columns, galleries with
+// steel railings, an orange timber-slat soffit; ochre walls with cream pilasters and window hoods; the cream and red
+// portico on the south. Two stacked dog-leg stairs: in the east bump and in the north projection.
+const RK = { O: [28.87, -304.06], eu: [0.9898, -0.1422], G: 0.45, FH: 3.75 };
+const RK_OUT = [[0, 6.4], [8, 6.4], [8, 0], [25.6, 0], [25.6, 6.4], [33.2, 6.4], [33.2, 18.4], [38.1, 18.4], [38.1, 27.5], [31.1, 27.5], [31.1, 38.6], [23.7, 38.6], [23.7, 44.7], [10.2, 44.7], [10.2, 38.6], [0, 38.6]];
+const RK_RECTS = [[0, 31.1, 6.4, 38.6], [31.1, 33.2, 6.4, 27.5], [8, 25.6, 0, 6.4], [33.2, 38.1, 18.4, 27.5], [10.2, 23.7, 38.6, 44.7]];
+function inPolyUV(u, v, poly) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [a, b] = poly[i]; const [p, q] = poly[j]; if ((b > v) !== (q > v) && u < ((p - a) * (v - b)) / (q - b) + a) c = !c; } return c; }
+// Ceiling planes over rectangles minus holes.
+function ceilRects(kit, rects, holes, y, key) {
+  for (const [u0, u1, v0, v1] of rects) {
+    const hs = holes.filter((h) => h.u1 > u0 && h.u0 < u1 && h.v1 > v0 && h.v0 < v1);
+    const vs = [...new Set([v0, v1, ...hs.flatMap((h) => [h.v0, h.v1])])].filter((x) => x >= v0 && x <= v1).sort((a, b) => a - b);
+    for (let j = 0; j < vs.length - 1; j++) {
+      const vm = (vs[j] + vs[j + 1]) / 2; let s = u0;
+      for (const h of hs.filter((q) => vm > q.v0 && vm < q.v1).sort((a, b) => a.u0 - b.u0)) { if (h.u0 > s) ceiling(kit, s, Math.min(h.u0, u1), vs[j], vs[j + 1], y, key); s = Math.max(s, h.u1); }
+      if (u1 > s) ceiling(kit, s, u1, vs[j], vs[j + 1], y, key);
+    }
+  }
+}
+// Furniture by room type in the rectangle r (u0, u1, v0, v1) at floor y; `front` is the side the board/screen is on.
+function furnishRoom(kit, r, y, type, ceil) {
+  const [u0, u1, v0, v1] = [r[0] + 0.2, r[1] - 0.2, r[2] + 0.2, r[3] - 0.2];
+  const W = u1 - u0; const D = v1 - v0; const cu = (u0 + u1) / 2; const cv = (v0 + v1) / 2;
+  const nu = Math.max(1, Math.round(W / 3.2)); const nv = Math.max(1, Math.round(D / 3.2));
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) rodLight(kit, u0 + (W * (i + 0.5)) / nu, v0 + (D * (j + 0.5)) / nv, ceil, 0.04, W > D ? [1, 0] : [0, 1]);
+  const longU = W >= D;
+  if (type === 'lab' || type === 'class') {
+    const f = longU ? [-1, 0] : [0, -1]; // facing the low end
+    kit.board(...(longU ? [u0 + 0.02, cv] : [cu, v0 + 0.02]), y, longU ? [1, 0] : [0, 1], { w: Math.min(3.6, (longU ? D : W) - 1), h: 1.2, key: type === 'lab' ? 'c:#f2f2ee' : 'c:#22302a', frame: 'c:#9aa0a3' });
+    const len = longU ? W : D; const wid = longU ? D : W;
+    const cols = Math.max(1, Math.floor((wid - 0.8) / (type === 'lab' ? 1.7 : 2.2)));
+    for (let s = 2.4; s < len - 0.6; s += type === 'lab' ? 1.7 : 1.15) for (let k = 0; k < cols; k++) {
+      const b = (longU ? v0 : u0) + 0.4 + ((wid - 0.8) * (k + 0.5)) / cols; const a = (longU ? u0 : v0) + s;
+      if (type === 'lab') pcDesk(kit, longU ? a : b, longU ? b : a, y, f);
+      else kit.benchDesk(longU ? a : b, longU ? b : a, y, f.map((x) => -x).map((x) => -x), { w: 1.8 });
+    }
+    return;
+  }
+  if (type === 'conf') {
+    const m = Math.min(W, D) * 0.28; const n = Math.max(W, D) * 0.32;
+    confTable(kit, cu - (longU ? n : m), cu + (longU ? n : m), cv - (longU ? m : n), cv + (longU ? m : n), y);
+    kit.box(...(longU ? [u1 - 0.06, u1, cv - 1.2, cv + 1.2] : [cu - 1.2, cu + 1.2, v1 - 0.06, v1]), y + 1.0, y + 2.3, 'e:#dfe8ee', { collide: false });
+    return;
+  }
+  if (type === 'maker') {
+    for (let s = 1.6; s < (longU ? W : D) - 1; s += 2.6) { const [a, b] = longU ? [u0 + s, cv] : [cu, v0 + s]; workbench(kit, a, b, y, longU ? [0, 1] : [1, 0], { w: 2.0, top: 't:wood:#b08a5c' }); piece(kit, a + (longU ? -0.5 : 0), b + (longU ? 0 : -0.5), y + 0.88, [0, 1], [[-0.22, 0.22, 0, 0.45, -0.22, 0.22, 'c:#e8e8e2'], [-0.18, 0.18, 0.06, 0.36, -0.23, -0.22, 'g:#9fc3d6'], [-0.06, 0.06, 0.1, 0.16, -0.06, 0.06, 'c:#d24a2a']], 0, 0, 0); }
+    for (let s = 1.2; s < (longU ? W : D) - 1; s += 2.0) kit.shelf(...(longU ? [u0 + s, v0 + 0.25] : [u0 + 0.25, v0 + s]), y, longU ? [0, 1] : [1, 0], { w: 1.8, books: ['c:#8a8f94', 'c:#d24a2a', 'c:#2f5d8a', 'c:#a8a08f'] });
+    return;
+  }
+  if (type === 'reception') {
+    counter(kit, cu, v0 + 2.0, y, [0, 1], Math.min(3.4, W - 1.5));
+    sofa(kit, cu - 1.2, v1 - 1.0, y, [0, -1], { c: 'c:#8a2b24' }); sofa(kit, cu + 1.4, v1 - 1.0, y, [0, -1], { c: 'c:#8a2b24' });
+    kit.box(cu - 0.5, cu + 0.5, v1 - 2.4, v1 - 1.9, y, y + 0.42, 't:wood:#6f4a2f');
+    return;
+  }
+  if (type === 'vr') {
+    kit.box(u0 + 0.5, u1 - 0.5, v0 + 0.5, v1 - 0.5, y, y + 0.012, 'c:#3a3f55', { collide: false });
+    for (let s = 1.5; s < (longU ? W : D) - 1; s += 3.0) pcDesk(kit, ...(longU ? [u0 + s, v1 - 0.5] : [u1 - 0.5, v0 + s]), y, longU ? [0, 1] : [1, 0]);
+    return;
+  }
+  // cowork / office: clusters of four desks, a sofa
+  for (let a = 1.6; a < W - 1.4; a += 3.4) for (let b = 1.6; b < D - 1.4; b += 3.0) {
+    for (const [du, dv, f] of [[-0.75, -0.4, [0, 1]], [0.75, -0.4, [0, 1]], [-0.75, 0.4, [0, -1]], [0.75, 0.4, [0, -1]]]) { kit.desk(u0 + a + du, v0 + b + dv, y, f, { w: 1.4, d: 0.7, top: 'c:#e2ddd2' }); kit.chair(u0 + a + du, v0 + b + dv - f[1] * 0.65, y, f, { seat: 'c:#c25a2a' }); }
+  }
+}
+
+function buildRKIC(kit) {
+  const { G, FH } = RK;
+  const LV = [G, G + FH, G + 2 * FH]; const R = G + 3 * FH;
+  const T = 0.3;
+  const K = { ochre: 't:plaster:#d8a64e', cream: 'c:#efe3c8', plinth: 'c:#55585a', frame: 'm:#2b2f33', int: 't:plaster:#f1ede4', col: 'c:#8d9196', slat: 't:wood:#e0904c', floor: 't:terrazzo:#a9a7a2', gallery: 't:paving:#9a9893', ceil: 'c:#f3f1ec', red: 'c:#a52a22', rail: 'm:#9aa1a6', roof: 't:concrete:#c9c4b8' };
+  const L = (axis, c, out) => line(kit, axis, c, out);
+  const C = { u0: 10.5, u1: 23, v0: 15, v1: 30.5 };
+  const GAL = { u0: 7.9, u1: 25.6, v0: 12.4, v1: 33.1 };
+  // ---- stairs (both stacked G -> L1 -> L2)
+  const SE = { u0: 33.35, u1: 37.75, v0: 18.75, v1: 27.2 };
+  const SN = { u0: 8.45, u1: 17.3, v0: 0.45, v1: 5.2 };
+  const hE = []; const hN = [];
+  for (const k of [0, 1]) {
+    hE.push(dogleg(kit, SE.u0, SE.u1, SE.v0, SE.v1, LV[k], LV[k + 1], { along: 'v', key: 't:terrazzo:#bdb8ad', name: `East stair ${k === 0 ? 'G-1' : '1-2'}`, topRail: k === 1 }));
+    hN.push(dogleg(kit, SN.u0, SN.u1, SN.v0, SN.v1, LV[k], LV[k + 1], { along: 'u', key: 't:terrazzo:#bdb8ad', name: `North stair ${k === 0 ? 'G-1' : '1-2'}`, topRail: k === 1 }));
+  }
+  const nStart = kit.stairs.find((s) => s.name === 'North stair G-1').start;
+  // ---- floors: the plinth (G), slabs at L1 and L2, roof
+  for (const [u0, u1, v0, v1] of RK_RECTS) {
+    kit.slab(u0, u1, v0, v1, G, K.floor, { thick: G, holes: [C] });
+    for (const k of [1, 2]) {
+      kit.slab(u0, u1, v0, v1, LV[k], 'c:#e6e2d8', { thick: 0.22, holes: [C, hE[k - 1], hN[k - 1]] });
+      kit.slab(u0, u1, v0, v1, LV[k] + 0.012, K.floor, { thick: 0.01, holes: [C, hE[k - 1], hN[k - 1]], walkable: false, collide: false });
+    }
+    kit.slab(u0, u1, v0, v1, R, K.roof, { thick: 0.25, holes: [C], walkable: false, collide: false });
+  }
+  // gallery paving ring at each level (just over the floor finish)
+  for (const k of [0, 1, 2]) {
+    const y = LV[k] + (k === 0 ? 0.004 : 0.016);
+    for (const [u0, u1, v0, v1] of [[GAL.u0, GAL.u1, GAL.v0, C.v0], [GAL.u0, GAL.u1, C.v1, GAL.v1], [GAL.u0, C.u0, C.v0, C.v1], [C.u1, GAL.u1, C.v0, C.v1]]) kit.box(u0, u1, v0, v1, y, y + 0.004, K.gallery, { collide: false });
+  }
+  for (const k of [0, 1, 2]) {
+    const top = k < 2 ? LV[k + 1] - 0.225 : R - 0.255;
+    ceilRects(kit, RK_RECTS, [C], top, K.ceil);
+    // orange timber slats under the gallery ring
+    for (let u = GAL.u0 + 0.15; u < GAL.u1; u += 0.25) for (const [a, b] of [[GAL.v0, C.v0 - 0.35], [C.v1 + 0.35, GAL.v1]]) kit.box(u - 0.04, u + 0.04, a, b, top - 0.09, top - 0.01, K.slat, { collide: false });
+    for (let v = C.v0 + 0.15; v < C.v1; v += 0.25) for (const [a, b] of [[GAL.u0, C.u0 - 0.35], [C.u1 + 0.35, GAL.u1]]) kit.box(a, b, v - 0.04, v + 0.04, top - 0.09, top - 0.01, K.slat, { collide: false });
+  }
+  // ---- courtyard: three steps down, setts, lawn strips, a circular motif, bollards; columns, railings
+  const ring = (inset, top) => {
+    const [a0, a1, b0, b1] = [C.u0 + inset, C.u1 - inset, C.v0 + inset, C.v1 - inset];
+    kit.box(a0, a1, b0, b0 + 0.35, 0, top, K.gallery, { walkable: true }); kit.box(a0, a1, b1 - 0.35, b1, 0, top, K.gallery, { walkable: true });
+    kit.box(a0, a0 + 0.35, b0 + 0.35, b1 - 0.35, 0, top, K.gallery, { walkable: true }); kit.box(a1 - 0.35, a1, b0 + 0.35, b1 - 0.35, 0, top, K.gallery, { walkable: true });
+  };
+  ring(0, 0.3); ring(0.35, 0.15);
+  kit.box(C.u0 + 0.7, C.u1 - 0.7, C.v0 + 0.7, C.v1 - 0.7, -0.03, 0.02, 't:paving:#8d8a85', { collide: false });
+  for (const v of [C.v0 + 2.2, C.v1 - 2.2]) kit.box(C.u0 + 1.5, C.u1 - 1.5, v - 0.5, v + 0.5, 0.02, 0.03, 't:grass:#7fa75a', { collide: false });
+  kit.cyl((C.u0 + C.u1) / 2, (C.v0 + C.v1) / 2, 0.02, 2.4, 0.015, 'c:#6e6a66', { seg: 32 });
+  kit.cyl((C.u0 + C.u1) / 2, (C.v0 + C.v1) / 2, 0.035, 1.6, 0.012, 'c:#a33a2a', { seg: 32 });
+  for (const [u, v] of [[C.u0 + 1.2, C.v0 + 1.2], [C.u1 - 1.2, C.v0 + 1.2], [C.u0 + 1.2, C.v1 - 1.2], [C.u1 - 1.2, C.v1 - 1.2]]) { kit.cyl(u, v, 0, 0.1, 0.8, 'c:#3a3d40', { seg: 8 }); kit.cyl(u, v, 0.8, 0.1, 0.08, 'e:#fff1c4', { seg: 8 }); }
+  const colAt = [];
+  for (let k = 0; k <= 4; k++) { const u = C.u0 + 0.3 + ((C.u1 - C.u0 - 0.6) * k) / 4; colAt.push([u, C.v0 - 0.35], [u, C.v1 + 0.35]); }
+  for (let k = 1; k < 5; k++) { const v = C.v0 + 0.3 + ((C.v1 - C.v0 - 0.6) * k) / 5; colAt.push([C.u0 - 0.35, v], [C.u1 + 0.35, v]); }
+  for (const [u, v] of colAt) kit.cyl(u, v, G, 0.25, R - G, K.col, { seg: 14, collide: true });
+  for (const k of [1, 2]) {
+    const y = LV[k];
+    kit.rail(C.u0 + 0.1, C.v0 - 0.1, C.u1 - 0.1, C.v0 - 0.1, y, K.rail); kit.rail(C.u0 + 0.1, C.v1 + 0.1, C.u1 - 0.1, C.v1 + 0.1, y, K.rail);
+    kit.rail(C.u0 - 0.1, C.v0 - 0.1, C.u0 - 0.1, C.v1 + 0.1, y, K.rail); kit.rail(C.u1 + 0.1, C.v0 - 0.1, C.u1 + 0.1, C.v1 + 0.1, y, K.rail);
+    for (const [u0, u1, v0, v1] of [[C.u0 - 0.05, C.u1 + 0.05, C.v0 - 0.3, C.v0 - 0.02], [C.u0 - 0.05, C.u1 + 0.05, C.v1 + 0.02, C.v1 + 0.3], [C.u0 - 0.3, C.u0 - 0.02, C.v0, C.v1], [C.u1 + 0.02, C.u1 + 0.3, C.v0, C.v1]]) kit.box(u0, u1, v0, v1, y - 0.6, y + 0.02, K.cream, { collide: false });
+  }
+  // roof parapet round the court
+  for (const [u0, u1, v0, v1] of [[C.u0 - 0.25, C.u1 + 0.25, C.v0 - 0.25, C.v0], [C.u0 - 0.25, C.u1 + 0.25, C.v1, C.v1 + 0.25], [C.u0 - 0.25, C.u0, C.v0, C.v1], [C.u1, C.u1 + 0.25, C.v0, C.v1]]) { kit.box(u0, u1, v0, v1, R - 0.6, R + 0.9, K.cream, { collide: false }); }
+
+  // ---- outer facades, edge by edge
+  const n = RK_OUT.length;
+  const PORT = { s0: 12.2, s1: 21.7, top: G + 3.0 };
+  for (let i = 0; i < n; i++) {
+    const p = RK_OUT[i]; const q = RK_OUT[(i + 1) % n];
+    const axis = Math.abs(p[1] - q[1]) < 1e-6 ? 'u' : 'v';
+    const cEdge = axis === 'u' ? p[1] : p[0]; const s0 = Math.min(axis === 'u' ? p[0] : p[1], axis === 'u' ? q[0] : q[1]); const s1 = Math.max(axis === 'u' ? p[0] : p[1], axis === 'u' ? q[0] : q[1]);
+    const sm = (s0 + s1) / 2; const probe = axis === 'u' ? [sm, cEdge + 0.5] : [cEdge + 0.5, sm];
+    const out = inPolyUV(probe[0], probe[1], RK_OUT) ? -1 : 1;
+    const Le = L(axis, cEdge - out * T / 2, out);
+    const len = s1 - s0;
+    const isPortico = axis === 'u' && Math.abs(cEdge - 44.7) < 1e-6;
+    const isBumpE = axis === 'v' && Math.abs(cEdge - 38.1) < 1e-6;
+    const isStairN = axis === 'u' && Math.abs(cEdge) < 1e-6;
+    for (const k of [0, 1, 2]) {
+      const y0 = k === 0 ? 0 : LV[k]; const y1 = k < 2 ? LV[k + 1] : R; const fl = LV[k];
+      let wins = [];
+      if (isBumpE) wins = [{ at: 20.0, width: 1.0, bottom: fl + 0.9 - y0, top: fl + 3.0 - y0 }];
+      else if (len > 2.4) {
+        const m = Math.max(1, Math.floor((len - 0.8) / 3.0)); const sp = len / m;
+        for (let j = 0; j < m; j++) wins.push({ at: s0 + sp * (j + 0.5), width: Math.min(1.6, sp - 1.2), bottom: fl + 0.9 - y0, top: fl + 2.7 - y0 });
+        if (isStairN) wins = wins.filter((w) => w.at > SN.u1 + 0.6);
+      }
+      const ops = [...wins];
+      if (isPortico && k === 0) { ops.length = 0; ops.push({ at: (PORT.s0 + PORT.s1) / 2, width: PORT.s1 - PORT.s0, bottom: 0, top: PORT.top }); }
+      wall2(kit, Le, s0, s1, y0, y1, K.ochre, K.int, T, ops);
+      for (const w of wins) {
+        if (isPortico && k === 0) continue;
+        glaze(Le, w.at, w.width, y0 + w.bottom, w.top - w.bottom, T, { frame: K.frame, mull: 1, transom: 0.7, sill: K.cream });
+        Le.box(w.at - w.width / 2 - 0.15, w.at + w.width / 2 + 0.15, T / 2 - 0.01, T / 2 + 0.55, y0 + w.top + 0.05, y0 + w.top + 0.2, K.cream); // hood
+        Le.box(w.at - w.width / 2 - 0.15, w.at - w.width / 2 - 0.05, T / 2 - 0.01, T / 2 + 0.55, y0 + w.top - 0.25, y0 + w.top + 0.05, K.cream);
+        Le.box(w.at + w.width / 2 + 0.05, w.at + w.width / 2 + 0.15, T / 2 - 0.01, T / 2 + 0.55, y0 + w.top - 0.25, y0 + w.top + 0.05, K.cream);
+      }
+      if (k > 0) Le.box(s0, s1, T / 2 - 0.01, T / 2 + 0.06, fl - 0.25, fl + 0.05, K.cream); // floor band
+    }
+    // pilasters (full height) at the ends and every ~6 m, plinth, cornice, parapet
+    const pm = Math.max(1, Math.round(len / 6));
+    for (let j = 0; j <= pm; j++) { const s = s0 + (len * j) / pm; Le.box(Math.max(s0 - (j === 0 ? 0.0 : 0), s - 0.35), Math.min(s1, s + 0.35), T / 2 - 0.01, T / 2 + 0.14, G, R + 0.9, K.cream); }
+    if (!(isPortico)) Le.box(s0, s1, T / 2 - 0.01, T / 2 + 0.08, 0, G + 0.35, K.plinth);
+    else { Le.box(s0, PORT.s0, T / 2 - 0.01, T / 2 + 0.08, 0, G + 0.35, K.plinth); Le.box(PORT.s1, s1, T / 2 - 0.01, T / 2 + 0.08, 0, G + 0.35, K.plinth); }
+    Le.box(s0, s1, T / 2 - 0.01, T / 2 + 0.3, R - 0.1, R + 0.15, K.cream);
+    Le.box(s0, s1, -T / 2, T / 2, R, R + 0.9, K.ochre);
+    Le.box(s0, s1, -T / 2 - 0.05, T / 2 + 0.05, R + 0.9, R + 0.98, K.cream);
+  }
+  // ---- the south portico: cream gateway with a red frame, the name, steps, the name wall and paving
+  {
+    const Lp = L('u', 44.7 - T / 2, 1); const um = (PORT.s0 + PORT.s1) / 2;
+    Lp.box(PORT.s0 - 1.2, PORT.s0, -T / 2, T / 2 + 0.6, 0, R + 1.4, K.cream); Lp.box(PORT.s1, PORT.s1 + 1.2, -T / 2, T / 2 + 0.6, 0, R + 1.4, K.cream);
+    Lp.box(PORT.s0 - 1.2, PORT.s1 + 1.2, -T / 2, T / 2 + 0.6, PORT.top, PORT.top + 1.2, K.cream);
+    Lp.box(PORT.s0 - 1.2, PORT.s1 + 1.2, -T / 2, T / 2 + 0.6, R + 0.9, R + 1.4, K.cream);
+    Lp.box(PORT.s0 - 0.25, PORT.s0, T / 2 + 0.6, T / 2 + 0.66, 0, PORT.top, K.red); Lp.box(PORT.s1, PORT.s1 + 0.25, T / 2 + 0.6, T / 2 + 0.66, 0, PORT.top, K.red);
+    Lp.box(PORT.s0 - 0.25, PORT.s1 + 0.25, T / 2 + 0.6, T / 2 + 0.66, PORT.top, PORT.top + 0.25, K.red);
+    kit.sign('RAKESH KAPOOR INNOVATION CENTRE', um, 44.7 + 0.67, PORT.top + 0.35, [0, 1], { width: 9.4, height: 0.7, bg: '#f3ead6', fg: '#a52a22', font: 'bold 64px Georgia, serif' });
+    for (const [a, b, top] of [[44.7, 45.0, G], [45.0, 45.3, 0.3], [45.3, 45.6, 0.15]]) kit.box(PORT.s0, PORT.s1, a, b, 0, top, 't:paving:#8d8a85', { walkable: true });
+    ceiling(kit, 10.5, 23.4, 38.6, 44.4, LV[1] - 0.225, K.slat);
+    // forecourt: grey pavers with maroon bands, the stone name wall with its curved plinth
+    kit.box(-1, 34, 45.6, 58, -0.02, 0.022, 't:paving:#9a9690', { collide: false });
+    for (const v of [48, 51, 54]) kit.box(-1, 34, v - 0.2, v + 0.2, 0.022, 0.026, 'c:#7a2b2b', { collide: false });
+    kit.box(1.5, 9.5, 51.5, 52.1, 0, 1.7, 't:concrete:#7d7b78');
+    kit.cyl(5.5, 52.6, 0, 3.2, 0.35, 't:concrete:#8a8784', { seg: 24 });
+    kit.sign('RAKESH KAPOOR INNOVATION CENTRE · BITS Pilani', 5.5, 52.12, 0.5, [0, 1], { width: 7.4, height: 0.9, bg: '#6f6d6a', fg: '#f3ead6', font: 'bold 54px Georgia, serif' });
+    for (const u of [-1, 34]) for (const v of [47, 56]) { kit.cyl(u, v, 0, 0.08, 5.5, 'm:#8a9096', { seg: 8 }); kit.box(u - 0.35, u + 0.35, v - 0.12, v + 0.12, 5.4, 5.55, 'e:#fff3d0', { collide: false }); }
+  }
+  kit.entrance('South portico', 17, 46.6, [0, 1]);
+  // ---- roof: stair heads, water tanks, AC units
+  for (const [u0, u1, v0, v1] of [[SE.u0 - 0.1, SE.u1 + 0.1, SE.v0, SE.v1], [SN.u0 - 0.1, SN.u1, SN.v0, SN.v1 + 0.2]]) { kit.box(u0, u1, v0, v1, R, R + 2.8, K.ochre, { collide: false }); kit.box(u0 - 0.2, u1 + 0.2, v0 - 0.2, v1 + 0.2, R + 2.8, R + 3.0, K.cream, { collide: false }); }
+  for (const [u, v] of [[3, 10], [3, 34], [28, 34]]) kit.cyl(u, v, R, 0.8, 1.5, 'c:#2a2c2e', { seg: 14 });
+  for (let u = 2; u < 7; u += 1.6) for (const v of [20, 24]) kit.box(u - 0.5, u + 0.5, v - 0.4, v + 0.4, R, R + 0.9, 'c:#d9dcd8', { collide: false });
+
+  // ---- interiors, one zone per level
+  const plates = []; const pIdx = {};
+  const rooms = [
+    [[0.3, 7.9, 6.7, 17], 'r1', ['IoT Tinkering Lab', 'AI Lab', 'Technology Enabling Centre'], ['maker', 'lab', 'cowork']],
+    [[0.3, 7.9, 17, 28], 'r2', ['Maker Space', 'API Lab', 'Co-working Zone'], ['maker', 'lab', 'cowork']],
+    [[0.3, 7.9, 28, 38.3], 'r3', ['UI/UX Lab', 'AR/VR Lab', 'Incubator Offices'], ['lab', 'vr', 'cowork']],
+    [[17.3, 25.45, 0.3, 12.4], 'n1', ['Vinati Organics Conference Room', 'CG-CV Lab', 'Board Room'], ['conf', 'lab', 'conf']],
+    [[25.6, 32.9, 6.7, 18.4], 'e1', ['Reception · PIEDS', 'Fin-Tech Lab', 'Start-up Offices'], ['reception', 'lab', 'cowork']],
+    [[25.6, 30.8, 22.4, 38.3], 'e2', ['Co-working', 'Co-working', 'Co-working'], ['cowork', 'cowork', 'cowork']],
+  ];
+  for (const [, id, names] of rooms) names.forEach((nm, k) => { pIdx[`${id}${k}`] = plates.length; plates.push([`${['G', '1', '2'][k]}·${id.toUpperCase()}`, nm]); });
+  for (const [k, nm] of [[0, 'Hari Menon Conference Room'], [0, 'Prem Talreja Conference Room'], [1, 'Seminar Hall'], [2, 'Co-working Hall']]) { pIdx[nm] = plates.length; plates.push([['G', '1', '2'][k] + ' · S', nm]); }
+  kit.texture('rkplates', () => plateAtlas(plates, { cols: 4, cw: 320, ch: 72, bg: '#3b3f44', fg: '#f3ead6', sub: '#e6c58a' }));
+  const doorPlate = (Lw, s, y, key, flip = 1) => { const i = pIdx[key]; if (i === undefined) return; const [pu, pv] = Lw.P(s + 1.0, flip * (0.125 + 0.006)); plate(kit, 'rkplates', i, pu, pv, y + 1.7, 0.82, 0.18, Lw.dir.map((x) => x * flip)); };
+  const DOORK = { frame: 'c:#3b3f44', leaf: 't:wood:#9a7b55' };
+  for (const k of [0, 1, 2]) {
+    kit.layer(`L${k}`, () => {
+      const y = LV[k]; const top = k < 2 ? LV[k + 1] - 0.225 : R - 0.255; const h = top - y;
+      // gallery walls with doors and glazed panels
+      const gw = [
+        { L: L('v', GAL.u0, -1), s0: 6.7, s1: 38.3, doors: [[14, 'r1'], [22.5, 'r2'], [31, 'r3']] },
+        { L: L('v', GAL.u1, 1), s0: 6.7, s1: 38.3, doors: [[15, 'e1'], [30, 'e2']], open: [[18.55, 22.25]] },
+        { L: L('u', GAL.v0, -1), s0: 17.3, s1: GAL.u1, doors: [[21, 'n1']] },
+        { L: L('u', GAL.v1, 1), s0: GAL.u0, s1: GAL.u1, doors: k === 0 ? [[11, 'Hari Menon Conference Room'], [23, 'Prem Talreja Conference Room']] : [[12, k === 1 ? 'Seminar Hall' : 'Co-working Hall'], [21.5, null]], open: k === 0 ? [[14.1, 19.7]] : [] },
+      ];
+      for (const w of gw) {
+        const ops = w.doors.map(([s]) => ({ at: s, width: 1.1, bottom: 0, top: 2.4 }));
+        for (const [a, b] of w.open || []) ops.push({ at: (a + b) / 2, width: b - a, bottom: 0, top: Math.min(3.0, h - 0.1) });
+        const glz = [];
+        for (let s = w.s0 + 1.5; s < w.s1 - 1.2; s += 2.6) if (!ops.some((o) => Math.abs(o.at - s) < o.width / 2 + 1.4)) glz.push(s);
+        for (const s of glz) ops.push({ at: s, width: 1.6, bottom: 0.9, top: 2.4 });
+        w.L.wall(w.s0, w.s1, y, top, K.int, 0.25, ops);
+        for (const s of glz) glaze(w.L, s, 1.6, y + 0.9, 1.5, 0.25, { frame: K.frame, mull: 0, sill: null, recess: 0.03 });
+        for (const [s, id] of w.doors) { kit.door(w.L.axis === 'u', s, w.L.c, y, 1.0, { height: 2.35, side: -w.L.out, ...DOORK }); if (id) doorPlate(w.L, s, y, id.length < 3 ? `${id}${k}` : id); }
+      }
+      // radial partitions
+      for (const v of [17, 28]) L('u', v, 1).wall(0.3, GAL.u0 - 0.125, y, top, K.int, 0.2);
+      L('v', 17.3, 1).wall(0.3, GAL.v0 - 0.125, y, top, K.int, 0.2);
+      for (const v of [18.4, 22.4]) L('u', v, 1).wall(GAL.u1 + 0.125, 33.2, y, top, K.int, 0.2);
+      L('v', 33.2, 1).wall(22.5, 27.5, y, top, K.int, 0.25);
+      L('v', 30.95, 1).wall(27.6, 38.3, y, top, K.int, 0.01, [], false);
+      // north stair: wall between the flights' side and the lobby
+      L('u', SN.v1 + 0.08, 1).wall(nStart, SN.u1, y, top, K.int, 0.15);
+      if (k === 0) {
+        for (const u of [14, 19.8]) L('v', u, 1).wall(GAL.v1 + 0.125, 38.6, y, top, K.int, 0.2);
+        for (const [a, b] of [[10.2, 14], [19.8, 23.7]]) L('u', 38.6, 1).wall(a, b, y, top, K.int, 0.2);
+        furnishRoom(kit, [7.9, 14, 33.1, 38.6], y, 'conf', top); furnishRoom(kit, [19.8, 25.6, 33.1, 38.6], y, 'conf', top);
+        // the arcade: benches, a fire-hose cabinet, the lift
+        for (const [u, v] of [[9.2, 20], [24.3, 25]]) kit.box(u - 0.25, u + 0.25, v - 1, v + 1, y, y + 0.45, 't:wood:#8f6f4b');
+        kit.box(GAL.u0 + 0.13, GAL.u0 + 0.3, 26, 26.9, y + 0.9, y + 2.0, K.red, { collide: false });
+        kit.box(17.4, 19.2, 10.5, 12.25, y, y + 2.3, 'm:#9aa1a6');
+      } else furnishRoom(kit, [7.9, 25.6, 33.1, 44.4], y, k === 1 ? 'class' : 'cowork', top);
+      for (const [r, id, , types] of rooms) furnishRoom(kit, r, y, types[k], top);
+      // gallery lights
+      for (let u = GAL.u0 + 1.3; u < GAL.u1; u += 3.2) for (const v of [(GAL.v0 + C.v0) / 2, (C.v1 + GAL.v1) / 2]) rodLight(kit, u, v, top - 0.09, 0.02);
+      for (let v = C.v0 + 2; v < C.v1; v += 3.2) for (const u of [(GAL.u0 + C.u0) / 2, (C.u1 + GAL.u1) / 2]) rodLight(kit, u, v, top - 0.09, 0.02, [0, 1]);
+      for (const [u, v] of [[12, 3], [14, 8], [29, 20.4], [35.5, 20]]) rodLight(kit, u, v, top, 0.02);
+    });
+  }
+  for (const [r, id, names] of rooms) names.forEach((nm, k) => kit.room(`rk${k}:${id}`, nm, r[0], r[1], r[2], r[3], LV[k], k < 2 ? LV[k + 1] : R, k));
+  kit.room('rkCourt', 'RKIC courtyard', C.u0, C.u1, C.v0, C.v1, 0, R);
+  kit.room('rkPortico', 'RKIC portico', 10.2, 23.7, 38.6, 44.7, G, LV[1]);
+  kit.floors.push({ y: LV[0], name: 'Ground (arcade, Maker Space, reception)' }, { y: LV[1], name: 'Level 1 (labs)' }, { y: LV[2], name: 'Level 2 (co-working, TEC)' });
+}
+
 // ================================================================ modules
 const mod = (name, osm, frame, build) => ({ id: 'workshops', name, category: 'academic', osm, floors: 1, enabled: true, research: 'mixed', frame: () => frame, build });
 export default [
   mod('BITS Workshop', ['BITS Workshop'], frameOf(WS.O, WS.eu, WS.U, WS.V), (kit, ctx) => { buildWorkshop(kit); ctx.buildings[0].h = WS.CREST; }),
   mod('New BITS Workshop (Central Workshop)', ['New BITS Workshop'], frameOf(NW.O, NW.eu, NW.U, NW.V), (kit, ctx) => { buildNewWorkshop(kit); ctx.buildings[0].h = 9.6; }),
+  mod('Rakesh Kapoor Innovation Centre', ['Rakesh Kapoor Innovation Centre'], frameOf(RK.O, RK.eu, 38.1, 44.7), (kit, ctx) => { buildRKIC(kit); ctx.buildings[0].h = RK.G + 3 * RK.FH + 0.9; }),
 ];
