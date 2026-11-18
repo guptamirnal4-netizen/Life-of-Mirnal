@@ -221,7 +221,12 @@ export default {
       D(x - 0.02, x + 0.02, z, z + s * 0.08, y, y + h, 'c:#4e3420');
     };
     // a ribbon (string-course, band) round a rectangle at y0..y1, proud by p
-    const band = (x0, x1, z0, z1, y0, y1, key, p = 0.06) => { D(x0 - p, x1 + p, z0 - p, z1 + p, y0, y1, key); };
+    // (four strips, so it never shows as a slab on the roof or the ceiling below)
+    const band = (x0, x1, z0, z1, y0, y1, key, p = 0.06) => {
+      const t = p + 0.02;
+      D(x0 - p, x1 + p, z0 - p, z0 - p + t, y0, y1, key); D(x0 - p, x1 + p, z1 + p - t, z1 + p, y0, y1, key);
+      if (z1 - z0 > 0.1) { D(x0 - p, x0 - p + t, z0 - p, z1 + p, y0, y1, key); D(x1 + p - t, x1 + p, z0 - p, z1 + p, y0, y1, key); }
+    };
 
     // ======================================================================================
     // Gameplay room in the spine: build round it
@@ -538,7 +543,7 @@ export default {
     const corr = tex('mb-corrugated', TEX.corrugated);
     for (const s of [-1, 1]) {
       const g = new THREE.BoxGeometry(slopeLen, 0.12, AZ1 - AZ0 + 1.2);
-      g.rotateZ(s * slope);
+      g.rotateZ(-s * slope);
       g.translate(AC + s * (AH / 2 + 0.2), (EAVE + RIDGE) / 2 + 0.1, (AZ0 + AZ1) / 2);
       kit.mesh(g, corr);
       // louvred clerestory hoods and windows along the long walls
@@ -573,7 +578,7 @@ export default {
       // roof trusses, wall lights, tube lights
       for (let z = AZ0 + 3; z < AZ1; z += 6) {
         D(A0 + 0.4, A1 - 0.4, z - 0.1, z + 0.1, EAVE - 0.25, EAVE - 0.05, 'm:#6a6f72');
-        for (const s of [-1, 1]) { const g = new THREE.BoxGeometry(AH - 0.4, 0.18, 0.18); g.rotateZ(s * slope); g.translate(AC + s * (AH / 2), (EAVE + RIDGE) / 2 - 0.6, z); kit.mesh(g, 'm:#6a6f72'); }
+        for (const s of [-1, 1]) { const g = new THREE.BoxGeometry(AH - 0.4, 0.18, 0.18); g.rotateZ(-s * slope); g.translate(AC + s * (AH / 2), (EAVE + RIDGE) / 2 - 0.6, z); kit.mesh(g, 'm:#6a6f72'); }
         kit.tubeLight(A0 + 0.7, z + 1.5, 6.5, [0, 1]); kit.tubeLight(A1 - 0.7, z + 1.5, 6.5, [0, 1]);
         kit.tubeLight(AC, z + 1.5, EAVE - 0.3, [1, 0]);
       }
@@ -745,8 +750,9 @@ export default {
           for (let i = steps; i >= 0; i--) { const d = d0 + ((d1 - d0) * i) / steps; const [x, z] = P(r1 - 0.3, d); gs.lineTo(x, -z); }
           const gg = new THREE.ShapeGeometry(gs); gg.rotateX(-Math.PI / 2); gg.translate(0, top + 0.01, 0); geoKey(gg, 't:grass:#cfe8a8');
         }
-        // colliders: walkable cells along the arc
-        const cells = Math.max(2, Math.ceil(((d1 - d0) * Math.PI / 180) * r1 / 1.5));
+        // colliders: walkable cells along the arc, short enough (0.5 m) that a cell's axis-aligned box never
+        // reaches past the next tier, so every 0.45 m step can be climbed from any direction
+        const cells = Math.max(2, Math.ceil(((d1 - d0) * Math.PI / 180) * r1 / 0.5));
         for (let i = 0; i < cells; i++) {
           const da = d0 + ((d1 - d0) * i) / cells; const db = d0 + ((d1 - d0) * (i + 1)) / cells;
           const pts = [P(r0 + 0.05, da), P(r1 - 0.05, da), P(r0 + 0.05, db), P(r1 - 0.05, db), P(r1 - 0.05, (da + db) / 2)];

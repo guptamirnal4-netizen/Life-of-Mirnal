@@ -351,3 +351,47 @@ The evidence supports only the overall plan. Room-level plans were not found [un
 - `roads-paths`: the semicircular driveway loop in front of the porch, and the Rotunda ramps and steps.
 - `landscape-water`: M Lawns and S Lawns planting, cypress cones, and the courtyard lawns.
 - `gates-landmarks`: the cannons at the entrance, if treated as monuments.
+
+## Build notes (js/world/buildings/main-building.js)
+
+Module `main-building`: replaces the OSM blocks `Main Building Hall` and `FD-II` and owns `clockTower` and `rotunda`, so
+the old `buildClockTowerAt` / `buildRotunda` in bits-world.js no longer run. The module's frame is the world itself
+(x east, z south), so every collider is exact. `Main Building (West Wing)` (FD-III) and `(East Wing)` (the FD-II quad)
+stay plain blocks, per fd2-fd3.md. Test: `tests/browser/main-building.mjs` (walkthrough, screenshots; `PERF=1` for
+frame timing against `?nomodules`).
+
+**Built from verified facts**
+- The U plan facing the Rotunda: tower block on the x ≈ -9.3 axis, spine ranges west and east, the Auditorium behind.
+- Art Deco stepped massing: two-storey outer body, three-storey middle tier, the Clock Tower shaft with the red-framed
+  louvred slot front and back, the clock stage with four round red-ringed dials (hands follow the game clock), an open
+  arched belfry and a curved cupola with dome and finial (about 43 m to the finial).
+- The porte-cochère with the wide front steps and steel rails, maroon door surround, the cannons and the front lawns
+  with cypress cones; the roof terrace over the foyer in front of the tower base.
+- The ground-floor sequence from the tour: checkerboard foyer → inner foyer (star-inlay marble, the bust on its plinth,
+  murals, carved doors, welcome screen) → cross corridor → pillared inner hall round a planted light-court → carved
+  double doors between relief panels into the Auditorium.
+- Spine ranges: two storeys, cusped-arch arcade with a red plinth and a jali vent band below, a paired-column verandah
+  with balustrade above, a grey dado on the verandah walls.
+- The Rotunda: sunken (kit.pit), 50 m across, floor at y -4.5, pink/slate star paving with lotus petals, the ochre
+  niche wall with white-framed cusped niches, the BITS emblem on the axis, a pierced jali parapet with a steel rail,
+  two white-framed doorways in the wall at the NE and NW.
+- Physics Laboratory 2247A on the first floor of the west range (periwinkle walls, black-top benches, stools).
+
+**Approximations (not seen; kept plausible)**
+- Internal stairs: twin dog-legs flanking the tower hall (x ≈ -27…-21 and 3…8.5, z -66…-62), ground (0.9) to first
+  floor (5.4), half landing at 3.15. Section D found no source for the stairs.
+- First floor of the tower block: corridor, a hall with a conference table over the inner foyer, side halls opening
+  onto the range verandahs, closed rooms 2246/2244. The third storey of the middle tier is closed (not walkable).
+- The Auditorium interior (stage, proscenium, bench rows with centre and cross aisles, steel trusses) and its pitched
+  corrugated roof with cream gables: the roof is seen from the air, the interior is not.
+- The Rotunda's E/S/W amphitheatre terraces (ten 0.45 m tiers) and the three stair aisles, and the trench stairs from
+  the two north doorways up to the forecourt: the plaza is verified sunken, the exact way down is not.
+- Tower and tier heights are visual estimates (body roof 9.9, tier roof 14.4, shaft top 31.5).
+- The gameplay room `sciencelab` was moved (module `rooms`) from over the tower entrance (review §5.4) to the west
+  range ground floor at about (-46, -61), directly under 2247A; its door opens onto the arcade verandah.
+
+**Known gaps / hand-offs**
+- The film's evening shot (`js/cinematic/cinematic.js`, walk `rot`) and NPC paths still place people at y = 0 over the
+  sunken floor; `walkGuide` / NPC walking should take the height from `campus.groundAt(x, z)` and the `rot` walk should
+  come down the south aisle (x = 0). Assembly spots, the player spot and the stage spot are already at the right heights.
+- The south-end corner pavilions with chhatris belong to the wing quads (FD-III / FD-II), which are not rebuilt yet.
