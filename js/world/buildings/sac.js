@@ -27,7 +27,7 @@
 // Levels: the halls, lobby and portico stand on a plinth at P (0.45; research: 0.5-0.6), up 3 steps from the
 // lawns and forecourt; the gameplay room stays at bare ground (its floor is the game's), so its door opens three
 // steps down from the hall's east vestibule. The Martial Arts mezzanine is at M = P + 4.0. Pavilions at PV, corridors
-// at CF. Layers: 'shell' (everything seen from outside), interior zones 'hall', 'sports', 'clubsN', 'clubsS', 'kiosks'.
+// at CF. Layers: 'shell' (everything seen from outside), interior zones 'hall', 'sports', 'clubsN', 'clubsS', 'kiosksN', 'kiosksS', 'looters'.
 import * as THREE from 'three';
 import { worldBoxGeometry, TEX_SIZE } from '../textures.js';
 
@@ -363,6 +363,19 @@ function buildSac(kit, ctx) {
     if (grille) R(at - w / 2, at + w / 2, c + out * 0.06, c + out * 0.075, y, y + h, K.grille);
   };
   const L = (name, fn) => kit.layer(name, fn);
+  // kit.wall, but a door opening whose sill is a low step (bottom <= 0.6, the floor levels P, PV) gets a walkable
+  // sill the full wall thickness, so you walk through instead of bumping into a 0.3-0.45 m kerb
+  const W = (u0, v0, u1, v1, y0, y1, key, opts = {}) => {
+    const ops = opts.openings || [];
+    const low = (o) => (o.bottom ?? 0) > 0 && o.bottom <= 0.6 && opts.collide !== false;
+    const w = kit.wall(u0, v0, u1, v1, y0, y1, key, { ...opts, openings: ops.map((o) => (low(o) ? { ...o, bottom: 0 } : o)) });
+    const th = opts.thick ?? 0.25;
+    for (const o of ops.filter(low)) {
+      const a = w.s0 + o.at - o.width / 2; const b = w.s0 + o.at + o.width / 2;
+      if (w.alongU) FL(a, b, w.c - th / 2, w.c + th / 2, y0, y0 + o.bottom, key); else FL(w.c - th / 2, w.c + th / 2, a, b, y0, y0 + o.bottom, key);
+    }
+    return w;
+  };
 
   // =====================================================================================================
   // EAST HALL ("SAC inside"), round the gameplay room
@@ -384,10 +397,10 @@ function buildSac(kit, ctx) {
   flat(RX1 + 0.1, lin.x1, AXIS - 1.1, AXIS + 1.1, 0.035, po(K.kota)); // threshold in the lining
   // the lining: grey dado, white plaster above, up to the aisle ceilings (hides the room's own box and roof slab)
   const liningOps = [{ at: AXIS - lin.z0, width: 2.2, bottom: 0, top: 2.5 }];
-  kit.wall(lin.x0 + LIN / 2, lin.z0, lin.x0 + LIN / 2, lin.z1, 0, EH.ceil, K.bluePl, { thick: LIN });
-  kit.wall(lin.x1 - LIN / 2, lin.z0, lin.x1 - LIN / 2, lin.z1, 0, EH.ceil, K.bluePl, { thick: LIN, openings: liningOps });
-  kit.wall(lin.x0 + LIN, lin.z0 + LIN / 2, lin.x1 - LIN, lin.z0 + LIN / 2, 0, EH.ceil, K.bluePl, { thick: LIN });
-  kit.wall(lin.x0 + LIN, lin.z1 - LIN / 2, lin.x1 - LIN, lin.z1 - LIN / 2, 0, EH.ceil, K.bluePl, { thick: LIN });
+  W(lin.x0 + LIN / 2, lin.z0, lin.x0 + LIN / 2, lin.z1, 0, EH.ceil, K.bluePl, { thick: LIN });
+  W(lin.x1 - LIN / 2, lin.z0, lin.x1 - LIN / 2, lin.z1, 0, EH.ceil, K.bluePl, { thick: LIN, openings: liningOps });
+  W(lin.x0 + LIN, lin.z0 + LIN / 2, lin.x1 - LIN, lin.z0 + LIN / 2, 0, EH.ceil, K.bluePl, { thick: LIN });
+  W(lin.x0 + LIN, lin.z1 - LIN / 2, lin.x1 - LIN, lin.z1 - LIN / 2, 0, EH.ceil, K.bluePl, { thick: LIN });
   // grey dado and a white band on the lining's outer faces
   for (const [a0, a1, b, dir, alongU] of [[lin.x0, lin.x1, lin.z0, -1, true], [lin.x0, lin.x1, lin.z1, 1, true], [lin.z0, lin.z1, lin.x0, -1, false]]) {
     const R = (p0, p1, q0, q1, y0, y1, k) => (alongU ? B(p0, p1, q0, q1, y0, y1, k) : B(q0, q1, p0, p1, y0, y1, k));
@@ -424,7 +437,7 @@ function buildSac(kit, ctx) {
   // east wall: the wooden door to the lobby on the axis, grilled windows either side
   {
     const at = AXIS - EH.z0;
-    kit.wall(EH.x1 - 0.15, EH.z0, EH.x1 - 0.15, EH.z1, 0, EH.spring, K.bluePl, { thick: 0.3, openings: [{ at, width: 3.0, bottom: P, top: P + 3.0 }, { at: at - 5.1, width: 1.4, bottom: P + 0.9, top: P + 2.4 }, { at: at + 5.1, width: 1.4, bottom: P + 0.9, top: P + 2.4 }] });
+    W(EH.x1 - 0.15, EH.z0, EH.x1 - 0.15, EH.z1, 0, EH.spring, K.bluePl, { thick: 0.3, openings: [{ at, width: 3.0, bottom: P, top: P + 3.0 }, { at: at - 5.1, width: 1.4, bottom: P + 0.9, top: P + 2.4 }, { at: at + 5.1, width: 1.4, bottom: P + 0.9, top: P + 2.4 }] });
     for (const s of [-1, 1]) win(false, AXIS + s * 5.1, EH.x1 - 0.15, P + 0.9, 1.4, 1.5, { out: 1, thick: 0.3, surround: 0 });
     // 4-leaf panelled door, folded open into the hall
     for (const s of [-1, 1]) {
@@ -501,15 +514,15 @@ function buildSac(kit, ctx) {
   const PO = { x0: -131.0, x1: -127.0, op0: AXIS - 3, op1: AXIS + 3, top: 8.0, open: P + 4.5 };
   // lobby: walls, floor, ceiling, roof and parapet
   FL(LB.x0, LB.x1 - 0.3, LB.z0 + 0.3, LB.z1 - 0.3, 0, P, K.kota);
-  kit.wall(LB.x0, LB.z0 + 0.15, LB.x1, LB.z0 + 0.15, 0, 6.5, K.bluePl, { thick: 0.3 });
-  kit.wall(LB.x0, LB.z1 - 0.15, LB.x1, LB.z1 - 0.15, 0, 6.5, K.bluePl, { thick: 0.3 });
+  W(LB.x0, LB.z0 + 0.15, LB.x1, LB.z0 + 0.15, 0, 6.5, K.bluePl, { thick: 0.3 });
+  W(LB.x0, LB.z1 - 0.15, LB.x1, LB.z1 - 0.15, 0, 6.5, K.bluePl, { thick: 0.3 });
   B(LB.x0, LB.x1, LB.z0, LB.z1, 6.2, 6.5, K.creamC);
   for (const [a0, a1, b0, b1] of [[LB.x0, LB.x1, LB.z0, LB.z0 + 0.25], [LB.x0, LB.x1, LB.z1 - 0.25, LB.z1]]) { B(a0, a1, b0, b1, 6.5, 7.0, K.bluePl); B(a0, a1, b0 - 0.05, b1 + 0.05, 7.0, 7.1, K.white); }
   B(LB.x0 - 0.01, LB.x1 - 0.3, LB.z0 + 0.3, LB.z1 - 0.3, 4.8, 4.9, K.ceiling);
   // portico back wall: central wooden door (open), glazed side doors, the sign above
   {
     const c = LB.x1 - 0.15; const at0 = LB.z0 + 0.3; const len = LB.z1 - 0.3 - at0;
-    kit.wall(c, at0, c, LB.z1 - 0.3, 0, 6.2, K.bluePl, { thick: 0.3, openings: [{ at: AXIS - at0, width: 3.0, bottom: P, top: P + 3.0 }, { at: AXIS - 2.25 - at0, width: 1.0, bottom: P, top: P + 2.6 }, { at: AXIS + 2.25 - at0, width: 1.0, bottom: P, top: P + 2.6 }] });
+    W(c, at0, c, LB.z1 - 0.3, 0, 6.2, K.bluePl, { thick: 0.3, openings: [{ at: AXIS - at0, width: 3.0, bottom: P, top: P + 3.0 }, { at: AXIS - 2.25 - at0, width: 1.0, bottom: P, top: P + 2.6 }, { at: AXIS + 2.25 - at0, width: 1.0, bottom: P, top: P + 2.6 }] });
     void len;
     for (const s of [-1, 1]) {
       const z = AXIS + s * 2.25;
@@ -585,14 +598,14 @@ function buildSac(kit, ctx) {
   for (const s of [-1, 1]) {
     const zIn = s < 0 ? LB.z0 : LB.z1; const zOut = s < 0 ? 284.0 : 325.0; const z0 = Math.min(zIn, zOut); const z1 = Math.max(zIn, zOut);
     const x0 = EH.x1; const x1 = -129.0; const t = 0.3; const H = 4.0;
-    kit.wall(x0, s < 0 ? z0 + t / 2 : z1 - t / 2, x1, s < 0 ? z0 + t / 2 : z1 - t / 2, 0, H, K.bluePl, { thick: t, openings: [{ at: 3.5, width: 1.2, bottom: 1.2, top: 2.4 }, { at: 8.0, width: 1.2, bottom: 1.2, top: 2.4 }] });
+    W(x0, s < 0 ? z0 + t / 2 : z1 - t / 2, x1, s < 0 ? z0 + t / 2 : z1 - t / 2, 0, H, K.bluePl, { thick: t, openings: [{ at: 3.5, width: 1.2, bottom: 1.2, top: 2.4 }, { at: 8.0, width: 1.2, bottom: 1.2, top: 2.4 }] });
     for (const at of [3.5, 8.0]) win(true, x0 + at, s < 0 ? z0 + t / 2 : z1 - t / 2, 1.2, 1.2, 1.2, { out: s, thick: t, surround: 0.22 });
     const ex = x1 - t / 2;
     const ews = [z0 + 2.4, (z0 + z1) / 2, z1 - 2.4];
-    kit.wall(ex, z0, ex, z1, 0, H, K.bluePl, { thick: t, openings: ews.map((z) => ({ at: z - z0, width: 1.2, bottom: 1.2, top: 2.4 })) });
+    W(ex, z0, ex, z1, 0, H, K.bluePl, { thick: t, openings: ews.map((z) => ({ at: z - z0, width: 1.2, bottom: 1.2, top: 2.4 })) });
     for (const z of ews) win(false, z, ex, 1.2, 1.2, 1.2, { out: 1, thick: t, surround: 0.22 });
     const wz0 = s < 0 ? z0 : EH.z1; const wz1 = s < 0 ? EH.z0 : z1; // west wall where the hall does not close it
-    kit.wall(x0 + t / 2, wz0, x0 + t / 2, wz1, 0, H, K.bluePl, { thick: t });
+    W(x0 + t / 2, wz0, x0 + t / 2, wz1, 0, H, K.bluePl, { thick: t });
     // plinth band and white cornice
     B(x0, x1 + 0.04, s < 0 ? z0 - 0.04 : z1 - 0.01, s < 0 ? z0 + 0.01 : z1 + 0.04, 0, 0.55, K.plinth);
     B(x1 - 0.01, x1 + 0.04, z0, z1, 0, 0.55, K.plinth);
@@ -643,14 +656,14 @@ function buildSac(kit, ctx) {
     // west wall: low grilled windows and a clerestory band
     {
       const ops = []; for (const at of lowWin(z1 - z0)) ops.push({ at, width: 1.6, bottom: P + 1.1, top: P + 2.3 }, { at, width: 2.6, bottom: 6.4, top: 7.9 });
-      kit.wall(x0 + t / 2, z0, x0 + t / 2, z1, 0, eave, K.bluePl, { thick: t, openings: ops });
+      W(x0 + t / 2, z0, x0 + t / 2, z1, 0, eave, K.bluePl, { thick: t, openings: ops });
       for (const at of lowWin(z1 - z0)) { win(false, z0 + at, x0 + t / 2, P + 1.1, 1.6, 1.2, { out: -1, thick: t, surround: 0.1 }); win(false, z0 + at, x0 + t / 2, 6.4, 2.6, 1.5, { out: -1, thick: t, surround: 0, grille: false }); }
     }
-    kit.wall(x1 - t / 2, z0, x1 - t / 2, z1, 0, eave, K.bluePl, { thick: t });
+    W(x1 - t / 2, z0, x1 - t / 2, z1, 0, eave, K.bluePl, { thick: t });
     for (const [z, out, door] of [[z0 + t / 2, -1, -186], [z1 - t / 2, 1, -186]]) {
       const ats = [3.0, 7.4, 20.0, 24.4]; const ops = [{ at: door - x0, width: 2.4, bottom: P, top: P + 2.7 }];
       for (const at of ats) ops.push({ at, width: 1.6, bottom: P + 1.1, top: P + 2.3 }, { at, width: 2.6, bottom: 6.4, top: 7.9 });
-      kit.wall(x0, z, x1, z, 0, eave, K.bluePl, { thick: t, openings: ops });
+      W(x0, z, x1, z, 0, eave, K.bluePl, { thick: t, openings: ops });
       for (const at of ats) { win(true, x0 + at, z, P + 1.1, 1.6, 1.2, { out, thick: t, surround: 0.1 }); win(true, x0 + at, z, 6.4, 2.6, 1.5, { out, thick: t, surround: 0, grille: false }); }
       kit.door(true, door, z, P, 2.4, { height: 2.7, thick: t, frame: K.frame, leaf: 'c:#6f7a80', side: -out });
       kit.flight(door, z + out * (t / 2 + 0.9), 0, [0, -out], 3, P / 3, 3.4, K.step, { tread: 0.3 });
@@ -674,12 +687,12 @@ function buildSac(kit, ctx) {
     }
     B(xm - 0.25, xm + 0.25, z0 - 0.6, z1 + 0.6, ridge + 0.02, ridge + 0.2, 'c:#7d8b97');
     // partition between the badminton and table-tennis halls (door at x -178)
-    kit.wall(x0 + t, WB.part + 0.125, x1 - t, WB.part + 0.125, P, eave, K.bluePl, { thick: 0.25, openings: [{ at: -178 - (x0 + t), width: 2.0, bottom: 0, top: 2.5 }] });
+    W(x0 + t, WB.part + 0.125, x1 - t, WB.part + 0.125, P, eave, K.bluePl, { thick: 0.25, openings: [{ at: -178 - (x0 + t), width: 2.0, bottom: 0, top: 2.5 }] });
     kit.door(true, -178, WB.part + 0.125, P, 2.0, { height: 2.5, thick: 0.25, frame: K.frame, leaf: 'c:#6f7a80', side: 1 });
+    kit.room('martial', 'Martial Arts (mezzanine)', -174.2, x1 - t, z0 + t, WB.part, M, eave, 1);
     kit.room('badminton', 'Badminton hall', x0 + t, x1 - t, z0 + t, WB.part, P, eave);
     kit.room('tt', 'Table tennis hall', -190, x1 - t, WB.part + 0.25, z1 - t, P, eave);
     kit.room('squash', 'Squash court', x0 + t, -190, WB.part + 0.25, 315.65, P, eave);
-    kit.room('martial', 'Martial Arts (mezzanine)', -174.2, x1 - t, z0 + t, WB.part, M, eave, 1);
 
     L('sports', () => {
       const ix0 = x0 + t; const ix1 = x1 - t; const iz0 = z0 + t; const iz1 = z1 - t;
@@ -697,7 +710,7 @@ function buildSac(kit, ctx) {
         B(cx, cx + 6.1, 299.69, 299.71, P + 1.5, P + 1.55, K.netW);
       }
       for (const z of [294, 300.5]) S(ix0 + 0.15, ix0 + 0.55, z, z + 4, P, P + 0.45, K.woodLt);
-      for (const x of [-197, -189, -181]) S(x, x + 4, WB.part - 0.55, WB.part - 0.15, P, P + 0.45, K.woodLt);
+      for (const x of [-198, -192, -186]) S(x, x + 4, WB.part - 0.55, WB.part - 0.15, P, P + 0.45, K.woodLt);
       // steel trusses (rust red) every 5 m with tube lights and exhaust fans
       for (let z = z0 + 2.5; z < z1; z += 5) {
         B(ix0, ix1, z - 0.07, z + 0.07, 8.45, 8.6, K.truss);
@@ -717,7 +730,7 @@ function buildSac(kit, ctx) {
       FL(-174.2, ix1, iz0, WB.part, M - 0.25, M, 't:concrete:#c4c7c2');
       for (const z of [295.5, 301, 306.5]) S(-174.2, -173.9, z - 0.15, z + 0.15, P, M - 0.25, K.creamC);
       const gw = []; for (let at = 3.6; at < WB.part - iz0 - 1.5; at += 3.4) gw.push({ at, width: 2.6, bottom: 1.0, top: 2.7 });
-      kit.wall(-174.1, iz0, -174.1, WB.part, M, 8.45, K.bluePl, { thick: 0.2, openings: [{ at: 0.65, width: 1.2, bottom: 0, top: 2.3 }, ...gw] });
+      W(-174.1, iz0, -174.1, WB.part, M, 8.45, K.bluePl, { thick: 0.2, openings: [{ at: 0.65, width: 1.2, bottom: 0, top: 2.3 }, ...gw] });
       for (const o of gw) { B(-174.24, -173.96, iz0 + o.at - 1.3, iz0 + o.at + 1.3, M + 0.95, M + 1.05, K.steel); }
       flat(-173.95, ix1 - 0.05, iz0 + 1.4, WB.part - 0.1, M + 0.006, po(K.mats));
       for (const z of [295, 299, 303]) { kit.cyl(ix1 - 1.2, z, M + 0.6, 0.18, 1.1, 'c:#b3261e', { seg: 10 }); kit.cyl(ix1 - 1.2, z, M + 1.7, 0.012, 8.45 - M - 1.7, K.steel, { seg: 4 }); }
@@ -737,12 +750,12 @@ function buildSac(kit, ctx) {
       // squash: maple floor, white walls with red lines, glass back wall with a door, viewing area
       const sq = { x0: ix0, x1: -190, z0: WB.part + 0.25, z1: 315.65 };
       flat(sq.x0, sq.x1, sq.z0, sq.z1, P + 0.006, po(K.maple));
-      kit.wall(sq.x0, sq.z1 + 0.1, -186.5, sq.z1 + 0.1, P, P + 5.6, K.squashW, { thick: 0.2 });
+      W(sq.x0, sq.z1 + 0.1, -186.5, sq.z1 + 0.1, P, P + 5.6, K.squashW, { thick: 0.2 });
       for (const z of [sq.z0 + 0.01, sq.z1 - 0.01]) B(sq.x0, sq.x1, z - 0.005, z + 0.005, P, P + 5.6, K.squashW);
       B(sq.x0 + 0.005, sq.x0 + 0.02, sq.z0, sq.z1, P, P + 5.6, K.squashW);
       B(sq.x0 + 0.02, sq.x0 + 0.03, sq.z0, sq.z1, P + 4.52, P + 4.57, K.red); B(sq.x0 + 0.02, sq.x0 + 0.03, sq.z0, sq.z1, P + 1.78, P + 1.83, K.red); B(sq.x0 + 0.02, sq.x0 + 0.03, sq.z0, sq.z1, P + 0.43, P + 0.48, K.red);
       flat(sq.x0 + 5.44 - 0.025, sq.x0 + 5.44 + 0.025, sq.z0, sq.z1, P + 0.009, po(K.red)); flat(sq.x0 + 5.44, sq.x1, (sq.z0 + sq.z1) / 2 - 0.025, (sq.z0 + sq.z1) / 2 + 0.025, P + 0.009, po(K.red));
-      kit.wall(sq.x1 + 0.05, sq.z0, sq.x1 + 0.05, sq.z1, P, P + 2.13, K.glazed, { thick: 0.1, openings: [{ at: (sq.z1 - sq.z0) / 2, width: 0.9, bottom: 0, top: 2.0 }] });
+      W(sq.x1 + 0.05, sq.z0, sq.x1 + 0.05, sq.z1, P, P + 2.13, K.glazed, { thick: 0.1, openings: [{ at: (sq.z1 - sq.z0) / 2, width: 0.9, bottom: 0, top: 2.0 }] });
       B(sq.x1, sq.x1 + 0.1, sq.z0, sq.z1, P + 2.13, P + 2.25, K.steel);
       B(-189.9, -186.5, sq.z1 + 0.2, sq.z1 + 0.22, P, P + 3.0, 'c:#2f5f9f'); // blue wall of the viewing area
       S(-189.6, -187.0, sq.z1 - 0.6, sq.z1 - 0.2, P, P + 0.45, K.woodLt);
@@ -801,13 +814,13 @@ function buildSac(kit, ctx) {
     if (open) FL(x0, x1, z0, z1, 0, PV, K.terrazzo);
     const winsN = [x0 + 3.5, x1 - 3.5]; const opsN = winsN.map((x) => ({ at: x - x0, width: 1.3, bottom: PV + 1.0, top: PV + 2.3 }));
     for (const [z, out] of [[z0 + t / 2, -1], [z1 - t / 2, 1]]) {
-      kit.wall(x0, z, x1, z, 0, H, wall, { thick: t, openings: opsN });
+      W(x0, z, x1, z, 0, H, wall, { thick: t, openings: opsN });
       for (const x of winsN) win(true, x, z, PV + 1.0, 1.3, 1.3, { out, thick: t, surround: 0.1 });
     }
     for (const side of ['w', 'e']) {
       const c = side === 'w' ? x0 + t / 2 : x1 - t / 2;
       const ops = open && side === doorSide ? [{ at: doorZ - z0 - t, width: dw, bottom: PV, top: PV + 2.4 }] : [];
-      kit.wall(c, z0 + t, c, z1 - t, 0, HE, wall, { thick: t, openings: ops });
+      W(c, z0 + t, c, z1 - t, 0, HE, wall, { thick: t, openings: ops });
       if (side === doorSide) {
         const out = side === 'w' ? -1 : 1;
         if (open) kit.door(false, doorZ, c, PV, dw, { height: 2.4, thick: t, frame: K.frame, leaf: 'c:#7d858c', side: -out });
@@ -822,8 +835,8 @@ function buildSac(kit, ctx) {
     L(layer, () => {
       // interior skin over the walls, the vault (chords) with painted arch ribs, lights and fans
       const ix0 = x0 + t; const ix1 = x1 - t; const iz0 = z0 + t; const iz1 = z1 - t;
-      for (const [z, d] of [[iz0, 1], [iz1, -1]]) kit.wall(ix0, z + d * 0.011, ix1, z + d * 0.011, PV, 3.1, wall, { thick: 0.02, openings: opsN.map((o) => ({ ...o, at: o.at - t })), collide: false });
-      for (const [x, d] of [[ix0, 1], [ix1, -1]]) kit.wall(x + d * 0.011, iz0, x + d * 0.011, iz1, PV, HE - 0.02, wall, { thick: 0.02, openings: (x < (x0 + x1) / 2 ? doorSide === 'w' : doorSide === 'e') ? [{ at: doorZ - iz0, width: dw, bottom: 0, top: 2.4 }] : [], collide: false });
+      for (const [z, d] of [[iz0, 1], [iz1, -1]]) W(ix0, z + d * 0.011, ix1, z + d * 0.011, PV, 3.1, wall, { thick: 0.02, openings: opsN.map((o) => ({ ...o, at: o.at - t, bottom: o.bottom - PV, top: o.top - PV })), collide: false });
+      for (const [x, d] of [[ix0, 1], [ix1, -1]]) W(x + d * 0.011, iz0, x + d * 0.011, iz1, PV, HE - 0.02, wall, { thick: 0.02, openings: (x < (x0 + x1) / 2 ? doorSide === 'w' : doorSide === 'e') ? [{ at: doorZ - iz0, width: dw, bottom: 0, top: 2.4 }] : [], collide: false });
       const ya = segArc(iz0, iz1, 3.1, 0.7); const n = 10;
       for (let k = 0; k < n; k++) {
         const za = iz0 + ((iz1 - iz0) * k) / n; const zb = iz0 + ((iz1 - iz0) * (k + 1)) / n;
@@ -928,8 +941,8 @@ function buildSac(kit, ctx) {
       const c = side === 'n' ? z0 + t / 2 : side === 's' ? z1 - t / 2 : side === 'w' ? x0 + t / 2 : x1 - t / 2;
       const a0 = horiz ? x0 : z0 + t; const a1 = horiz ? x1 : z1 - t;
       const ops = side === face ? [door ? { at: (a1 - a0) / 2, width: 1.4, bottom: 0, top: 2.3 } : { at: (a1 - a0) / 2, width: 3.2, bottom: 1.0, top: 2.3 }] : [];
-      if (horiz) kit.wall(a0, c, a1, c, y0, y0 + h, 't:plaster:#f1f0ea', { thick: t, openings: ops });
-      else kit.wall(c, a0, c, a1, y0, y0 + h, 't:plaster:#f1f0ea', { thick: t, openings: ops });
+      if (horiz) W(a0, c, a1, c, y0, y0 + h, 't:plaster:#f1f0ea', { thick: t, openings: ops });
+      else W(c, a0, c, a1, y0, y0 + h, 't:plaster:#f1f0ea', { thick: t, openings: ops });
       if (side === face) {
         const out = side === 'n' || side === 'w' ? -1 : 1; const mid = (a0 + a1) / 2;
         const R = (p0, p1, q0, q1, ya, yb, k) => (horiz ? B(p0, p1, q0, q1, ya, yb, k) : B(q0, q1, p0, p1, ya, yb, k));
@@ -941,7 +954,7 @@ function buildSac(kit, ctx) {
     }
     B(x0 - 0.03, x1 + 0.03, z0 - 0.03, z1 + 0.03, y0, y0 + 0.5, K.plinth);
     hip(x0 - 0.35, x1 + 0.35, z0 - 0.35, z1 + 0.35, y0 + h, 1.8, K.kioskRoof);
-    L('kiosks', () => { // inside: a dark back room, a shelf of stock and a light
+    L(cz < 300 ? 'kiosksN' : 'kiosksS', () => { // inside: a dark back room, a shelf of stock and a light
       B(x0 + t, x1 - t, z0 + t, z1 - t, y0 + 2.9, y0 + 3.0, 'c:#5c5f63');
       flat(x0 + t, x1 - t, z0 + t, z1 - t, y0 + 0.01, 'c:#6a6d70');
       kit.tubeLight(cx, cz, y0 + 2.9, [1, 0]);
@@ -1008,7 +1021,7 @@ function buildSac(kit, ctx) {
     B(DS.x0 - 0.3, DS.x1 + 0.3, DS.z0 - 0.3, DS.z1 + 0.3, 3.6, 3.8, K.darkRoof);
     B(DS.x0 - 0.35, DS.x1 + 0.35, DS.z0 - 0.35, DS.z1 + 0.35, 3.45, 3.6, 'c:#2a2d31');
     for (let x = DS.x0 + 0.2; x <= DS.x1; x += 4.9) for (const z of [DS.z0 + 0.2, DS.z1 - 0.2]) kit.cyl(x, z, 0, 0.1, 3.45, 'c:#2a2d31', { seg: 8, collide: true });
-    L('kiosks', () => {
+    L('looters', () => {
       for (let x = DS.x0 + 2.5; x < DS.x1 - 2; x += 4.9) {
         S(x - 1.2, x + 1.2, 245.6, 246.4, 0, 0.75, K.table);
         for (let k = 0; k < 3; k++) for (const s of [-1, 1]) kit.chair(x - 0.8 + k * 0.8, 246 + s * 0.75, 0, [0, -s], { seat: K.chairRed, frame: K.chairRed });

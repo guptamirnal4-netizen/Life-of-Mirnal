@@ -20,5 +20,6 @@
 import library from './library.js';
 import nab from './nab.js';
 import mainBuilding from './main-building.js';
+import sac from './sac.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding];
+export const BUILDING_MODULES = [library, nab, mainBuilding, sac];
