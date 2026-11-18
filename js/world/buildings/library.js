@@ -32,7 +32,7 @@ const COURT_R = 6.0; // gravel court
 const RING_R = 6.5; // marble step ring round it
 
 // world-size of one repeat of the module's own canvas textures
-const XT = { ashlar: 2.4, marble: 4, kota: 2.4, gravel: 2, jali: 0.9, pavers: 2.0, spines: 1.2, diamond: 0.9 };
+const XT = { ashlar: 3.6, marble: 4, kota: 2.4, gravel: 2, jali: 0.9, pavers: 2.0, spines: 1.2, diamond: 0.9 };
 
 const K = {
   ashlar: 'x:ashlar', pink: 't:plaster:#f4b9a6', cream: 'c:#efe0c2', plinth: 'c:#8f4a3b', white: 't:plaster:#f7f4ee',
@@ -537,7 +537,7 @@ function buildLibrary(kit, ctx) {
     B(-46.86, -46.8, -4.85, 4.85, 5.88, 6.02, K.cream); B(-46.86, -46.8, -4.85, 4.85, 4.58, 4.7, K.cream);
     for (const s of [-1, 1]) B(-46.86, -46.8, s * 3.4 - 0.06, s * 3.4 + 0.06, 0.6, 4.6, K.cream);
     // portico ceiling (fresco) and its side walls of sandstone fins
-    plane(-45.0, 0, 4.59, 3.0, 6.8, [0, 0], 'x:fresco', { offset: 0 });
+    { const g = new THREE.PlaneGeometry(3.0, 6.8); g.rotateX(Math.PI / 2); g.translate(-45.0, 4.58, 0); add('x:fresco', g); }
     for (const s of [-1, 1]) for (let u = -46.2; u < -43.8; u += 0.6) B(u, u + 0.18, s * 3.4 - s * 0.12, s * 3.4, G, 4.6, K.sand);
     // the segmental arch band carrying the lettering, with a slot showing the canopy behind
     {
@@ -557,9 +557,10 @@ function buildLibrary(kit, ctx) {
     }
     // the white tent-like pyramid canopy over the portico (white with dark lines)
     {
-      const g = new THREE.ConeGeometry(4.6, 2.2, 4); g.rotateY(Math.PI / 4); g.translate(-44.4, 6.0 + 1.1, 0); add(K.canopy, g);
-      for (const [du, dv] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) bar([-44.4 + du * 3.25, 6.0, dv * 3.25], [-44.4, 8.2, 0], 0.1, 0.1, K.navy);
-      bar([-47.65, 6.15, -3.2], [-47.65, 6.15, 3.2], 0.05, 0.25, K.navy);
+      // it sits on the portico lintel in front of the arch band and stays clear of the facade (u < -44)
+      const g = new THREE.ConeGeometry(3.4, 1.6, 4); g.rotateY(Math.PI / 4); g.translate(-46.4, 6.0 + 0.8, 0); add(K.canopy, g);
+      for (const [du, dv] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) bar([-46.4 + du * 2.4, 6.0, dv * 2.4], [-46.4, 7.6, 0], 0.1, 0.1, K.navy);
+      bar([-48.85, 6.1, -2.4], [-48.85, 6.1, 2.4], 0.05, 0.2, K.navy);
     }
     // the door screen: coloured glass over four glazed leaves standing open
     plane(-43.45, 0, G + 2.6, 3.6, 1.6, [-1, 0], 'x:doorglass', { offset: 0 });
@@ -772,13 +773,13 @@ function buildLibrary(kit, ctx) {
       B(-42, -12.2, f - 0.02, f + 0.02, F1 + 2.9, F1 + 3.3, K.brick);
       for (let u = -40.5; u < -13; u += 1.6) { B(u, u + 0.9, f - 0.03, f + 0.03, F1 + 1.75, F1 + 2.7, K.canopy); B(u + 0.1, u + 0.8, f - 0.04, f + 0.04, F1 + 1.85, F1 + 2.6, K.jali); }
     }
-    // big brick arches in the foyer's side walls (as in the panorama), rising into the gallery level
-    for (const s of [-1, 1]) for (const uc of [-37.5, -16.5]) {
+    // brick arches in the foyer's side walls (as in the panorama), under the gallery slab
+    for (const s of [-1, 1]) for (const uc of [-37.5]) { // kept below the gallery slab and clear of the doors
       const f = s * (9.5 - WT / 2 - 0.04);
-      const sh = new THREE.Shape(); const r0 = 2.2; const r1 = 2.7;
+      const sh = new THREE.Shape(); const r0 = 1.9; const r1 = 2.3;
       sh.absarc(0, 0, r1, 0, Math.PI, false); sh.lineTo(-r0, 0); sh.absarc(0, 0, r0, Math.PI, 0, true); sh.closePath();
-      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: false, curveSegments: 20 }); g.translate(0, 0, -0.03); scaleUV(g, 1 / 1.6); g.translate(uc, G + 3.8, f); add(K.brick, g);
-      for (const x of [-r1, r0]) B(uc + x, uc + x + 0.5, f - 0.03, f + 0.03, G, G + 3.8, K.brick);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: false, curveSegments: 20 }); g.translate(0, 0, -0.03); scaleUV(g, 1 / 1.6); g.translate(uc, G + 1.9, f); add(K.brick, g);
+      for (const x of [-r1, r0]) B(uc + x, uc + x + 0.4, f - 0.03, f + 0.03, G, G + 1.9, K.brick);
     }
     // --- twin stairs: straight flights rising east on both sides of the central passage, to the bridge ---
     const rise = (F1 - G) / STEPS; const uTop = STAIR_U0 + STEPS * TREAD;
@@ -813,7 +814,7 @@ function buildLibrary(kit, ctx) {
     railLine([-22.5, -6.5], [-22.5, 6.5], F1, F1);
     railLine([uTop, -6.5], [uTop, -4.5], F1, F1); railLine([uTop, -2.2], [uTop, 2.2], F1, F1); railLine([uTop, 4.5], [uTop, 6.5], F1, F1);
     // reading tables at the gallery balustrades
-    for (const s of [-1, 1]) for (const u of [-38, -32, -19, -15]) { table8(u, s * 8.1, F1, true, { len: 1.6, chairs: false }); kit.chair(u - 0.5, s * 8.95, F1, [0, -s]); kit.chair(u + 0.5, s * 8.95, F1, [0, -s]); }
+    for (const s of [-1, 1]) for (const u of [-38, -32, -19, -15]) { table8(u, s * 7.15, F1, true, { len: 1.6, chairs: false }); kit.chair(u - 0.5, s * 8.0, F1, [0, -s]); kit.chair(u + 0.5, s * 8.0, F1, [0, -s]); }
     // --- foyer furniture ---
     for (const s of [-1, 1]) { // issue/return counters (brick faced, glazed screens behind)
       B(-40.2, -34.5, s * 7.3, s * 8.1, G, G + 1.05, K.brick, { collide: true });
