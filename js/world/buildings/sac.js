@@ -40,12 +40,12 @@ const EH = { x0: -170.5, x1: -140.5, z0: 291, z1: 317, spring: 6.0, crown: 8.0, 
 const LIN = 0.4; // lining round the gameplay room
 
 // world size of one repeat of the module's canvas textures
-const XT = { kota: 3, stamped: 3, jali: 0.8, marble: 2, sheet: 1.2, mats: 2, grille: 0.5, net: 0.3 };
+const XT = { tiles: 2.5, kota: 3, stamped: 3, jali: 0.8, marble: 2, sheet: 1.2, mats: 2, grille: 0.5, net: 0.3 };
 
 const K = {
   blue: 'c:#9eabb4', bluePl: 't:plaster:#a7b4bd', white: 'c:#f2f2ee', salmon: 'c:#d8a597', terra: 'c:#b5653f',
   cream: 't:plaster:#efe6d2', creamC: 'c:#ece3cf', plinth: 'c:#8e9396', granite: 'c:#7f8689', granDark: 'c:#5f6669',
-  roofTile: 't:rooftile:#d9927a', kioskRoof: 'c:#cdc4b3', sheet: 'x:sheet', pv: 'm:#24324f', pvFrame: 'c:#c9cdd1',
+  roofTile: 'x:tiles', kioskRoof: 'c:#cdc4b3', sheet: 'x:sheet', pv: 'm:#24324f', pvFrame: 'c:#c9cdd1',
   kota: 'x:kota', marble: 'x:marble', stamped: 'x:stamped', step: 'c:#a3a7a8', terrazzo: 't:terrazzo:#cfcabd',
   corridor: 't:terrazzo:#bdb7ad', brick: 't:brick:#b45a3c', jali: 'x:jali', glass: 'c:#29333c', grille: 'x:grille',
   glazed: 'g:#bcd6e2', wood: 't:wood:#7a5232', woodLt: 't:wood:#b08a5a', frame: 'c:#4a3a2a', ceiling: 'c:#f3f0ea',
@@ -97,6 +97,14 @@ const SIGNS = [
 const SROW = Object.fromEntries(SIGNS.map((s, i) => [s[0], i]));
 
 const TEXTURES = {
+  tiles: () => canvas(256, 256, (g, W) => { // salmon-terracotta roof tiles (the drone view's pale salmon roofs)
+    const rows = 8; const rh = W / rows; g.fillStyle = '#9a5a44'; g.fillRect(0, 0, W, W);
+    for (let r = 0; r < rows; r++) for (let c = -1; c < 10; c++) {
+      const x = c * (W / 10) + (r % 2 ? W / 20 : 0); const base = jitter('#cf8a6e', 0.06);
+      const gr = g.createLinearGradient(x, 0, x + W / 10, 0); gr.addColorStop(0, jitter(base, 0.08)); gr.addColorStop(0.5, '#e0a088'); gr.addColorStop(1, base);
+      g.fillStyle = gr; g.fillRect(x + 1, r * rh + 1, W / 10 - 2, rh - 2);
+    }
+  }),
   kota: () => canvas(512, 512, (g, W) => { // grey Kota slabs (0.6 m) with a white and green marble inlay grid every 3 m
     const n = 5; const s = W / n;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
@@ -363,12 +371,42 @@ function buildSac(kit, ctx) {
     if (grille) R(at - w / 2, at + w / 2, c + out * 0.06, c + out * 0.075, y, y + h, K.grille);
   };
   const L = (name, fn) => kit.layer(name, fn);
+  // a plinth band 3-4 cm proud round the outside of a footprint (four strips, never a solid block that would
+  // poke up through the floor inside); gaps: { n|s|e|w: [a, b] } leaves a doorway open along that side
+  const band = (x0, x1, z0, z1, y0, y1, { d = 0.035, gaps = {} } = {}) => {
+    const run = (side, a0, a1, mk) => { const gp = gaps[side]; if (gp) { mk(a0, gp[0]); mk(gp[1], a1); } else mk(a0, a1); };
+    run('n', x0 - d, x1 + d, (a, b) => B(a, b, z0 - d, z0, y0, y1, K.plinth));
+    run('s', x0 - d, x1 + d, (a, b) => B(a, b, z1, z1 + d, y0, y1, K.plinth));
+    run('w', z0, z1, (a, b) => B(x0 - d, x0, a, b, y0, y1, K.plinth));
+    run('e', z0, z1, (a, b) => B(x1, x1 + d, a, b, y0, y1, K.plinth));
+  };
+  // kit.wall that also takes openings stacked in one bay (a low window under a clerestory): the wall is cut into
+  // vertical strips at every opening edge and each strip keeps only the solid bands between its openings
+  const wallStack = (u0, v0, u1, v1, y0, y1, key, { thick = 0.25, openings = [], collide = true } = {}) => {
+    const alongU = Math.abs(u1 - u0) >= Math.abs(v1 - v0);
+    const len = alongU ? Math.abs(u1 - u0) : Math.abs(v1 - v0);
+    const s0 = alongU ? Math.min(u0, u1) : Math.min(v0, v1); const c = alongU ? v0 : u0;
+    const ops = openings.map((o) => ({ a: Math.max(0, o.at - o.width / 2), b: Math.min(len, o.at + o.width / 2), lo: y0 + (o.bottom ?? 0), hi: y0 + (o.top ?? 2.2) }));
+    const cuts = [...new Set([0, len, ...ops.flatMap((o) => [o.a, o.b])])].filter((x) => x >= 0 && x <= len).sort((a, b) => a - b);
+    const piece = (a, b, ya, yb) => {
+      if (b - a < 0.005 || yb - ya < 0.005) return;
+      if (alongU) B(s0 + a, s0 + b, c - thick / 2, c + thick / 2, ya, yb, key, { collide }); else B(c - thick / 2, c + thick / 2, s0 + a, s0 + b, ya, yb, key, { collide });
+    };
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const a = cuts[i]; const b = cuts[i + 1]; const m = (a + b) / 2;
+      const here = ops.filter((o) => m > o.a && m < o.b).sort((p, q) => p.lo - q.lo);
+      let y = y0;
+      for (const o of here) { piece(a, b, y, Math.max(y, o.lo)); y = Math.max(y, o.hi); }
+      piece(a, b, y, y1);
+    }
+    return { alongU, s0, c, len };
+  };
   // kit.wall, but a door opening whose sill is a low step (bottom <= 0.6, the floor levels P, PV) gets a walkable
   // sill the full wall thickness, so you walk through instead of bumping into a 0.3-0.45 m kerb
   const W = (u0, v0, u1, v1, y0, y1, key, opts = {}) => {
     const ops = opts.openings || [];
     const low = (o) => (o.bottom ?? 0) > 0 && o.bottom <= 0.6 && opts.collide !== false;
-    const w = kit.wall(u0, v0, u1, v1, y0, y1, key, { ...opts, openings: ops.map((o) => (low(o) ? { ...o, bottom: 0 } : o)) });
+    const w = wallStack(u0, v0, u1, v1, y0, y1, key, { ...opts, openings: ops.map((o) => (low(o) ? { ...o, bottom: 0 } : o)) });
     const th = opts.thick ?? 0.25;
     for (const o of ops.filter(low)) {
       const a = w.s0 + o.at - o.width / 2; const b = w.s0 + o.at + o.width / 2;
@@ -671,7 +709,7 @@ function buildSac(kit, ctx) {
       sign(out < 0 ? 'badminton' : 'tthall', door, z + out * (t / 2 + 0.01), 3.48, 3.2, 0.42, [0, out]);
     }
     // plinth band and gable ends
-    for (const [a0, a1, b0, b1] of [[x0 - 0.04, x1, z0 - 0.04, z0], [x0 - 0.04, x1, z1, z1 + 0.04], [x0 - 0.04, x0, z0, z1]]) B(a0, a1, b0, b1, 0, 0.6, K.plinth);
+    band(x0, x1, z0, z1, 0, 0.6, { d: 0.04, gaps: { n: [-187.2, -184.8], s: [-187.2, -184.8], e: [z0, z1] } }); // the east side meets the hall
     const gy = (x) => eave + ((ridge - eave) * (1 - Math.abs(x - xm) / (xm - x0 + 0.5))) - 0.06;
     for (const z of [z0, z1 - t, WB.part]) extrudeXY([[x0 + (z === WB.part ? t : 0), eave], [x1 - (z === WB.part ? t : 0), eave], [x1 - (z === WB.part ? t : 0), gy(x1)], [xm, gy(xm)], [x0 + (z === WB.part ? t : 0), gy(x0)]], z, z === WB.part ? 0.25 : t, K.bluePl);
     B(x0 - 0.06, x1 + 0.06, z0 - 0.06, z1 + 0.06, eave - 0.25, eave - 0.1, K.white);
@@ -828,7 +866,7 @@ function buildSac(kit, ctx) {
         sign(sg, c + out * (t / 2), doorZ, PV + 2.55, 2.4, 0.36, [out, 0]);
       }
     }
-    B(x0 - 0.03, x1 + 0.03, z0 - 0.03, z1 + 0.03, 0, 0.5, K.plinth);
+    band(x0, x1, z0, z1, 0, 0.5, { gaps: open ? { [doorSide]: [doorZ - dw / 2, doorZ + dw / 2] } : {} });
     B(x0 - 0.08, x1 + 0.08, z0 - 0.08, z1 + 0.08, H - 0.12, H, K.white);
     hip(x0 - 0.4, x1 + 0.4, z0 - 0.4, z1 + 0.4, H, 2.0, K.roofTile);
     if (!open) return;
@@ -952,7 +990,7 @@ function buildSac(kit, ctx) {
         if (sg) sign(sg, horiz ? mid : c + out * (t / 2), horiz ? c + out * (t / 2) : mid, y0 + 2.58, 3.6, 0.42, horiz ? [0, out] : [out, 0]);
       }
     }
-    B(x0 - 0.03, x1 + 0.03, z0 - 0.03, z1 + 0.03, y0, y0 + 0.5, K.plinth);
+    band(x0, x1, z0, z1, y0, y0 + 0.5, { gaps: door ? { [face]: face === 'n' || face === 's' ? [cx - 0.7, cx + 0.7] : [cz - 0.7, cz + 0.7] } : {} });
     hip(x0 - 0.35, x1 + 0.35, z0 - 0.35, z1 + 0.35, y0 + h, 1.8, K.kioskRoof);
     L(cz < 300 ? 'kiosksN' : 'kiosksS', () => { // inside: a dark back room, a shelf of stock and a light
       B(x0 + t, x1 - t, z0 + t, z1 - t, y0 + 2.9, y0 + 3.0, 'c:#5c5f63');
@@ -978,7 +1016,8 @@ function buildSac(kit, ctx) {
     for (const [x0, label] of [[-169.0, null], [-162.0, 'shop2'], [-155.0, 'tott'], [-148.0, 'shop1']]) kiosk(x0 + 3.0 + 0.25, 245.6, 's', label, P, { label: label === 'tott' ? 'Order at TOTT' : 'Buy a snack' });
     kiosk(-135.4, 257, 'w', 'f301', P, { label: 'Get an ice cream at -301°F' });
     for (const z of [251.5, 255, 258.5, 262]) for (const x0 of [-166, -159.5, -153]) {
-      S(x0, x0 + 4.4, z - 0.4, z + 0.4, P, P + 0.75, K.table);
+      B(x0, x0 + 4.4, z - 0.4, z + 0.4, P + 0.71, P + 0.75, K.table); kit.col(x0, x0 + 4.4, z - 0.4, z + 0.4, P, P + 0.75);
+      for (const dx of [0.15, 4.2]) for (const dz of [-0.3, 0.25]) B(x0 + dx, x0 + dx + 0.05, z + dz, z + dz + 0.05, P, P + 0.71, K.steel);
       for (let k = 0; k < 4; k++) for (const s of [-1, 1]) kit.chair(x0 + 0.6 + k * 1.05, z + s * 0.75, P, [0, -s], { seat: K.chairRed, frame: K.chairRed });
     }
     for (const [x, z] of [[-167.5, 264.5], [-133.5, 243.5]]) { kit.cyl(x, z, P, 0.07, 6.5, K.pole, { seg: 8 }); beam([x, P + 6.4, z], [x + 1.2, P + 6.4, z], 0.07, 0.07, K.pole); B(x + 1.0, x + 1.5, z - 0.15, z + 0.15, P + 6.2, P + 6.35, K.lamp); }
@@ -998,7 +1037,9 @@ function buildSac(kit, ctx) {
     const nx = ez / el; const nz = -ex / el; const mx = (ax + bx) / 2; const mz = (az + bz) / 2;
     const face = nx > 0 ? [nx, nz] : [-nx, -nz];
     const i = SROW.looters; const N = SIGNS.length;
-    vplane(mx + face[0] * 0.02, mz + face[1] * 0.02, 2.5, 5.0, 0.8, face, K.neon, { uv: [0, 1 - (i + 1) / N, 1, 1 - i / N], offset: 0.02 });
+    // the neon sign on a black fascia board standing on the roof edge, above the canopy
+    beam([ax - face[0] * 0.08, 4.15, az - face[1] * 0.08], [bx - face[0] * 0.08, 4.15, bz - face[1] * 0.08], 0.16, 1.1, 'c:#1b1c1e');
+    vplane(mx, mz, 3.72, 6.0, 0.96, face, K.neon, { uv: [0, 1 - (i + 1) / N, 1, 1 - i / N], offset: 0.015 });
     B(mx + face[0] * 0.3 - 0.3, mx + face[0] * 0.3 + 0.3, mz - 3.2, mz + 3.2, 0, 1.0, 'c:#2a2b2d', { collide: true }); // counter
     B(mx + face[0] * 0.3 - 0.35, mx + face[0] * 0.3 + 0.35, mz - 3.25, mz + 3.25, 1.0, 1.05, K.steel);
     // tent canopy over the counter: a sloping white sheet on steel poles
@@ -1037,6 +1078,11 @@ function buildSac(kit, ctx) {
   // replace them. buildAreas runs after the modules.
   const mine = (a) => a.kind === 'grass' && a.poly.every(([x, z]) => x > -185 && x < -140 && z > 270 && z < 330);
   if (D?.areas) D.areas.splice(0, D.areas.length, ...D.areas.filter((a) => !mine(a)));
+  // The OSM point "Student Activities Center" sits in the middle of the sports hall, so its 6 m campus label floated
+  // inside the badminton hall and the explorer dropped visitors there. Move it (in place: the explorer and minimap
+  // hold the object) to the forecourt in front of the portico, the real main entrance (research F).
+  const poi = D?.pois?.find((q) => q.name === 'Student Activities Center');
+  if (poi) Object.assign(poi, { x: -119, z: AXIS });
   // keep the scattered campus trees out of the halls, pavilions, corridors and courts (buildTrees skips anything
   // within 9 m of these points); the lawns and the road avenue keep theirs
   campus.statuePts ||= [];
