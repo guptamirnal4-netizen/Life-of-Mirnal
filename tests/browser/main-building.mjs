@@ -166,6 +166,12 @@ for (const s of [-1, 1]) {
   p = await goTo(C + s * 16.6, -63.0);
   p = await goTo(C + s * 11.5, -63.0, 9000);
   check(Math.abs(p.y - 5.4) < 0.08, `${name} stair: flight 2 up to the first floor (5.4)`, p);
+  // the spine wall between the flights stops you stepping off flight 2 onto flight 1
+  await at(C + s * 14.2, 5.6, -63.0, 0, -1); await page.waitForTimeout(400);
+  await walk(1200);
+  const sp = await where();
+  check(sp.y > 3.6 && sp.z > -64.0, `${name} stair: spine wall keeps you on flight 2`, sp);
+  p = await goTo(C + s * 11.5, -63.0, 9000);
   p = await goTo(C + s * 11.5, -68);
   check(Math.abs(p.y - 5.4) < 0.08 && p.z < -67, `${name} stair: onto the first-floor corridor`, p);
   if (s < 0) {

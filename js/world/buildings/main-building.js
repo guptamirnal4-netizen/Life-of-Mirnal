@@ -355,6 +355,20 @@ export default {
     kit.layer('tower', () => {
       stairs.W = kit.dogleg(C - 17.8, C - 12, -66, -62, FL0, FL1, { along: 'u', reverse: true, wall: null, name: 'West stair (tower hall)', key: TERRAZZO });
       stairs.E = kit.dogleg(C + 12, C + 17.8, -66, -62, FL0, FL1, { along: 'u', wall: null, name: 'East stair (tower hall)', key: TERRAZZO });
+      // spine wall between the two flights (the kit's rail stops at landing height, so you could step off flight 2)
+      const wid = (4 - 0.1) / 2; const zs0 = -66 + wid; const zs1 = zs0 + 0.1;
+      const spineW = [C - 17.8 + Math.max(1.1, wid), stairs.W.u1]; const spineE = [stairs.E.u0, C + 17.8 - Math.max(1.1, wid)];
+      // a solid dwarf wall stepping up with flight 2 (low at the half landing, high at the floor above)
+      const N = 8;
+      for (const [x0, x1, hiAtX1] of [[...spineW, true], [...spineE, false]]) {
+        for (let k = 0; k < N; k++) {
+          const a = x0 + (x1 - x0) * k / N; const b = x0 + (x1 - x0) * (k + 1) / N;
+          const f = hiAtX1 ? (k + 1) / N : (N - k) / N; // how far up flight 2 this segment's high end is
+          const top = FL0 + (FL1 - FL0) * (0.5 + 0.5 * f) + 1.0;
+          B(a, b, zs0 - 0.04, zs1 + 0.04, FL0, top, CREAM);
+          D(a - 0.01, b + 0.01, zs0 - 0.08, zs1 + 0.08, top - 0.05, top + 0.03, 'c:#d9d3c7'); // capping
+        }
+      }
     });
     kit.slab(TX0 + 0.4, TX1 - 0.4, -70, Z_END, FL1, 'c:#f3f0e8', { thick: 0.3, holes: [stairs.W, stairs.E] });
     walk(C - 6, C + 6, Z_END, -47.3, FL1 - 0.3, FL1, 'c:#cfc8bb'); // the terrace over the foyer
@@ -411,8 +425,11 @@ export default {
     // ---- foyer front, terrace, first-floor hall front ----
     kit.wall(C - 6, -47.15, C + 6, -47.15, 0, 6.4, CREAM, { thick: 0.3, openings: [{ at: 6, width: 3.2, bottom: FL0, top: 4.6 }] });
     D(C - 6.05, C + 6.05, -47.35, -46.95, 6.4, 6.55, TRIM);
-    D(C - 2.0, C + 2.0, -47.0, -46.94, FL0, 4.85, MAROON); // maroon door surround
-    D(C - 1.6, C + 1.6, -47.02, -46.9, FL0, 4.6, 'c:#3a2416');
+    for (const s of [-1, 1]) D(Math.min(C + s * 1.6, C + s * 2.0), Math.max(C + s * 1.6, C + s * 2.0), -47.0, -46.94, FL0, 4.85, MAROON); // maroon door surround
+    D(C - 2.0, C + 2.0, -47.0, -46.94, 4.6, 4.85, MAROON);
+    // (the doorway stays open: the 'tower' zone is in range from the porch, so the lit foyer shows through)
+    // close the thin slots where the foyer front wall meets the flanking projections and the pilasters
+    for (const s of [-1, 1]) D(Math.min(C + s * 5.6, C + s * 6.35), Math.max(C + s * 5.6, C + s * 6.35), -47.6, -47.0, 0, 6.4, CREAM);
     kit.wall(C - 6, -58, C + 6, -58, FL1, FL2 - 0.3, CREAM, { thick: 0.3, openings: [{ at: 6, width: 1.6, bottom: 0, top: 2.5 }, { at: 1.4, width: 1.8, bottom: 0.9, top: 3.0 }, { at: 10.6, width: 1.8, bottom: 0.9, top: 3.0 }] });
     kit.window(true, C - 4.6, -58, FL1 + 0.9, 1.8, 2.1, { glass: 'g:#8fb3c6' });
     kit.window(true, C + 4.6, -58, FL1 + 0.9, 1.8, 2.1, { glass: 'g:#8fb3c6' });
@@ -572,16 +589,21 @@ export default {
           D(x0, x1, z, z + 0.45, FL0 + 0.4, FL0 + 0.48, 'c:#8a2b2b');
           D(x0, x1, z + 0.42, z + 0.5, FL0 + 0.48, FL0 + 0.95, 'c:#7a2424');
           for (let x = x0; x <= x1 + 1e-6; x += (x1 - x0) / 6) D(x - 0.03, x + 0.03, z + 0.05, z + 0.45, FL0, FL0 + 0.4, 'm:#4a4f55');
+          // seat dividers / armrests and a capped backrest, so the rows read as tip-up seats, not planks
+          for (let x = x0; x <= x1 + 1e-6; x += 0.55) D(x - 0.025, x + 0.025, z + 0.08, z + 0.48, FL0 + 0.48, FL0 + 0.68, 'm:#4a4f55');
+          D(x0, x1, z + 0.4, z + 0.52, FL0 + 0.95, FL0 + 1.0, 'm:#4a4f55');
           kit.col(x0, x1, z, z + 0.5, FL0, FL0 + 0.95);
         }
       }
       // roof trusses, wall lights, tube lights
       for (let z = AZ0 + 3; z < AZ1; z += 6) {
-        D(A0 + 0.4, A1 - 0.4, z - 0.1, z + 0.1, EAVE - 0.25, EAVE - 0.05, 'm:#6a6f72');
-        for (const s of [-1, 1]) { const g = new THREE.BoxGeometry(AH - 0.4, 0.18, 0.18); g.rotateZ(-s * slope); g.translate(AC + s * (AH / 2), (EAVE + RIDGE) / 2 - 0.6, z); kit.mesh(g, 'm:#6a6f72'); }
+        D(A0 + 0.4, A1 - 0.4, z - 0.15, z + 0.15, EAVE - 0.65, EAVE - 0.3, 'c:#e2dccd'); // ceiling beam
         kit.tubeLight(A0 + 0.7, z + 1.5, 6.5, [0, 1]); kit.tubeLight(A1 - 0.7, z + 1.5, 6.5, [0, 1]);
         kit.tubeLight(AC, z + 1.5, EAVE - 0.3, [1, 0]);
       }
+      // false ceiling under the trusses, with acoustic panel strips
+      D(A0 + 0.4, A1 - 0.4, AZ0 + 0.4, AZ1 - 0.4, EAVE - 0.3, EAVE - 0.2, 'c:#efeadf');
+      for (let x = A0 + 3; x < A1 - 2; x += 4) D(x - 0.6, x + 0.6, AZ0 + 10, AZ1 - 2, EAVE - 0.34, EAVE - 0.3, 'c:#d8d0bf');
       kit.room('auditorium-main', 'Main Building Auditorium', A0, A1, AZ0, AZ1, FL0, EAVE, 0);
     });
 

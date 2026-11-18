@@ -379,10 +379,11 @@ frame timing against `?nomodules`).
 
 **Approximations (not seen; kept plausible)**
 - Internal stairs: twin dog-legs flanking the tower hall (x ≈ -27…-21 and 3…8.5, z -66…-62), ground (0.9) to first
-  floor (5.4), half landing at 3.15. Section D found no source for the stairs.
+  floor (5.4), half landing at 3.15, with a solid stepped spine wall between the two flights (no source either).
 - First floor of the tower block: corridor, a hall with a conference table over the inner foyer, side halls opening
   onto the range verandahs, closed rooms 2246/2244. The third storey of the middle tier is closed (not walkable).
-- The Auditorium interior (stage, proscenium, bench rows with centre and cross aisles, steel trusses) and its pitched
+- The Auditorium interior (stage, proscenium, tip-up seat rows with armrests and centre and cross aisles, a flat
+  false ceiling with beams and acoustic strips under the roof trusses) and its pitched
   corrugated roof with cream gables: the roof is seen from the air, the interior is not.
 - The Rotunda's E/S/W amphitheatre terraces (ten 0.45 m tiers) and the three stair aisles, and the trench stairs from
   the two north doorways up to the forecourt: the plaza is verified sunken, the exact way down is not.
@@ -395,3 +396,10 @@ frame timing against `?nomodules`).
   sunken floor; `walkGuide` / NPC walking should take the height from `campus.groundAt(x, z)` and the `rot` walk should
   come down the south aisle (x = 0). Assembly spots, the player spot and the stage spot are already at the right heights.
 - The south-end corner pavilions with chhatris belong to the wing quads (FD-III / FD-II), which are not rebuilt yet.
+
+**Fix pass (review round 1)**
+- The main doorway is open: the dark slab that filled it (and the solid maroon panel behind it) is gone; the maroon
+  surround is now two jambs and a lintel, and the lit foyer is visible from the porch (the 'tower' zone is within range).
+- Filler piers close the slots at the foyer's front corners where the front wall met the projections and pilasters.
+- Stepped spine walls separate the dog-leg flights; the browser test checks you can't step off flight 2 onto flight 1.
+- The Auditorium has a false ceiling; the seat rows have armrests and a capped backrest.
