@@ -7,7 +7,8 @@
 // itself (u = x east, v = z south); each site is built in its own small Kit frame fitted to its OSM polygon (the
 // grounds are tilted 8.5-12 degrees off north) and then merged into this kit, so the whole module costs one mesh
 // per material. Interior zones: the pavilion rooms, the pool block and the Med-C scorers' hut.
-// The football field and its goals stay as bits-world.js builds them (fieldBounds drives the ball and the match).
+// The football goals and fieldBounds stay as bits-world.js builds them (they drive the ball and the match); this module
+// lays the infield grass and the pitch markings over them.
 // Everything here is ground level (stands 2 m, floodlights 17 m) and far east of the Clock Tower → Saraswati axis.
 import * as THREE from 'three';
 import { Kit } from './kit.js';

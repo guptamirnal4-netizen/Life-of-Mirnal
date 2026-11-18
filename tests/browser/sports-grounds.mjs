@@ -287,9 +287,7 @@ if (SHOTS) {
   await view('aerial-gymkhana', 'G', [-140, -120, 160], [30, 20, 0]);
   await view('aerial-courts', 'C', [-20, -20, 40], [40, 30, 0]);
   await view('aerial-pool', 'P', [-15, -10, 30], [16, 22, 0]);
-  await g(() => { window.__game.explorer.clock = 21 * 60; });
-  await page.waitForTimeout(2500);
-  await view('night-track', 'G', [-60, -40, 25], [30, 30, 0]);
+  await view('aerial-track', 'G', [-60, -40, 25], [30, 30, 0]);
 }
 
 check(errors.length === 0, 'no console errors');

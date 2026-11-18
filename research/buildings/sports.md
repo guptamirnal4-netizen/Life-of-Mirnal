@@ -221,3 +221,35 @@ All `…/` paths are under `/private/tmp/claude-501/-Users-mirnal-Documents-Whis
 - **`landscape-water`:** the tree rows around the grounds; the water tank tower seen from the cricket ground.
 - **`gates-landmarks`:** the pool's closeness to the Main Gate; the boundary wall east of the pool.
 - **Orchestrator:** the Med-C (Medical Centre) building has no owner in the index. The tour has panoramas of it ("Medical Centre", "Medical Centre - Reception").
+
+## Build notes (phase 7, `js/world/buildings/sports-grounds.js`)
+
+Module `sports-grounds` (registry.js). It owns no OSM footprint (`osm: []`). The kit's frame is the campus frame. Each site is built in its own small Kit fitted to its OSM polygon (the grounds sit 8.5 to 12 degrees off north), then merged into the module kit, so the whole module costs one mesh per material.
+
+**What is built:**
+- **Athletics track:** a six-lane sandy oval fitted to the OSM `track` polygon, with lane lines, a finish line, staggered marks and an inner kerb.
+- **Infield:** grass with full football markings: touchlines, halfway line, centre circle, penalty and goal areas, spots and D's. bits-world's own field plane loses to the sandy track area under it (even with `?nomodules`), so the module draws the grass and the lines itself. bits-world still builds the goals and `fieldBounds` for the match.
+- **Floodlights:** eight 17 m masts around the track.
+- **Gymkhana boundary wall:** 1.1 m cream wall on a dado, pilasters every 3 m and a pipe railing. It is inset 1.5 m inside the `ground` polygon and has six gates, each with an entrance and a nav link out→in. No road or nav edge crosses the wall away from a gate (checked).
+- **East stand:** five blue tiers, 50 m, facing the home straight, with stairs and stepped cheek walls at both ends and a back wall.
+- **Hockey field:** 50 × 88 m with full markings, goals with backboards, and six floodlights.
+- **Cricket practice nets:** three concrete lanes in a green-netted enclosure.
+- **Skating rink:** 54 × 26 m grey tiled slab with a speed oval. It has a low cream wall and pipe railing, a west and a south opening, and two masts.
+- **Gymkhana pavilion:** 24 × 9 m, one storey on a 0.45 m plinth. It has an eight-column verandah facing the track (the middle bay is open on the entrance axis) and a "BITS GYMKHANA" name panel. Its interior zone holds three rooms, each with a ceiling, tube lights, a fan and furniture: the Gymkhana Office (desk, chairs, almirah, trophy cabinet, notice board), the Sports Store (open steel racks of balls, cones, kit bags) and the Changing Room (lockers, bench).
+- **Basketball:** the two OSM courts inside the ground, with keys, arcs and single-pole hoops. Pipe railings run on the north and west. On the south there is a jaali parapet with three openings and a five-tier blue stand with end stairs.
+- **Tennis:** two courts with nets in a chain-link cage with a south gate. The 2.5 m blue wall with mesh above separates them from basketball.
+- **Volleyball:** three sand courts with nets in a chain-link cage with a west gate.
+- **Swimming pool:** water 25 × 12.5 m (from the official page), six lanes. The tank slopes from 2.0 m at the deep (north) end to 1.2 m at the shallow end and is dug as a pit. The pool has lane ropes, backstroke flags, starting blocks, ladders, a lifeguard chair, a tiled deck, a 2.2 m perimeter wall, three-row spectator tiers on the west deck and four lighting masts.
+- **Pool changing block:** single storey on the road (south) side, with a porch, a "BITS SWIMMING POOL" board and a parapet. Its interior zone holds the gents' and ladies' changing rooms (lockers, benches, three shower stalls each) and the lobby (attendant's counter, timings sign, notice board). Doors lead from the road to the lobby and from the lobby and each changing room to the deck.
+- **Med-C ground:** clay square and pitch, creases and stumps, a 52 m boundary rope and a 30-yard circle. It has sight screens, six floodlights, and the scorers' hut (one room, verandah, scoreboard; interior zone with desk, almirah and spare numbers).
+
+**Approximations** (not verified):
+- The pavilion's position and plan.
+- The hockey field, practice nets and skating rink positions inside the ground.
+- The pool block plan and the pool depths.
+- The scorers' hut.
+- The tennis and volleyball court counts follow OSM, not the panoramas, which show more.
+
+**Sight line:** everything is east of x 232, more than 200 m from the Clock Tower → Saraswati Mandir axis. The tallest things are the 17 m masts.
+
+**Test:** `tests/browser/sports-grounds.mjs` (`?explore&only=sports-grounds`) walks every entrance, stair, room and cage and checks the blocking walls; `PERF=1` gives frame timing against `?nomodules`. Measured from outside, both builds are vsync-bound at 16.67 ms. CPU per frame is within run-to-run noise (about 5.3 ms against 5.4 ms over three runs each), at about 65 to 80 more draw calls.
