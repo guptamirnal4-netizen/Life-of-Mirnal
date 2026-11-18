@@ -2005,6 +2005,7 @@ export class Hostel {
       const pu = e + sgn * 0.9;
       this.cyl(pu, 0, cv, 0.08, 3.0, 'm:#5c6670', 10); this.col(pu - 0.1, pu + 0.1, cv - 0.1, cv + 0.1, 0, 3);
       this.box(pu - sgn * 0.36, pu - sgn * 0.31, cv - 0.9, cv + 0.9, 2.9, 3.95, 'c:#f5f5f5', { collide: false });
+      this.box(Math.min(pu, pu - sgn * 0.33), Math.max(pu, pu - sgn * 0.33), cv - 0.05, cv + 0.05, 2.9, 3.0, 'm:#5c6670', { collide: false }); // the arm
       const hoop = new THREE.TorusGeometry(0.23, 0.015, 6, 20); hoop.rotateX(Math.PI / 2); hoop.translate(pu - sgn * 0.62, 3.05, cv); this.geo('c:#e65100', hoop);
     }
     this.legend('🏀', 'Basketball (courtyard)', [0], cu, cv);

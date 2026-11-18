@@ -263,3 +263,41 @@ All three have FLOORS 2 and FH 3.3. Each has a main stair next to the lobby and 
 - **`sports`:** the courts, the pitched-roof shed and the Gymkhana track east of Shankar.
 - **`workshops-halls`:** BITS Workshop north of VK.
 - **Orchestrator:** the Vyas OSM outline correction, and the VK and Vyas rotation.
+
+## Build notes (Shankar, Vyas and Vishwakarma Bhawan, phase 7 in js/world/hostel.js)
+
+**Shared by all six (Gandhi, Ram, Budh, Shankar, Vyas, Vishwakarma).** They are still built by the shared `Hostel` class. The per-Bhawan differences live in the `STYLE` table in js/world/hostel.js, and nothing about Krishna (`this.mine`) changed. Each Bhawan now has:
+- a cream outer face with its painted bay texture, a plinth, a first-floor string course, a cornice and a parapet coping;
+- a projecting 10.4 m entrance bay on the west face with its Devanagari name band, a shut green collapsible gate and an open arch, two steps up to the porch and one step down into the lobby;
+- salmon courtyard faces and a cream string course and cornice round each courtyard;
+- garden courtyards with lawn, trees, a cross of paths, shrubs, benches and four lamp posts each, instead of concrete cricket and football grounds;
+- kota-stone corridor floors;
+- six stair cores besides the main stair: the east stair plus NW, NE and SW corners and both ends of the middle wing. Each core sits under a roof mumty, and every one is walkable up and down;
+- one open round arch in the middle of every courtyard side that has no arcade, so every courtyard can be reached from the corridor.
+
+Tests: tests/browser/hostels-courtyard.mjs walks in through each entrance, up and down every stair, onto the roof and back, and into and out of every courtyard. It also checks that the gate and the walled courtyard sides block. bhawans.mjs, stairsdown.mjs and krishna.mjs still pass.
+
+**Needs an orchestrator change.** tests/hostel.test.js (not in this builder's files) still expects OSM's courtyard count and OSM corners. Vyas and Vishwakarma now have two courtyards, and Vyas's two north corners move 35 m. The fix is to expect 2 courtyards for those two Bhawans and to skip Vyas's north corners in the corner check. With that one test change applied, the unit tests pass.
+
+**Not changed.** Roof material is still `roofSolar`, set by bits-world.js `roofOf`, which this builder does not own. The research says the real roofs are not covered in PV.
+
+**All three**
+- The entrance is on the west face, in line with the middle wing. This uses the outline's own west order, not the old road-facing order that put Shankar's and Vyas's entrances on the east face.
+- The entrance is a closed block with round arches.
+- The outer face has round-headed jaali arches below and small windows above, with a maroon line under the cornice.
+- A red paved forecourt with a sandstone planter sits in front of the entrance.
+- The arcade (round arches with a colonnade above) runs only on the middle wing's north face. The other courtyard faces are salmon walls with barred windows and one open arch each.
+- The middle wing's south face has rooms: salmon with a window on each floor.
+
+**Shankar**
+- The north court has a concrete volleyball court against the west wing, a small football goal and lawn with trees. The south court is lawn with trees.
+
+**Vyas**
+- In code, the outline runs 35 m north of OSM (`extendN`). The data file is unchanged. The building is 57.3 × 103.1 m.
+- It has two courtyards with the middle wing at 0.48 of the length.
+- The north court has a large tree on a round sitting platform. The south court is lawn with a bare sandy play patch and a small goal.
+
+**Vishwakarma**
+- It has two courtyards (OSM traces one), with the middle wing at 0.46 of the length.
+- The courts are a sandy patch with a goal, and lawn with trees.
+- The east wing is the one joined to Rana Pratap. No entrance or arcade opens on the east outer side; that link is owned by hostels-newer.
