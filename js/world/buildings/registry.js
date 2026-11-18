@@ -19,6 +19,7 @@
 //   openings at ctx.cuts and keep them reachable.
 import library from './library.js';
 import nab from './nab.js';
+import fd1 from './fd1.js';
 import mainBuilding from './main-building.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding];
+export const BUILDING_MODULES = [library, nab, mainBuilding, fd1];
