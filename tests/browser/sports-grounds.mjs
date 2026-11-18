@@ -155,7 +155,7 @@ for (const [v, room] of [[4, 'pavilionOffice'], [13, 'sportsStore'], [21, 'pavil
   w = await go(6, v);
   check(w.room === room && near(w.y, 0.45), `through the door into the ${room} ${JSON.stringify(w)}`);
 }
-if (SHOTS) { await view('pav-office', 'pav', [3.6, 0.8, 2.0], [8, 6.5, 1.0]); await view('pav-store', 'pav', [3.6, 13, 2.0], [8.6, 11, 1.2]); }
+if (SHOTS) { await view('pav-office', 'pav', [3.7, 7.5, 2.0], [8, 1.5, 1.0]); await view('pav-store', 'pav', [4.0, 17.3, 2.0], [8.6, 10, 1.0]); }
 await at(6, 13, 0.45, 1, 0);
 w = await go(11, 13, { ms: 2500 });
 check(w.u < 8.9, `the pavilion back wall blocks ${JSON.stringify(w)}`);
@@ -235,9 +235,10 @@ w = await go(P.DOOR, P.v1 + 1);
 check(near(w.y, P.DECK), `up onto the pool porch ${JSON.stringify(w)}`);
 w = await go(P.DOOR, P.BV + 3);
 check(w.room === 'poolLobby' && near(w.y, P.DECK), `into the pool lobby ${JSON.stringify(w)}`);
-if (SHOTS) await view('pool-lobby', 'P', [P.DOOR - 1, P.v1 - 0.6, 1.9], [P.DOOR + 3, P.BV + 2, 1.0]);
+if (SHOTS) await view('pool-lobby', 'P', [P.DOOR - 2.5, P.v1 - 0.8, 1.9], [P.DOOR + 3, P.BV + 2, 1.0]);
 const dv = P.BV + 0.23 + 5.6;
-w = await route([[P.uM + 1, dv], [P.uM - 2.5, dv]]);
+w = await go(P.uM + 1.5, dv, { near: 0.25, slow: true });
+w = await go(P.uM - 2.5, dv);
 check(w.room === 'poolGents', `through the partition door into the gents' changing room ${JSON.stringify(w)}`);
 if (SHOTS) await view('pool-gents', 'P', [P.uM - 1, dv, 1.8], [1, P.BV + 2, 1.0]);
 w = await route([[P.uM + 1, dv], [P.uW - 1, dv], [P.uW + 2.5, dv]]);
@@ -262,7 +263,8 @@ check(w.v > 0.2, `the pool's perimeter wall blocks ${JSON.stringify(w)}`);
 // ---------- the Med-C scorers' hut (G frame: u 9..15, v 135.5..145.5, door at v 138.5) ----------
 use('G');
 await at(19, 138.5, 0, -1, 0);
-w = await go(16, 138.5);
+await page.waitForTimeout(600);
+w = await route([[17.6, 138.5], [16, 138.5]], { slow: true });
 check(near(w.y, 0.3), `onto the scorers' hut verandah ${JSON.stringify(w)}`);
 w = await go(12, 138.5);
 check(w.room === 'medcHut' && near(w.y, 0.3), `into the scorers' hut ${JSON.stringify(w)}`);
@@ -286,6 +288,7 @@ if (SHOTS) {
   await view('aerial-courts', 'C', [-20, -20, 40], [40, 30, 0]);
   await view('aerial-pool', 'P', [-15, -10, 30], [16, 22, 0]);
   await g(() => { window.__game.explorer.clock = 21 * 60; });
+  await page.waitForTimeout(2500);
   await view('night-track', 'G', [-60, -40, 25], [30, 30, 0]);
 }
 

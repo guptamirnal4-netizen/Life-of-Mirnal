@@ -368,8 +368,7 @@ function buildTrack(site, track, field, kit, clear) {
     kit.geo(LINE, flatGeo(F, 1));
   }
 
-  // two training goals in the north and south D's, and the floodlights round the track
-  for (const s of [-1, 1]) goal(T, 0, s * (Sx + Ri * 0.55), -s, 5, 2, 1.2);
+  // the floodlights round the track
   for (const v of [-36, -12, 12, 36]) { flood(T, -(Ro + 4.5), v, 0, v); flood(T, Ro + 9.5, v, 0, v); }
   return T;
 }
@@ -590,8 +589,10 @@ function buildPavilion(site, G, clear) {
     K.board(8.86, 4, F, [-1, 0], { w: 2.2, h: 1.0, key: 'c:#6b4f35', frame: 'c:#3b2f22' });
     // store: steel racks with balls, cones, bags; a stack of hurdles
     for (const v0 of [8.6, 14.2]) {
-      slab(K, 8.25, 8.85, v0, v0 + 2.6, F, F + 2.0, M.almirah, { walkable: false, collide: false });
-      K.col(8.25, 8.85, v0, v0 + 2.6, F, F + 2.0);
+      // open steel rack: back panel and two end frames; the shelves and the balls on them show from the room
+      K.box(8.78, 8.85, v0, v0 + 2.6, F, F + 2.0, M.almirah, { collide: false });
+      for (const e of [v0, v0 + 2.57]) K.box(8.2, 8.85, e, e + 0.03, F, F + 2.0, M.steel, { collide: false });
+      K.col(8.2, 8.85, v0, v0 + 2.6, F, F + 2.0);
       for (let s = 0; s < 4; s++) {
         const y = F + 0.12 + s * 0.48;
         K.box(8.2, 8.85, v0, v0 + 2.6, y, y + 0.03, M.steel, { collide: false });
