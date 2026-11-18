@@ -488,3 +488,39 @@ Captures: `$S/game-west-aerial.png`, `game-east-aerial.png`, `game-walk-courtyar
   - `player.floorAt` and nav must support ground below y = 0 for Option A.
   - The `classroom` and `classroomB` placement moves.
   - `NAB_PASSAGES` should become portal stairs plus level -01 corridors, at the corrected z values.
+
+---
+
+## Build notes (module `js/world/buildings/nab.js`, test `tests/browser/nab.mjs`)
+
+Frame: `u` across the blocks (east), `v` along them (south) from the north ends, origin (−32.2, 37), the 8.8° axis of A. One kit frame covers both blocks, the courtyard, the light-wells and the South side ramp.
+
+**Built (Option A, the faithful sunken version):**
+
+- **One pit** (`kit.pit`) at y −9 covers both blocks, the courtyard, both outer light-wells and the South side ramp. Level −01 stands on walkable fill and slabs at −4.5; level −02 is the pit floor. One polygon on purpose: two touching pits break the ground triangulation (tested: ShapeUtils loses or adds area when holes share edges, except along shared vertices).
+- **Roof lawns at grade** over both OSM footprints (white fascia slab, lawn at +0.08, gravel paths, skylights, bougainvillea and shrub beds) with steel railings on every edge that drops into a court or well [verified concept].
+- **Four portal pavilions** at the OSM steps ways: buff 8.2 m boxes with cusped (multifoil) white-trimmed arches front and back, slot windows, cornice and corner finials, "NEW ACADEMIC BLOCK / Portal 0x" plates. Each has a straight stair (12 risers, 1.4 m landing, 12 risers; rise 0.1875, tread 0.28) cut through the grass embankment between buff cheek walls, then a 6 m cross-corridor at −01 through the block to the courtyard [verified positions; stair split approximated].
+- **Outer light-wells**: 6 m grass embankment from the railing at grade to a paved strip at −4.5 that follows the jagged outer faces (the notches become paved light courts). Outer faces: buff render, punched windows with red jamb reveals and dark glazing, white band under the roof [verified materials].
+- **Courtyard**: north half at −4.5 (Snake Path with red sandstone edging and bollard lights on the OSM line, raised planting beds, small trees), meeting the Rotunda rim (r 25 with `main-building`, 26.4 standalone) along vertices of the same 120-gon; the **canopy stair** (S9) at v 128–137, 12 m wide, two flights with a landing under a white canopy on round columns, red balustrades; the **lower courtyard** at −9 with its own Snake Path, beds and red hydrant cabinets. Two-storey courtyard faces in the south half: round white columns and fin groups at the roof edge, a lower colonnade at −9 under a gallery at −4.5 with railings [verified look; exact layout approximated].
+- **Stairs**: 4 portal stairs, the canopy stair, dog-legs **S6** (west, beside the Portal 03 corridor) and **S5** (east, beside Portal 04) from the lower colonnades to the galleries, LT tiers, and the **South side ramp** (48 risers over 57 m, −9 to grade at Gandhi Marg). All walk up and down in `tests/browser/nab.mjs`.
+- **Rooms (real numbers, plan zones)**: classrooms 6151–6162, 6101–6108, 6112–6119, 6169; LT 6164 and the bow-tie pair LT 6109 / 6110 (6110 dressed as the J.C. Chaudhry Auditorium: dark curtains, grey seats, dark wood); 6111 (CSIS Lab); 6165 (Economics & Finance, HoD 6165-I plate); faculty cells 6166, 6167A, 6168, 6170, 6120, 6121; level −02: 6065, 6066, **6067 Department of Mathematics** (HoD 6067-H plate), 6013, 6016, 6017 (Management Studies Lab). Classrooms have the ochre front wall, wooden dais, black board, screen, red clock, light-wood bench desks, fans and tube lights; labs have coloured fabric cubicles. Ochre inlay strips in a grey Kota floor. Number plates and signs share one atlas texture.
+- **Gameplay rooms**: `classroom` (Lecture Theatre) moved to the LT 6163 position, y −4.5; its fixed south door opens into the west notch court at v 124–128, which runs through a foyer to the courtyard at the top of the canopy stair. `classroomB` (Tutorial Room) at y −4.5 in the east block, door into the SE notch court, reached along the east light-well from the Portal 04 stair. Their `exit/outside/inside/center` points carry y −4.5.
+- **Passages**: `owns: ['nabPassages']`; the module removes the four at-grade passages (and their door cuts) and adds 11 `navLinks` along the real routes (road → portal stair foot → courtyard, across the north courtyard and across the lower one, down the canopy stair).
+- **Zones**: 17 interior layers (room clusters, LTs, cross-corridors, −02 bands), drawn only near the player.
+
+**Approximations and why:**
+
+- **Depths −4.5 / −9.0** and the 4.5 m storey are the report's visual estimates; no section drawing exists.
+- **Level −02 only in a band** behind each lower colonnade (west v 137–182, east v 137–185); the rest of the south half is fill. The plan's 6011–6021 and 6065–6070 cell clusters are represented by six rooms.
+- **Room positions** follow the plan zones (±6 m); room sizes are regularised (≈ 11–13 m). The plan's outer corridors are modelled as a 2.5 m corridor inside the outer face (north) or omitted (south).
+- **Portal 04** is placed at v 192.5, 2.7 m north of the OSM Gandhi Stairs (v 195.2), to keep its corridor clear of the Tutorial Room.
+- **Tutorial Room**: the report asks for 6113/6116, but the school room's door is fixed on its south side and the room is an axis-aligned box, so `fitRoom` can only place it against a south-facing edge of the east block; the nearest is the v 209.5 notch (the 6120 wing).
+- **Light-well width** (6 m slope + paved strip to the face) and the **ramp width** (10.5 m inside the OSM lawn trapezoid) are proportions from the photos and the plan.
+- **No lifts** modelled (6121/6166/6170 marked on the plan); stairs and the ramp give every level step access.
+
+**Engine hand-offs (needed outside this file):**
+
+1. `buildAreas` draws lawns that overlap a pit whole, and `buildRoads` ignores pits. The module therefore removes from `D.areas` the two OSM lawns over the courtyard/ramp and from `D.roads` the Snake Path, the four portal steps and the courtyard footways (it redraws them at their level). The engine should clip areas and roads to pits instead.
+2. **Touching pits.** `buildGround` triangulates every pit as a separate hole. NAB's pit shares the Rotunda rim with `main-building`'s pit only along the 120-gon vertices (which triangulates cleanly), but in general the engine should union touching pits before triangulating. Also: `main-building`'s south terrace currently climbs to grade at r 25 while this courtyard meets r 25 at −4.5; one of the two must give way (the research says the Rotunda opens south onto the courtyard at floor level).
+3. `owns: 'nabPassages'` is not read by the engine; the module empties `campus.passages` for its hosts itself. `planPassages/buildPassages` should skip when a module owns them, and `tests/browser/npcnav.mjs` (expects 4 passages) needs updating.
+4. **NPC heights.** Nav routes are 2D and `pathTo` gives every route point y 0, so NPCs on the NAB links walk at grade height over the sunken courtyard. Route points need the floor height (e.g. `groundAt` plus the module's walkable floor) for NPCs to use the stairs visibly.

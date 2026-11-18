@@ -316,3 +316,26 @@ No Gandhi-specific interior source was found [unknown]. Use the generic heritage
 - Roads and landscape owner: Krishna Marg has striped posts or barriers in front of Gandhi's west face; there is a tree belt along Krishna Marg; the Patel roundabout lies just off Gandhi's SW corner.
 - Food and mess owner: POI "Gandhi Redi by Ratan Ji" (154,199) and "Da Cloud Cafe" (179,170) sit at Krishna's south and SE ends. SWD says each Bhawan's mess has a 400-seat dining hall. VKB mess is next to Krishna (bits-world.js comment).
 - `hostels-ram-budh` and `hostels-shankar-vyas-vk`: the blog's wing nomenclature (Front, Back, T, New and H wings) and the 1xx/2xx room numbering probably apply to all the heritage Bhawans.
+
+## Build notes (Krishna Bhawan, pilot build in js/world/hostel.js)
+
+Krishna is still built by the shared `Hostel` class. Everything specific to it sits behind `this.mine`, so the other six courtyard Bhawans are unchanged. The one shared fix is that walls built up to roof level now stop 3 cm under the roof surface, which removes the stripes that z-fought through the roof.
+
+**Built from verified facts**
+- OSM footprint: 63.4 × 162.8 m, with two courtyards of 32.7 × 57.6 m and 32.7 × 58.8 m. Wings are 15.35 m deep (OSM gives 15.4 m) instead of the old 7.85 m. Two storeys at 3.3 m and a flat walkable roof.
+- Courtyards are lawns with mature trees, plus a badminton court on the first lawn (SWD lists both). The basketball hoop the other Bhawans have is left out.
+- Entrance bay on the west face, as in the 2006 photo. It projects 2.4 m and is 10.4 m wide. It has two round-arched grilled windows, a cusped arch with a shut green collapsible gate, an open cusped arch, rosettes in the spandrels, the Devanagari name band "कृष्ण भवन", and a first-floor loggia with paired Tuscan columns and jaali parapet panels. A raised attic tops it at 8.6 m, about 1 m above the main parapet coping. There are two steps up to the porch and one step down into the lobby.
+- Courtyard faces: a ground-floor arcade of cusped arches on piers, a first-floor colonnade of rectangular openings over a jaali parapet, salmon room walls behind the verandahs, and a cream string course and cornice.
+- Corridor finishes: grey kota-stone floors. Doors are green timber with two leaves (a wire-mesh outer leaf and a solid inner one), with a corridor window and a jaali ventilator beside each. Room numbers are stencilled in red above the doors.
+- Roof: parapets, solar PV (campus roof material), the main stair mumty, a mumty over every other stair core with arched jaali openings, and black water tanks on some of them.
+
+**Approximations, and why**
+- Cross-section: Model 1 from section C, double-loaded. From outside in, the wing has rooms, a 2.8 m corridor ring, a second row of rooms, a 2.8 m verandah and then the arcade. Six cross passages, one per courtyard side and each in line with an arch, link the corridor ring to the verandahs. The middle wing is two rows of rooms back to back, one row facing each courtyard.
+- Stairs: 7 dog-leg cores, all walkable up and down (tested). They are the main stair (it also continues to the roof), the east stair, NW, north, two at the ends of the middle wing, and south. Their positions follow the mumties visible in the drone crops. The research supports about 6 to 8, and their exact positions are unknown.
+- Room numbers keep the game's four-digit scheme (1001–1148 on the ground floor, 2001–2152 on the first) rather than the verified three-digit 1xx and 2xx. The double-loaded plan has about 150 rooms per floor, which does not fit into 1xx, and the guide and plates use the four-digit numbers.
+- Floor height stays at 3.3 m (the research prefers about 4.0 m and accepts 3.3 m), so the shared stairs, NPC heights and roof logic do not change.
+- Outer face colour: pale cream from the recent drone shot, not the 2006 ochre. The courtyard walls are salmon. The outer windows are painted onto the facade texture: arched grilled windows below and rectangular openings above.
+- Room, common room, washrooms, laundry and lobby keep the game's existing layout and furniture near the entrance (positions are unknown in the research). Your room ('hostelroom'), the spawn, the bed, the almirah, the light switch, the common-room TV and TT, the courtyard cricket and football, and the NPC spots all still work.
+- No volleyball court. The second lawn keeps the game's football pitch because the hostel-mates' evening football uses it.
+
+**Performance:** from outside, Krishna's interior is drawn only through the entrance bay (within 15 m of it) or once you are inside the footprint. The outer face is opaque, so nothing else could be seen. Draw calls: about +1% facing the building from outside, about 4% fewer walking past its long face, and about +3–5% in the corridor (about 103 interior meshes). Frame times were measured with tests/browser/perf.mjs against the base build. They varied run to run by more than the difference between builds, because the machine load average was 3 to 17.

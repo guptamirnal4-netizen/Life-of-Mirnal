@@ -301,3 +301,53 @@ v=+36           └────────────────── S lobe
 - **`fd1`:** FD-I is visible on the right of the library entrance panorama (cream, horizontal window bands). This agrees with Library-north-of-FD-I.
 - **`workshops-halls` / orchestrator:** the Lecture Theatre Complex, east of the Library, is not in OSM (see the fd1 report). The tour links "Library" ↔ "Lecture Theatre Complex", "Central Workshop" and "RK Innovation Centre".
 - **Orchestrator:** the explorer's dedupe hides the "BITS Library" *building* entry behind the *room* entry of the same name, so `select()` flies to the room (focus (210.2, -197.0), size 12) and not to the building.
+
+## Build notes (js/world/buildings/library.js)
+
+**Built from verified facts:**
+
+- The OSM outline as the façade (cross plan, convex ends), turned 7.94° so the frame matches section A. It has two storeys: a red-brown sandstone ground storey and a pale pink plaster upper band. A cream string course sits at the first floor, with a cornice, a coping and clusters of crenellations on the parapet. Blue porthole windows sit near the ends of each façade run, and white-framed windows on both storeys, with carved rosette panels between the ground-floor windows.
+- The west entrance:
+  - a segmental sandstone arch band with "BITS LIBRARY" and a slot over the portico;
+  - the white pyramid canopy with dark ridge lines;
+  - a recessed portico with a fresco ceiling;
+  - a coloured-glass grid over four glazed door leaves;
+  - a marble threshold, fan steps (3 sandstone risers with marble nosings up to the semicircular platform, then 2 steps to the door) and ramps both sides with steel tube rails;
+  - stepped sandstone wing walls with rosette panels.
+- The forecourt with octagon-and-square pavers, sandstone planters, bicycle rows and pole lamps.
+- The roof: the rotunda drum with a ring of ports, a ribbed glazed dome and an oculus ring, glazed pyramid skylights over the foyer and the east lobby, and PV rows.
+- Inside:
+  - The marble foyer with its starburst medallion and the red "Must Read" table. It has brick-faced issue/return counters on both sides with glazed screens, a self-issue kiosk, a Help Desk lectern, blue sofas, green marble planters and brass chandeliers under the skylights. A brick band and a clerestory row of jali niches run round it, with brick arches in the side walls.
+  - The **twin straight stairs**: 24 risers of 0.19 m each, dark granite with white nosings, rising east on either side of the central passage. Each has diamond-pattern steel balustrades with a teak handrail and brick arch cut-outs in its outer wall. They climb to a **bridge** at the first floor over an arched opening.
+  - Area 1, with portraits, the floor-guide board and the "HALL NO. 1" and "HALL NO. 5" signs.
+  - The **rotunda (Area 2)**:
+    - 16 octagonal pink sandstone columns with cream bands, in two tiers, on an 8 m ring, carrying cusped arches;
+    - jali panels on the lower bays (every other bay is open) and a continuous jali parapet on the upper tier;
+    - a sunken gravel court with two green marble steps, steel airport benches facing out, planters, and a Help Desk and Stationery counter in the ambulatory.
+  - The east lobby with the BITS logo pillar, the Vice-Chancellor message, the mural and the Hall 2/Hall 3 call-number signs.
+  - Hall 1 (reference tables), Halls 2 and 3 (stacks at right angles to the doors, the G.D. Birla display case), Hall 4 (teak tables, MakerSpace benches with 3D printers, the young-learners' rainbow corner) and Hall 5 (teak tables, issue counter, HBR shelf).
+  - The Birla Heritage Gallery: photo frames, the four-campus frieze, cream sofas and a kiosk.
+
+**Approximations (and why):**
+
+- The positions and sizes of the halls follow the C3 plan. Only the topology is verified.
+- Floor heights: the plinth is 0.6 m, the first floor 5.2 m and the roof 9.8 m (parapet 10.7 m). This gives an even 0.19 m riser on the twin stairs and matches the 10–11 m visual estimate.
+- The first floor is walkable over the gallery ring round the foyer and Area 1 voids, the bridge, the rotunda's upper ring and **Hall 6**. Hall 6 sits in the north-west wing and holds bound-volume stacks, carrels, tables, the glazed Brainstorm Room and the E-Zone. The first floor over Halls 2–5 is drawn but closed, because its extent is [unknown].
+- There are 16 rotunda columns, single rather than paired, to keep the draw and collider budget modest. The research says "about 24, in pairs".
+- Not built: the Hall 4 helical mezzanine stair and the Heritage Gallery's small stair, because their destinations are [unknown]. There is no fire stair either.
+- The gameplay room `library` stays where placeRooms puts it (Hall 4's south-west), at bare-ground level, with its south door. The module replaces its east wall with one that has a door and adds 3 steps of 0.15 m up to Hall 4's floor. Hall 4 opens from the rotunda through a cusped-arch door. The room's own interior (built by bits-world.js) is unchanged. Review 5.1 asks for Hall 4 *to be* the gameplay room with a new north door to the rotunda. That was not done: the room's north wall is lined end to end by the four bookcases that `campus.js` (`interiorLibrary`) builds, with 0.4 m gaps, and the room's interior is outside this module's files. The east door (by the room's free east wall, where the librarian's desk is) through Hall 4 to the rotunda's cusped-arch door gives the same connection, room → Hall 4 → rotunda, in about 20 m. To do it as specified, `interiorLibrary` would need to move one north-wall bookcase (e.g. the one at x 11.5) so the module can cut a door there.
+- The ashlar, marble, Kota, jali and paver textures are procedural canvases in the module, and the colours are taken from the photos.
+
+**Testing:** `tests/browser/library.mjs` walks in through the fan steps and doors, then up and down both twin stairs. It goes round the galleries, Hall 6 and the rotunda's upper ring. On the ground floor it visits Area 1, Halls 1–5, the rotunda court and the east lobby. It goes from Hall 4 down into the gameplay room, out of the room's south door and back, and finally out of the main entrance. It also checks that a foyer wall blocks the player.
+
+**Performance (`?only=library` vs `?nomodules`, explore mode, 1440×900):**
+
+- From outside, the frame time stays at 16.7 ms (vsync) in both. The library adds about 30–50 draw calls, mostly the shell (31 meshes) and its shadow pass.
+- Inside, the visible zones add about 100 draw calls.
+- The library has 5 interior zones (structure, west, centre, south, east), which are drawn only within 15 m.
+
+**Fix pass (after review):**
+- The white inner lining of the facade is now split round the openings, as the masonry is, so the west entrance and the reading room's south door can be seen through (before, a non-colliding cream panel filled both). The browser test now casts rays through both doorways to catch this.
+- Cusped arches: the arch outline ended with a diagonal edge from the springing to the top corner that crossed the scalloped curve and tore the triangulation. It now goes back to the jamb first, and the crown is held 8 cm below the top of the spandrel.
+- The corner piers are turned to the bisector of the two walls they join and sit over the joint, not as boxes square to the frame standing off angled walls.
+- The portico floor, the top fan step and the ramps use a plain marble colour, not the foyer's inlaid marble texture.

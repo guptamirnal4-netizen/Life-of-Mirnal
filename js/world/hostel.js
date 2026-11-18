@@ -54,6 +54,9 @@ const OUT = 0.3; // outer wall
 const COR = 2.8; // corridor width
 const SCREEN = 0.3; // arch screen on the courtyard side
 const WD = OUT + DEPTH + T + COR + SCREEN; // wing depth, 7.85
+// Krishna: outer rooms, corridor, inner rooms, verandah and arcade: 15.35 m, the OSM wing depth (15.4 m)
+const KWD = WD + T + DEPTH + T + COR; // 15.35
+const VER = SCREEN + COR; // the verandah ring round a Krishna courtyard, from the arcade line to the room fronts
 const SLAB = 0.2;
 export const DIMS = { DEPTH, T, OUT, COR, SCREEN, WD, SLAB };
 const RISE = FH / 16; // 8 + 8 steps per floor
@@ -83,19 +86,34 @@ function rng(seed) {
 const PX = 150; // pixels per metre on the wall textures
 
 // Corridor face of one locked room: door, corridor window, ventilator, cream dado.
-function bayTexture() {
+// style 'k': Krishna Bhawan (cream corridor walls, green-painted timber doors with a wire-mesh outer leaf, as in the
+// 2006 photos); 'ver': the same door in a salmon wall, for the room fronts along Krishna's courtyard verandahs.
+function bayTexture(style = null) {
   return canvas(768, 512, (g) => {
     const W = 768; const H = 512; const m = W / ROOM; const y = (h) => H - h * (H / (FH - SLAB));
     const wx = (1.3 + ROOM) / 2 - 0.6; // corridor window, centred in the wall beside the door
-    g.fillStyle = '#f3f0e8'; g.fillRect(0, 0, W, H);
-    g.fillStyle = '#e6d6b2'; g.fillRect(0, y(1.0), W, H - y(1.0));
-    g.fillStyle = '#b89a6a'; g.fillRect(0, y(1.0), W, 3);
-    // door
+    const K = !!style;
+    g.fillStyle = style === 'ver' ? '#e9b29a' : K ? '#f2ead6' : '#f3f0e8'; g.fillRect(0, 0, W, H);
+    g.fillStyle = style === 'ver' ? '#c98f78' : K ? '#cfd3cf' : '#e6d6b2'; g.fillRect(0, y(1.0), W, H - y(1.0));
+    g.fillStyle = K ? '#8d8a80' : '#b89a6a'; g.fillRect(0, y(1.0), W, 3);
+    if (K) {
+      // deep reveal, green frame, two leaves: the wire-mesh outer leaf folded back over the solid inner one
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(0.24 * m, y(2.24), 1.12 * m, y(0) - y(2.24));
+      g.fillStyle = '#3f5f3a'; g.fillRect(0.3 * m, y(2.16), 1.0 * m, y(0) - y(2.16));
+      g.fillStyle = '#5d7f52'; g.fillRect(0.36 * m, y(2.1), 0.44 * m, y(0) - y(2.1)); g.fillRect(0.8 * m, y(2.1), 0.44 * m, y(0) - y(2.1));
+      g.strokeStyle = '#2c3f29'; g.lineWidth = 2;
+      g.save(); g.beginPath(); g.rect(0.42 * m, y(1.95), 0.32 * m, y(0.25) - y(1.95)); g.clip();
+      for (let d = -300; d < 300; d += 10) { g.beginPath(); g.moveTo(0.42 * m + d, y(1.95)); g.lineTo(0.42 * m + d + 260, y(0.25)); g.stroke(); g.beginPath(); g.moveTo(0.42 * m + d + 260, y(1.95)); g.lineTo(0.42 * m + d, y(0.25)); g.stroke(); }
+      g.restore();
+      g.fillStyle = '#4c6c44'; g.fillRect(0.86 * m, y(1.95), 0.32 * m, y(1.15) - y(1.95)); g.fillRect(0.86 * m, y(1.0), 0.32 * m, y(0.2) - y(1.0));
+      g.fillStyle = '#c9ccc4'; g.fillRect(0.83 * m, y(1.08), 0.03 * m, y(0.9) - y(1.08));
+    } else {
     g.fillStyle = '#9a7a4f'; g.fillRect(0.3 * m, y(2.16), 1.0 * m, y(0) - y(2.16));
     g.fillStyle = '#d8b987'; g.fillRect(0.36 * m, y(2.1), 0.88 * m, y(0) - y(2.1));
     g.fillStyle = '#cfae7c'; g.fillRect(0.44 * m, y(1.95), 0.72 * m, y(1.2) - y(1.95));
     g.fillStyle = '#b9bec4'; g.fillRect(1.12 * m, y(1.08), 0.05 * m, y(0.88) - y(1.08));
     g.fillStyle = '#8f9399'; g.fillRect(1.06 * m, y(0.98), 0.12 * m, 4);
+    }
     // corridor window with bars
     g.fillStyle = '#efe7d6'; g.fillRect(wx * m, y(2.25), 1.2 * m, y(1.05) - y(2.25));
     g.fillStyle = '#3a4550'; g.fillRect((wx + 0.07) * m, y(2.18), 1.06 * m, y(1.12) - y(2.18));
@@ -155,15 +173,16 @@ function archTexture(grille) {
 }
 
 // Room numbers for the door plates, all in one atlas (shared by every Bhawan: rooms 1001–1150 and 2001–2150).
-const PLATES_PER_FLOOR = 150;
-let sharedPlates = null;
-function plates() {
-  if (!sharedPlates) {
+const PLATES_PER_FLOOR = 200; // Krishna has a second row of rooms round its courtyards
+const sharedPlates = {};
+// style 'k': Krishna's numbers, stencilled in red on the wall above the door (2006 photo), not on a plate
+function plates(style = 'plate') {
+  if (!sharedPlates[style]) {
     const numbers = [];
     for (let k = 1; k <= FLOORS; k++) for (let n = 1; n <= PLATES_PER_FLOOR; n++) numbers.push(k * 1000 + n);
-    sharedPlates = plateAtlas(numbers);
+    sharedPlates[style] = plateAtlas(numbers, style);
   }
-  return sharedPlates;
+  return sharedPlates[style];
 }
 // Materials are shared between Bhawans too, except the TV screen, which each common room switches on its own.
 const sharedMats = new Map();
@@ -200,7 +219,7 @@ export function mergeShells(hostels, root) {
   }
 }
 
-function plateAtlas(numbers) {
+function plateAtlas(numbers, style = 'plate') {
   const cols = 16; const cw = 128; const ch = 48;
   const rows = Math.ceil(numbers.length / cols);
   const uv = new Map();
@@ -208,15 +227,146 @@ function plateAtlas(numbers) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     numbers.forEach((n, i) => {
       const x = (i % cols) * cw; const yy = Math.floor(i / cols) * ch;
-      g.fillStyle = '#2b2f36'; g.fillRect(x + 4, yy + 4, cw - 8, ch - 8);
-      g.fillStyle = '#f2f2f2'; g.font = 'bold 30px system-ui, sans-serif'; g.fillText(String(n), x + cw / 2, yy + ch / 2 + 1);
+      if (style === 'k') {
+        g.fillStyle = '#f2ead6'; g.fillRect(x, yy, cw, ch);
+        g.fillStyle = '#b3261e'; g.font = 'bold 34px "Courier New", monospace'; g.fillText(String(n), x + cw / 2, yy + ch / 2 + 2);
+      } else {
+        g.fillStyle = '#2b2f36'; g.fillRect(x + 4, yy + 4, cw - 8, ch - 8);
+        g.fillStyle = '#f2f2f2'; g.font = 'bold 30px system-ui, sans-serif'; g.fillText(String(n), x + cw / 2, yy + ch / 2 + 1);
+      }
       uv.set(n, [x / (cols * cw), 1 - (yy + ch) / (rows * ch), (x + cw) / (cols * cw), 1 - yy / (rows * ch)]);
     });
   });
   return { tex, uv };
 }
 
+// ---------- Krishna Bhawan's own faces (research/buildings/hostels-krishna-gandhi.md) ----------
+// Textures with cut-out openings (alpha-tested, both sides drawn).
+const CUT = new Set(['colonnade', 'kbay', 'kgate']);
+// A cusped (multifoil) arch head: five lobes along a pointed arch from (x0, spring) over to (x1, spring).
+function cusped(g, x0, x1, ySpring, yApex, bulge) {
+  const cx = (x0 + x1) / 2; const lobes = 5;
+  const pt = (k) => { const a = Math.PI * (k / lobes); return [cx - Math.cos(a) * (cx - x0), ySpring - Math.sin(a) * (ySpring - yApex)]; };
+  for (let k = 0; k < lobes; k++) {
+    const [ax, ay] = pt(k); const [bx, by] = pt(k + 1);
+    const mx = (ax + bx) / 2; const my = (ay + by) / 2;
+    const nx = -(by - ay); const ny = bx - ax; const nl = Math.hypot(nx, ny);
+    g.quadraticCurveTo(mx - (nx / nl) * bulge, my - (ny / nl) * bulge, bx, by);
+  }
+}
+// A round-arched window with a radial fanlight grille and vertical bars with rings (the 2006 entrance photo).
+function archedWindow(g, cx, sill, spring, w, py, px) {
+  const r = (w / 2) * px; const x0 = cx - r; const x1 = cx + r;
+  const ys = py(spring); const yb = py(sill);
+  g.fillStyle = '#fbf8f0'; g.beginPath(); g.moveTo(x0 - 9, yb + 6); g.lineTo(x0 - 9, ys); g.arc(cx, ys, r + 9, Math.PI, 0); g.lineTo(x1 + 9, yb + 6); g.closePath(); g.fill();
+  g.fillStyle = '#2c3135'; g.beginPath(); g.moveTo(x0, yb); g.lineTo(x0, ys); g.arc(cx, ys, r, Math.PI, 0); g.lineTo(x1, yb); g.closePath(); g.fill();
+  g.strokeStyle = '#d8d6cf'; g.lineWidth = 2;
+  for (let k = 1; k < 8; k++) { const a = Math.PI + (Math.PI * k) / 8; g.beginPath(); g.moveTo(cx, ys); g.lineTo(cx + Math.cos(a) * r, ys + Math.sin(a) * r); g.stroke(); }
+  g.beginPath(); g.arc(cx, ys, r * 0.3, Math.PI, 0); g.stroke();
+  g.beginPath(); g.moveTo(x0, ys); g.lineTo(x1, ys); g.stroke();
+  for (let k = 1; k < 6; k++) { const x = x0 + (k * (x1 - x0)) / 6; g.beginPath(); g.moveTo(x, ys); g.lineTo(x, yb); g.stroke(); }
+  const yr = py(sill + 0.35);
+  for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(x0 + ((k + 0.5) * (x1 - x0)) / 5, yr, Math.min(7, r / 6), 0, 7); g.stroke(); }
+  g.fillStyle = '#e9e4d6'; g.fillRect(x0 - 12, yb, x1 - x0 + 24, 7);
+}
+function rosette(g, x, y, r) {
+  g.fillStyle = '#fbf8f0'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  g.strokeStyle = '#cbbd9c'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r * 0.8, 0, 7); g.stroke();
+  for (let k = 0; k < 8; k++) { const a = (k * Math.PI) / 4; g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.42, y + Math.sin(a) * r * 0.42, r * 0.3, r * 0.12, a, 0, 7); g.stroke(); }
+}
+function jaaliPanel(g, x, y, w, h) {
+  g.fillStyle = '#f6f3ea'; g.fillRect(x, y, w, h);
+  g.fillStyle = '#7d7a72';
+  const n = Math.max(2, Math.round(w / 22));
+  const cs = w / n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < Math.max(1, Math.round(h / cs)); j++) { g.beginPath(); g.arc(x + (i + 0.5) * cs, y + (j + 0.5) * cs, cs * 0.3, 0, 7); g.fill(); }
+}
+const LAWN = 't:grass:#d9e8b8';
+const KOTA = 't:terrazzo:#b7bab2';
+const ENTRANCE_W = 10.4; // the projecting entrance bay of Krishna Bhawan
+const KTEX = {
+  // Krishna's outer face, one 3.4 m bay, both floors: arched grilled windows below, rectangular openings above
+  kfacade: () => canvas(256, 512, (g, W, H) => {
+    const px = W / MOD; const py = (h) => H - h * (H / (FLOORS * FH));
+    g.fillStyle = '#efe5cb'; g.fillRect(0, 0, W, H);
+    const r = rng(11); g.fillStyle = 'rgba(120,100,60,0.05)'; for (let i = 0; i < 260; i++) g.fillRect(r() * W, r() * H, 3 + r() * 9, 2 + r() * 6);
+    g.fillStyle = '#d8c8a2'; g.fillRect(0, py(0.5), W, H - py(0.5));
+    g.fillStyle = '#e4d6b4'; g.fillRect(0, 0, 10, H); g.fillRect(W - 10, 0, 10, H);
+    archedWindow(g, W / 2, 0.95, 2.05, 1.2, py, px);
+    g.fillStyle = '#f7f3ea'; g.fillRect(0, py(3.42), W, py(3.15) - py(3.42));
+    for (const cx of [0.95, 2.45]) {
+      const x0 = (cx - 0.5) * px; const x1 = (cx + 0.5) * px;
+      g.fillStyle = '#fbf8f0'; g.fillRect(x0 - 7, py(5.95), x1 - x0 + 14, py(3.85) - py(5.95));
+      g.fillStyle = '#30373b'; g.fillRect(x0, py(5.88), x1 - x0, py(3.92) - py(5.88));
+      g.fillStyle = '#556a5a'; for (let k = 0; k < 4; k++) g.fillRect(x0 + 3, py(5.7 - k * 0.45), x1 - x0 - 6, 4);
+    }
+  }, { repeat: true }),
+  // the ground floor of the entrance bay: window, the gate arch, the open arch, window; name band; loggia parapet
+  kbay: () => canvas(1040, 440, (g, W, H) => {
+    const px = W / ENTRANCE_W; const py = (h) => H - h * (H / 4.4);
+    g.fillStyle = '#eddcb5'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#ddc79c'; g.fillRect(0, py(0.5), W, H - py(0.5));
+    for (const x of [0, 2.3, 5.2, 8.1, 10.4]) { g.fillStyle = '#e4cfa6'; g.fillRect(x * px - 14, py(2.95), 28, py(0) - py(2.95)); }
+    archedWindow(g, 1.15 * px, 0.95, 2.0, 1.1, py, px);
+    archedWindow(g, 9.25 * px, 0.95, 2.0, 1.1, py, px);
+    rosette(g, 1.15 * px, py(2.62), 22); rosette(g, 9.25 * px, py(2.62), 22);
+    const arch = (cx) => {
+      const x0 = (cx - 1.15) * px; const x1 = (cx + 1.15) * px;
+      const path = (grow) => { g.beginPath(); g.moveTo(x0 - grow, py(0)); g.lineTo(x0 - grow, py(2.2)); cusped(g, x0 - grow, x1 + grow, py(2.2), py(2.85) - grow, 14); g.lineTo(x1 + grow, py(0)); g.closePath(); };
+      g.fillStyle = '#fbf8f0'; path(12); g.fill();
+      g.save(); g.globalCompositeOperation = 'destination-out'; path(0); g.fill(); g.restore();
+      for (const dx of [-1.48, 1.48]) rosette(g, (cx + dx) * px, py(2.7), 15);
+    };
+    arch(3.75); arch(6.65);
+    // name band: "कृष्ण भवन" in Devanagari above the arches (partly legible in the photo; the full name is assumed)
+    g.fillStyle = '#f7f3ea'; g.fillRect(0, py(3.3), W, py(2.95) - py(3.3));
+    g.fillStyle = '#5a4a32'; g.font = 'bold 30px "Kohinoor Devanagari", "Devanagari Sangam MN", "Noto Sans Devanagari", "Mangal", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('कृष्ण भवन', 5.2 * px, py(3.125));
+    // loggia parapet with jaali panels, white coping
+    g.fillStyle = '#eddcb5'; g.fillRect(0, py(4.3), W, py(3.3) - py(4.3));
+    for (const x of [0.7, 2.9, 4.8, 6.9, 8.9]) jaaliPanel(g, x * px, py(4.15), 0.8 * px, py(3.45) - py(4.15));
+    g.fillStyle = '#fbf8f0'; g.fillRect(0, 0, W, py(4.3));
+  }),
+  // green collapsible gate (the left arch)
+  kgate: () => canvas(256, 256, (g, W, H) => {
+    g.clearRect(0, 0, W, H);
+    g.strokeStyle = '#2d5634'; g.lineWidth = 5;
+    for (let x = 4; x < W; x += 21) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+    g.lineWidth = 3;
+    for (let x = 4; x < W - 21; x += 21) for (let y = 0; y < H; y += 32) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 21, y + 16); g.lineTo(x, y + 32); g.stroke(); g.beginPath(); g.moveTo(x + 21, y); g.lineTo(x, y + 16); g.lineTo(x + 21, y + 32); g.stroke(); }
+    g.lineWidth = 8; for (const y of [6, H - 6, H / 2]) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  }),
+  // the courtyard colonnade on the first floor: square piers, a rectangular opening over a jaali parapet
+  colonnade: () => canvas(512, 512, (g, W, H) => {
+    const m = W / MOD; const y = (h) => H - h * (H / (FH - SLAB));
+    g.fillStyle = '#efe4c9'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#e4d5b2'; g.fillRect(0, 0, 0.42 * m, H); g.fillRect(W - 0.42 * m, 0, 0.42 * m, H);
+    g.fillStyle = '#f8f4ea'; g.fillRect(0, y(2.95), W, y(2.75) - y(2.95));
+    jaaliPanel(g, 0.55 * m, y(0.85), W - 1.1 * m, y(0.2) - y(0.85));
+    g.fillStyle = '#f8f4ea'; g.fillRect(0.42 * m, y(0.98), W - 0.84 * m, y(0.88) - y(0.98));
+    g.save(); g.globalCompositeOperation = 'destination-out'; g.fillRect(0.42 * m, y(2.72), W - 0.84 * m, y(0.98) - y(2.72)); g.restore();
+  }),
+  // the back wall of the first-floor loggia: pale blue distemper, doors and windows (2006 photo)
+  loggiaBack: () => canvas(512, 160, (g, W, H) => {
+    const px = W / ENTRANCE_W; const py = (h) => H - h * (H / (FH - SLAB));
+    g.fillStyle = '#dfe7ea'; g.fillRect(0, 0, W, H);
+    for (const cx of [1.6, 4.0, 6.4, 8.8]) {
+      g.fillStyle = '#f5f6f2'; g.fillRect((cx - 0.6) * px - 3, py(2.4), 1.2 * px + 6, py(0.9) - py(2.4));
+      g.fillStyle = '#3d4f3c'; g.fillRect((cx - 0.6) * px, py(2.35), 1.2 * px, py(0.95) - py(2.35));
+      g.fillStyle = '#7e8c80'; g.fillRect((cx - 0.3) * px, py(2.9), 0.6 * px, py(2.6) - py(2.9));
+    }
+  }),
+  // a roof mumty's side: arched jaali opening
+  mumty: () => canvas(256, 256, (g, W, H) => {
+    g.fillStyle = '#ebe3cf'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#f6f2e8'; g.fillRect(0, 0, W, 22);
+    g.fillStyle = '#3a3a36'; g.beginPath(); g.moveTo(88, 200); g.lineTo(88, 120); g.arc(128, 120, 40, Math.PI, 0); g.lineTo(168, 200); g.closePath(); g.fill();
+    g.fillStyle = '#e8e2d2'; for (let i = 0; i < 4; i++) for (let j = 0; j < 5; j++) g.fillRect(94 + i * 19, 98 + j * 20, 9, 9);
+  }),
+};
+
 const TEXTURES = {
+  ...KTEX,
   notice: () => canvas(256, 160, (g) => {
     g.fillStyle = '#a77b4f'; g.fillRect(0, 0, 256, 160);
     g.fillStyle = '#c69c6d'; g.fillRect(8, 8, 240, 144);
@@ -308,8 +458,11 @@ export class Hostel {
     this.npcSpots = {};
     this.time = 0;
     this.lightOn = true;
+    // Krishna's wings are as deep as in OSM (about 15.4 m): rooms on the outside, a corridor, a second row of rooms
+    // and a verandah behind the courtyard arcade. The other Bhawans keep one row of rooms and a corridor.
+    this.WD = mine ? KWD : WD;
     this.layout(b, outer);
-    for (const [name, w] of Object.entries(this.wings)) {
+    for (const [name, w] of [...Object.entries(this.wings), ...Object.entries(this.inner || {})]) {
       w.name = name;
       const o = w.map(0, 0); const a = w.map(1, 0); const c = w.map(0, 1);
       w.ds = [a[0] - o[0], a[1] - o[1]];
@@ -346,7 +499,7 @@ export class Hostel {
     this.twoCourts = b.holes.length >= 2;
     const hv = b.holes.map((h) => h.map((p) => proj(p)[1] - v0)).sort((a, c) => Math.min(...a) - Math.min(...c));
     this.vm = this.twoCourts ? (Math.max(...hv[0]) + Math.min(...hv[1])) / 2 : this.L / 2;
-    const { W, L, vm } = this;
+    const { W, L, vm, WD } = this;
     this.mc0 = vm - WD / 2; this.mc1 = this.mc0 + COR;
     this.court = this.twoCourts ? [
       { u0: WD, u1: W - WD, v0: WD, v1: this.mc0 - SCREEN },
@@ -369,6 +522,33 @@ export class Hostel {
       M: { map: (s, t) => [t, mBand + s], depth: WD - COR - T - OUT, tw: [WD - SCREEN, W - WD + SCREEN], tb: [WD, W - WD] },
     };
     if (!this.twoCourts) delete this.wings.M;
+    if (this.mine && this.twoCourts) this.krishnaBands();
+  }
+
+  // Krishna's second row of rooms, one band per side of each courtyard's verandah ring. The room fronts face the
+  // verandah (s < 0, as in every band); the backs line the corridor ring (u or v = 7.55 … 7.8 from the outside).
+  // The middle wing is two rows back to back: M (onto the first courtyard's verandah, which is the old M corridor)
+  // and H (onto the second's). Single-letter names, like the wings: the room numbers and the guide use them.
+  krishnaBands() {
+    const { W, L, vm } = this;
+    const c2 = this.court[1];
+    const e = OUT + DEPTH + T + COR + T + DEPTH; // 12.0: from the outside face to the room side of a front wall
+    this.n2a = c2.v0 - VER; this.n2b = c2.v0 - SCREEN; // the second courtyard's north verandah
+    const mBand = this.mc1 + T;
+    Object.assign(this.wings.M, { depth: vm - T / 2 - mBand, front: true });
+    this.inner = {
+      A: { map: (s, t) => [e - s, t], tw: [e, this.mc0], tb: [e + T, this.mc0 - T] },
+      B: { map: (s, t) => [W - e + s, t], tw: [e, this.mc0], tb: [e + T, this.mc0 - T] },
+      C: { map: (s, t) => [t, e - s], tw: [e, W - e], tb: [e + T, W - e - T] },
+      D: { map: (s, t) => [e - s, t], tw: [this.n2b, L - e], tb: [this.n2b + T, L - e - T] },
+      F: { map: (s, t) => [W - e + s, t], tw: [this.n2b, L - e], tb: [this.n2b + T, L - e - T] },
+      G: { map: (s, t) => [t, L - e + s], tw: [e, W - e], tb: [e + T, W - e - T] },
+      H: { map: (s, t) => [t, this.n2a - T - s], spine: true },
+    };
+    for (const w of Object.values(this.inner)) { w.depth = w.spine ? this.n2a - T - (vm + T / 2) : DEPTH; w.front = true; w.ring = !w.spine; }
+    // M and H run the whole width, from corridor ring to corridor ring (their west and east ends are the junctions)
+    const r0 = WD - SCREEN; // 7.55, the inner face of the corridor ring
+    for (const w of [this.wings.M, this.inner.H]) { w.tw = [r0, W - r0]; w.tb = [r0 + T, W - r0 - T]; }
   }
 
   // ---------- coordinates ----------
@@ -408,9 +588,39 @@ export class Hostel {
     add('W', 1, ve - MOD - 2 * ROOM, ROOM, 'room', { variant: 'senior', id: 'room-senior' });
     const E = this.wings.E;
     if (E) for (let k = 0; k < FLOORS; k++) add('E', k, E.tb[1] - 3 * MOD, MOD, 'stair', { top: FLOORS - 1 });
+    if (this.inner) this.planKrishna(add);
     // fill the rest of every corridor with student rooms
     this.segs = {};
-    for (const w of Object.values(this.wings)) {
+    this.fillSegs(this.wings, this.segs);
+    if (this.inner) this.fillSegs(this.inner, (this.innerSegs = {}));
+  }
+
+  // Krishna: a stair core under each roof mumty seen in the drone view (near the courtyard corners and at both ends
+  // of the middle wing, besides the main stair and the east stair), and cross passages from the corridor ring
+  // through the inner rooms to the courtyard verandahs. The extra cores are 'core' spaces: stairs like the east one.
+  planKrishna(add) {
+    const { W } = this; const I = this.inner;
+    for (let k = 0; k < FLOORS; k++) {
+      add('A', k, I.A.tb[0] + 0.75, MOD, 'core', { top: FLOORS - 1, label: 'NW stairs' });
+      add('C', k, I.C.tb[1] - MOD - 4.6, MOD, 'core', { top: FLOORS - 1, label: 'North stairs' });
+      add('M', k, I.A.tb[0] + 4.0, MOD, 'core', { top: FLOORS - 1, label: 'Middle-wing stairs' });
+      add('H', k, W - I.A.tb[0] - 4.0 - MOD, MOD, 'core', { top: FLOORS - 1, label: 'Middle-wing stairs' });
+      add('G', k, I.G.tb[0] + 6.0, MOD, 'core', { top: FLOORS - 1, label: 'South stairs' });
+      // passages: one off each side of each courtyard, each in line with an arch of the arcade (not a pier)
+      const [c1, c2] = this.court;
+      const arch = (a, b, want) => { const n = Math.max(1, Math.round((b - a) / MOD)); const bw = (b - a) / n; const j = Math.max(0, Math.min(n - 1, Math.round((want - a) / bw - 0.5))); return a + (j + 0.5) * bw - 1.6; };
+      add('A', k, arch(c1.v0, c1.v1, this.ve - 30), 3.2, 'pass');
+      add('B', k, arch(c1.v0, c1.v1, (I.B.tb[0] + I.B.tb[1]) / 2), 3.2, 'pass');
+      add('C', k, arch(c1.u0, c1.u1, W / 2), 3.2, 'pass');
+      add('D', k, arch(c2.v0, c2.v1, (I.D.tb[0] + I.D.tb[1]) / 2), 3.2, 'pass');
+      add('F', k, arch(c2.v0, c2.v1, (I.F.tb[0] + I.F.tb[1]) / 2), 3.2, 'pass');
+      add('G', k, arch(c2.u0, c2.u1, W / 2), 3.2, 'pass');
+    }
+  }
+
+  // Fill every stretch of corridor wall between the spaces with student rooms about ROOM wide.
+  fillSegs(wings, out) {
+    for (const w of Object.values(wings)) {
       for (let k = 0; k < FLOORS; k++) {
         const own = this.spaces.filter((x) => x.wing === w.name && x.k === k).sort((x, y) => x.t0 - y.t0);
         const list = [];
@@ -424,10 +634,15 @@ export class Hostel {
           if (!x.end) list.push(x);
           t = Math.max(t, x.t1);
         }
-        this.segs[`${w.name}${k}`] = list;
+        out[`${w.name}${k}`] = list;
       }
     }
   }
+
+  // The rooms and spaces along a band on one floor.
+  allBands() { return [...Object.values(this.wings), ...Object.values(this.inner || {})]; }
+  segsOf(w, k) { return (this.inner?.[w.name] ? this.innerSegs : this.segs)[`${w.name}${k}`]; }
+  bandOf(name) { return this.wings[name] || this.inner?.[name]; }
 
   // Cricket in the first courtyard, football (and the basketball hoop) in the second. Both are bare concrete.
   // A Bhawan with one courtyard plays football in it.
@@ -443,7 +658,7 @@ export class Hostel {
 
   // A space's footprint in the local frame (for the guide's floor plan).
   spaceRect(sp) {
-    const w = this.wings[sp.wing]; const a = w.map(0, sp.t0); const c = w.map(w.depth, sp.t1);
+    const w = this.bandOf(sp.wing); const a = w.map(0, sp.t0); const c = w.map(w.depth, sp.t1);
     return { u0: Math.min(a[0], c[0]), u1: Math.max(a[0], c[0]), v0: Math.min(a[1], c[1]), v1: Math.max(a[1], c[1]) };
   }
 
@@ -467,6 +682,10 @@ export class Hostel {
   box(u0, u1, v0, v1, y0, y1, key, { collide = true, walkable = false } = {}) {
     if (u1 < u0) [u0, u1] = [u1, u0];
     if (v1 < v0) [v0, v1] = [v1, v0];
+    // anything built up from below to the roof level stops just under the roof's surface, or its top z-fights with
+    // the roof (salmon stripes along the roof in the aerial view)
+    const R = FLOORS * FH;
+    if (y0 < R - 0.1 && y1 > R - 0.03 && y1 < R + 0.01) y1 = R - 0.03;
     const w = u1 - u0; const d = v1 - v0; const h = y1 - y0;
     if (w <= 0 || d <= 0 || h <= 0) return;
     const tex = key.startsWith('t:') ? key.split(':')[1] : null;
@@ -559,14 +778,14 @@ export class Hostel {
     else if (key.startsWith('g:')) m = new THREE.MeshStandardMaterial({ color: key.slice(2), roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.55 });
     else if (key.startsWith('x:')) {
       const name = key.slice(2);
-      const tex = name === 'bay' ? bayTexture() : name === 'arch' ? archTexture(false) : name === 'grille' ? archTexture(true) : name === 'plates' ? this.plates.tex : TEXTURES[name]();
-      const cut = name === 'arch' || name === 'grille';
+      const tex = name === 'bay' ? bayTexture() : name === 'bayK' ? bayTexture('k') : name === 'bayVer' ? bayTexture('ver') : name === 'arch' ? archTexture(false) : name === 'grille' ? archTexture(true) : name === 'plates' ? this.plates.tex : name === 'platesK' ? this.platesK.tex : TEXTURES[name]();
+      const cut = name === 'arch' || name === 'grille' || CUT.has(name);
       m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: cut ? THREE.DoubleSide : THREE.FrontSide, alphaTest: cut ? 0.5 : 0 });
     } else if (key.startsWith('facade:')) m = this.campus.material(key);
     else if (key === VC) m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
     else m = mat(key.replace(/^c:/, ''));
-    // the courtyard concrete lies 3.5 cm over the ground: keep it in front at a distance
-    if (key === 't:concrete:#dcd6ca') Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    // the courtyard concrete (or lawn) lies 3.5 cm over the ground: keep it in front at a distance
+    if (key === 't:concrete:#dcd6ca' || key === LAWN) Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
     this.customMats[key] = m;
     if (key !== 'x:tvOn') sharedMats.set(key, m);
     return m;
@@ -640,8 +859,8 @@ export class Hostel {
     const numbers = [];
     for (let k = 0; k < FLOORS; k++) {
       let n = 1;
-      for (const w of Object.values(this.wings)) {
-        for (const x of this.segs[`${w.name}${k}`]) {
+      for (const w of this.allBands()) {
+        for (const x of this.segsOf(w, k)) {
           if (x.type !== 'room' && x.type !== 'locked') continue;
           x.number = (k + 1) * 1000 + n++;
           numbers.push(x.number);
@@ -649,13 +868,15 @@ export class Hostel {
       }
     }
     this.plates = plates();
+    if (this.mine) this.platesK = plates('k');
     if (numbers.some((n) => n % 1000 > PLATES_PER_FLOOR)) throw new Error(`${this.name}: more rooms than room plates`);
     this.entranceCut();
-    for (let k = 0; k < FLOORS; k++) for (const w of Object.values(this.wings)) this.buildBandWall(w, k);
+    for (let k = 0; k < FLOORS; k++) for (const w of this.allBands()) this.buildBandWall(w, k);
     this.buildCorridors();
+    if (this.inner) this.buildRing();
     this.onShell(() => { this.buildScreens(); this.buildRoof(); });
     for (const sp of this.spaces) this[`space_${sp.type}`](sp);
-    this.onShell(() => { this.buildCourtyards(); this.buildOutside(); });
+    this.onShell(() => { this.buildCourtyards(); this.buildOutside(); if (this.mine) { this.buildFacade(); this.buildEntranceBay(); this.buildMumties(); } });
     this.flush();
   }
 
@@ -665,7 +886,8 @@ export class Hostel {
     if (!cuts.has(this.b)) cuts.set(this.b, []);
     const ps = [this.world(-1.2, this.ve - 1.5), this.world(0.8, this.ve - 1.5), this.world(0.8, this.ve + 1.5), this.world(-1.2, this.ve + 1.5)];
     cuts.get(this.b).push({ minX: Math.min(...ps.map((p) => p.x)), maxX: Math.max(...ps.map((p) => p.x)), minZ: Math.min(...ps.map((p) => p.z)), maxZ: Math.max(...ps.map((p) => p.z)) });
-    const out = this.world(-2.2, this.ve);
+    // Krishna: outside means in front of the projecting entrance bay and its steps
+    const out = this.world(this.mine ? -4.8 : -2.2, this.ve);
     const inside = this.world(1.6, this.ve);
     this.entrance = { out, inside, yaw: Math.atan2(this.eu[0], this.eu[1]) };
   }
@@ -675,24 +897,29 @@ export class Hostel {
   buildBandWall(w, k) {
     const y0 = k * FH; const y1 = y0 + FH - SLAB;
     const open = [];
-    for (const sp of this.segs[`${w.name}${k}`]) {
+    // Krishna: green double-leaf doors with red stencilled numbers; salmon room fronts along the verandahs
+    const bay = this.mine ? (w.front ? 'x:bayVer' : 'x:bayK') : 'x:bay';
+    const wall = this.mine && w.front ? 't:plaster:#e9b29a' : 't:plaster:#f1ede4';
+    const plate = this.mine ? 'x:platesK' : 'x:plates';
+    for (const sp of this.segsOf(w, k)) {
       const st = sp.t0;
       if (sp.type === 'locked') {
-        this.bquad(w, -T - 0.012, (sp.t0 + sp.t1) / 2, y0, sp.t1 - sp.t0, FH - SLAB, '-s', 'x:bay', { flip: 'auto' });
-        this.bquad(w, -T - 0.02, st + 0.8, y0 + 2.18, 0.32, 0.12, '-s', 'x:plates', { uv: this.plates.uv.get(sp.number) });
+        this.bquad(w, -T - 0.012, (sp.t0 + sp.t1) / 2, y0, sp.t1 - sp.t0, FH - SLAB, '-s', bay, { flip: 'auto' });
+        this.bquad(w, -T - 0.02, st + 0.8, y0 + 2.18, 0.32, 0.12, '-s', plate, { uv: this.plates.uv.get(sp.number) });
         continue;
       }
-      if (sp.type === 'lobby' || sp.type === 'stair') open.push([st + 0.15, sp.t1 - 0.15]);
+      if (sp.type === 'lobby' || sp.type === 'stair' || sp.type === 'core' || sp.type === 'pass') open.push([st + 0.15, sp.t1 - 0.15]);
       else if (sp.type === 'common') open.push([st + 5.4, st + 8.2]);
       else if (sp.type === 'wash') open.push([st + 0.35, st + 1.5]);
       else open.push([st + 0.3, st + 1.3]);
-      if (sp.type === 'room') this.bquad(w, -T - 0.02, st + 0.8, y0 + 2.18, 0.32, 0.12, '-s', 'x:plates', { uv: this.plates.uv.get(sp.number) });
+      if (sp.type === 'room') this.bquad(w, -T - 0.02, st + 0.8, y0 + 2.18, 0.32, 0.12, '-s', plate, { uv: this.plates.uv.get(sp.number) });
     }
-    // wall pieces between openings, lintels over them
+    // wall pieces between openings, lintels over them (Krishna's run up to the slab above, so no gap shows)
+    const top = this.mine ? y0 + FH : y1;
     let t = w.tw[0];
     for (const [a, b] of [...open, [w.tw[1], w.tw[1]]]) {
-      if (a > t) this.bbox(w, -T, 0, t, a, y0, y1, 't:plaster:#f1ede4');
-      if (b > a) this.bbox(w, -T, 0, a, b, y0 + 2.25, y1, 't:plaster:#f1ede4', { collide: false });
+      if (a > t) this.bbox(w, -T, 0, t, a, y0, top, wall);
+      if (b > a) this.bbox(w, -T, 0, a, b, y0 + 2.25, top, wall, { collide: false });
       t = Math.max(t, b);
     }
     // dado band on the corridor side
@@ -708,15 +935,68 @@ export class Hostel {
       { u0: 7.55, u1: W - 7.55, v0: 4.75, v1: 7.55, w: 'N' },
       { u0: 7.55, u1: W - 7.55, v0: L - 7.55, v1: L - 4.75, w: 'S' },
       { u0: 7.55, u1: W - 7.55, v0: this.mc0, v1: this.mc1, w: 'M' },
+      ...this.verandahRects(),
     ].filter((r) => this.wings[r.w]);
+  }
+
+  // Krishna's verandahs round the courtyards, behind the arcade (the first courtyard's south one is the M corridor;
+  // the second's north one runs the whole width too, out to the corridor ring at both ends).
+  verandahRects() {
+    if (!this.inner) return [];
+    const { W, L } = this; const [c1, c2] = this.court;
+    const a = c1.u0 - VER; const b = c1.u0 - SCREEN; // 12.25 … 15.05 from the west face
+    return [
+      { u0: a, u1: b, v0: c1.v0 - VER, v1: this.mc0, w: 'W' }, { u0: W - b, u1: W - a, v0: c1.v0 - VER, v1: this.mc0, w: 'E' },
+      { u0: b, u1: W - b, v0: c1.v0 - VER, v1: c1.v0 - SCREEN, w: 'N' },
+      { u0: 7.55, u1: W - 7.55, v0: this.n2a, v1: this.n2b, w: 'M' },
+      { u0: a, u1: b, v0: this.n2b, v1: L - a, w: 'W' }, { u0: W - b, u1: W - a, v0: this.n2b, v1: L - a, w: 'E' },
+      { u0: b, u1: W - b, v0: c2.v1 + SCREEN, v1: L - a, w: 'S' },
+    ];
+  }
+
+  // Krishna: the inner face of the corridor ring (the backs of the inner rooms), open where the passages and the
+  // middle-wing verandahs come through, and the ends of the inner rows where they meet those verandahs.
+  buildRing() {
+    const { W, L } = this; const r0 = WD - SCREEN; const r1 = r0 + T;
+    const gaps = { u: [[this.mc0, this.mc1], [this.n2a, this.n2b]], U: [[this.mc0, this.mc1], [this.n2a, this.n2b]], v: [], V: [] };
+    for (const sp of this.spaces) if (sp.type === 'pass' && sp.k === 0) gaps[{ A: 'u', D: 'u', B: 'U', F: 'U', C: 'v', G: 'V' }[sp.wing]].push([sp.t0, sp.t1]);
+    const run = (side, a0, a1, y0, y1) => {
+      const list = gaps[side].slice().sort((p, q) => p[0] - q[0]);
+      let t = a0;
+      for (const [g0, g1] of [...list, [a1, a1]]) {
+        for (let x = t; x < g0 - 0.01; x += 20) {
+          const x1 = Math.min(g0, x + 20);
+          if (side === 'u') this.box(r0, r1, x, x1, y0, y1, 't:plaster:#f1ede4');
+          if (side === 'U') this.box(W - r1, W - r0, x, x1, y0, y1, 't:plaster:#f1ede4');
+          if (side === 'v') this.box(x, x1, r0, r1, y0, y1, 't:plaster:#f1ede4');
+          if (side === 'V') this.box(x, x1, L - r1, L - r0, y0, y1, 't:plaster:#f1ede4');
+        }
+        t = Math.max(t, g1);
+      }
+    };
+    for (let k = 0; k < FLOORS; k++) {
+      const y0 = k * FH; const y1 = y0 + FH;
+      run('u', r0, L - r0, y0, y1); run('U', r0, L - r0, y0, y1);
+      run('v', r1, W - r1, y0, y1); run('V', r1, W - r1, y0, y1);
+      // the inner rows end beside the middle wing's verandahs
+      const e = this.inner.A.tw[0];
+      for (const [u0, u1] of [[r1, e], [W - e, W - r1]]) {
+        this.box(u0, u1, this.mc0 - T, this.mc0, y0, y1, 't:plaster:#e9b29a');
+        this.box(u0, u1, this.n2b, this.n2b + T, y0, y1, 't:plaster:#e9b29a');
+      }
+      // dado along the corridor side
+      this.box(r0 - 0.01, r0, r0, L - r0, y0, y0 + 0.02, 'c:#c9b48c', { collide: false });
+    }
   }
 
   buildCorridors() {
     for (const r of this.corridorRects()) {
       for (let k = 0; k < FLOORS; k++) {
         const y = k * FH;
-        if (k === 0) this.box(r.u0, r.u1, r.v0, r.v1, 0, 0.03, 't:terrazzo:#d9dad6', { collide: false });
-        else this.box(r.u0, r.u1, r.v0, r.v1, y - SLAB, y, 't:terrazzo:#d9dad6', { walkable: true });
+        // Krishna: grey kota stone (2006 photo of the first-floor corridor)
+        const fl = this.mine ? KOTA : 't:terrazzo:#d9dad6';
+        if (k === 0) this.box(r.u0, r.u1, r.v0, r.v1, 0, 0.03, fl, { collide: false });
+        else this.box(r.u0, r.u1, r.v0, r.v1, y - SLAB, y, fl, { walkable: true });
         // ceiling (the next slab's underside; the top floor's is under the roof)
         if (k === FLOORS - 1) this.box(r.u0, r.u1, r.v0, r.v1, FLOORS * FH - SLAB - 0.05, FLOORS * FH - 0.05, 't:concrete:#f4f2ec', { walkable: true });
         // tube lights down the middle
@@ -746,12 +1026,14 @@ export class Hostel {
 
   // The courtyard side: cusped arches on piers, open on the ground floor, grilles above.
   buildScreens() {
-    const { W, L, mc0, mc1, vm } = this;
+    const { W, L, mc0, mc1, vm, WD } = this;
     // [fixed axis, value (screen centre line), from, to, wall?]
     const runs = this.twoCourts ? [
       ['u', WD - SCREEN / 2, WD, mc0 - SCREEN], ['u', WD - SCREEN / 2, vm + WD / 2, L - WD],
       ['u', W - WD + SCREEN / 2, WD, mc0 - SCREEN], ['u', W - WD + SCREEN / 2, vm + WD / 2, L - WD],
       ['v', WD - SCREEN / 2, WD, W - WD], ['v', L - WD + SCREEN / 2, WD, W - WD], ['v', mc0 - SCREEN / 2, WD, W - WD],
+      // Krishna's middle wing has a verandah onto the second courtyard too
+      ...(this.inner ? [['v', vm + WD / 2 - SCREEN / 2, WD, W - WD]] : []),
     ] : [
       ['u', WD - SCREEN / 2, WD, L - WD], ['u', W - WD + SCREEN / 2, WD, L - WD],
       ['v', WD - SCREEN / 2, WD, W - WD], ['v', L - WD + SCREEN / 2, WD, W - WD],
@@ -765,7 +1047,8 @@ export class Hostel {
           const g = new THREE.PlaneGeometry(bw, FH - SLAB);
           if (axis === 'u') g.rotateY(Math.PI / 2);
           g.translate(axis === 'u' ? at : m, y0 + (FH - SLAB) / 2, axis === 'u' ? m : at);
-          this.geo(k === 0 ? 'x:arch' : 'x:grille', g);
+          // Krishna: cusped arches below, a colonnade of rectangular openings above (drone view of the middle wing)
+          this.geo(k === 0 ? 'x:arch' : this.mine ? 'x:colonnade' : 'x:grille', g);
           // piers
           const p0 = a + j * bw;
           const pier = (pa, pb) => (axis === 'u' ? this.box(at - SCREEN / 2, at + SCREEN / 2, pa, pb, y0, y1, 'c:#ecdcb9', { collide: true }) : this.box(pa, pb, at - SCREEN / 2, at + SCREEN / 2, y0, y1, 'c:#ecdcb9', { collide: true }));
@@ -779,15 +1062,24 @@ export class Hostel {
       const corners = [[WD - SCREEN, WD - SCREEN], [W - WD, WD - SCREEN], [WD - SCREEN, L - WD], [W - WD, L - WD]];
       if (this.twoCourts) corners.push([WD - SCREEN, mc0 - SCREEN], [W - WD, mc0 - SCREEN], [WD - SCREEN, vm + WD / 2 - SCREEN], [W - WD, vm + WD / 2 - SCREEN]);
       for (const [u, v] of corners) this.box(u, u + SCREEN, v, v + SCREEN, y0, y1 + SLAB, 'c:#e1cda4');
-      if (this.twoCourts) for (const u of [WD - SCREEN, W - WD]) this.box(u, u + SCREEN, mc1, vm + WD / 2, y0, y1 + SLAB, 't:plaster:#f1ede4');
+      if (this.twoCourts && !this.inner) for (const u of [WD - SCREEN, W - WD]) this.box(u, u + SCREEN, mc1, vm + WD / 2, y0, y1 + SLAB, 't:plaster:#f1ede4');
       // floor slab edges facing the courtyards
       if (k > 0) for (const r of this.court) {
         this.box(r.u0 - SCREEN, r.u1 + SCREEN, r.v0 - SCREEN, r.v0, y0 - SLAB, y0, 'c:#e8d9b8', { collide: false });
         this.box(r.u0 - SCREEN, r.u1 + SCREEN, r.v1, r.v1 + SCREEN, y0 - SLAB, y0, 'c:#e8d9b8', { collide: false });
       }
     }
+    // Krishna: a moulded string course at the first floor and a cornice under the parapet, all round each courtyard
+    if (this.mine) {
+      for (const r of this.court) {
+        for (const [y0, y1, d] of [[FH - 0.22, FH + 0.12, 0.16], [FLOORS * FH - 0.3, FLOORS * FH, 0.22]]) {
+          this.box(r.u0, r.u0 + d, r.v0, r.v1, y0, y1, 'c:#f4efe3', { collide: false }); this.box(r.u1 - d, r.u1, r.v0, r.v1, y0, y1, 'c:#f4efe3', { collide: false });
+          this.box(r.u0, r.u1, r.v0, r.v0 + d, y0, y1, 'c:#f4efe3', { collide: false }); this.box(r.u0, r.u1, r.v1 - d, r.v1, y0, y1, 'c:#f4efe3', { collide: false });
+        }
+      }
+    }
     // the middle wing's back wall onto the second courtyard (rooms with windows)
-    if (!this.twoCourts) return;
+    if (!this.twoCourts || this.inner) return;
     const len = W - 2 * WD;
     const g = new THREE.PlaneGeometry(len, FLOORS * FH);
     const a = g.attributes.uv;
@@ -799,7 +1091,7 @@ export class Hostel {
 
   // The walkable roof: one strip per wing (the first, from u = 0, is the west wing with the stair opening).
   roofStrips() {
-    const { W, L, mc0, vm } = this;
+    const { W, L, mc0, vm, WD } = this;
     const strips = [
       { u0: 0, u1: WD, v0: 0, v1: L }, { u0: W - WD, u1: W, v0: 0, v1: L },
       { u0: WD, u1: W - WD, v0: 0, v1: WD }, { u0: WD, u1: W - WD, v0: L - WD, v1: L },
@@ -864,7 +1156,7 @@ export class Hostel {
   }
 
   shell(sp, { floor = 't:terrazzo:#dcdcd6', ceiling = true, back = true } = {}) {
-    const w = this.wings[sp.wing]; const { t0, t1 } = sp; const y0 = sp.k * FH; const y1 = y0 + FH - SLAB;
+    const w = this.bandOf(sp.wing); const { t0, t1 } = sp; const y0 = sp.k * FH; const y1 = y0 + FH - SLAB;
     this.partitions(sp, w, t0, t1, y0, y1);
     if (back) this.bbox(w, w.depth, w.depth + 0.28, t0, t1, y0, y1, 't:plaster:#f3efe6');
     if (sp.k === 0) this.bbox(w, 0, w.depth, t0, t1, 0, 0.03, floor, { collide: false });
@@ -894,7 +1186,8 @@ export class Hostel {
     pivot.position.set(hinge[0], k * FH, hinge[1]);
     const beta = Math.atan2(-dt[1], dt[0]);
     const phi = Math.abs(dt[1] - ds[0]) < 1e-6 && Math.abs(-dt[0] - ds[1]) < 1e-6 ? Math.PI / 2 : -Math.PI / 2;
-    const leaf = new THREE.Mesh(worldBoxGeometry(0.98, 2.1, 0.05, 1.5), texturedMaterial('wood', { tint: '#e2c493' }));
+    // Krishna's doors are green-painted timber (2006 photos)
+    const leaf = new THREE.Mesh(worldBoxGeometry(0.98, 2.1, 0.05, 1.5), texturedMaterial('wood', { tint: this.mine ? '#7d9a6c' : '#e2c493' }));
     leaf.position.set(0.5, 1.05, 0);
     leaf.castShadow = true;
     pivot.add(leaf);
@@ -951,10 +1244,11 @@ export class Hostel {
   }
 
   space_stair(sp) {
-    const w = this.wings[sp.wing]; const { t0, t1 } = sp; const y0 = sp.k * FH;
-    if (sp.k === 0) this.legendBand('🪜', sp.roof ? 'Main stairs · roof' : 'East stairs', sp.roof ? [0, 1, 2] : [0, 1], w, 1.6, t0 + MOD / 2);
+    const w = this.bandOf(sp.wing); const { t0, t1 } = sp; const y0 = sp.k * FH;
+    if (sp.k === 0) this.legendBand('🪜', sp.roof ? 'Main stairs · roof' : sp.label || 'East stairs', sp.roof ? [0, 1, 2] : [0, 1], w, 1.6, t0 + MOD / 2);
     this.partitions(sp, w, t0, t1, y0, y0 + FH);
-    this.bbox(w, w.depth, w.depth + 0.28, t0, t1, y0, y0 + FH, 't:plaster:#f3efe6');
+    // (an inner Krishna core backs onto the corridor ring's wall, which is built with the ring)
+    if (!w.ring) this.bbox(w, w.depth, w.depth + 0.28, t0, t1, y0, y0 + FH, 't:plaster:#f3efe6');
     const stone = 't:terrazzo:#c9c6bd';
     // platform at this floor (the ground floor stands on the ground)
     if (sp.k === 0) this.bbox(w, -T, 0.84, t0, t1, 0, 0.03, stone, { collide: false });
@@ -985,6 +1279,23 @@ export class Hostel {
     this.tube(w, 3.6, t0 + MOD / 2, y0 + FH - 0.1, false);
     if (sp.k === 0) this.label(sp.roof ? 'Stairs · roof terrace' : 'Stairs', w, -T - 0.3, t0 + MOD / 2, 2.55);
     sp.flights = { t0, t1 };
+  }
+
+  // Krishna's other stair cores (under the roof mumties): the same dog-leg as the east stair.
+  space_core(sp) { this.space_stair(sp); }
+
+  // A cross passage from the corridor ring through the inner rooms to a courtyard verandah, on both floors.
+  space_pass(sp) {
+    const w = this.bandOf(sp.wing); const { t0, t1 } = sp; const y0 = sp.k * FH; const y1 = y0 + FH - SLAB;
+    this.partitions(sp, w, t0, t1, y0, y0 + FH);
+    const floor = 't:terrazzo:#b9bab3';
+    if (sp.k === 0) this.bbox(w, -T, w.depth + T, t0, t1, 0, 0.03, floor, { collide: false });
+    else this.bbox(w, -T, w.depth + T, t0, t1, y0 - SLAB, y0, floor, { walkable: true });
+    this.bbox(w, -T, w.depth + T, t0, t1, y1, y0 + FH - 0.05, 't:concrete:#f6f4ee', { collide: false });
+    // a plain round arch at each end, as in the corridor ring
+    for (const s0 of [-T, w.depth]) this.bbox(w, s0, s0 + T, t0, t1, y0 + 2.45, y1, 't:plaster:#f1ede4', { collide: false });
+    this.tube(w, w.depth / 2, (t0 + t1) / 2, y1, false);
+    if (sp.k === 0) this.legendBand('↔', 'To the courtyard', [0], w, w.depth / 2, (t0 + t1) / 2);
   }
 
   space_wash(sp) {
@@ -1126,7 +1437,7 @@ export class Hostel {
 
   // ---------- rooms ----------
   space_room(sp) {
-    const { w, t0, t1, y0, y1 } = this.shell(sp);
+    const { w, t0, t1, y0, y1 } = this.shell(sp, this.mine ? { floor: KOTA } : {});
     const k = sp.k; const v = sp.variant;
     const sheet = { mine: 'x:sheetBlue', study: 'x:sheetTeal', double: 'x:sheetFloral', senior: 'x:sheetTeal' }[v];
     sp.doorIndex = this.door(w, t0 + 0.3, k, true);
@@ -1211,6 +1522,7 @@ export class Hostel {
         const inside = w.map(0.65, th - 0.3);
         for (const [dy, col] of [[0.5, '#e57373'], [0.9, '#64b5f6'], [1.3, '#ffd54f']]) this.box(inside[0] - 0.3, inside[0] + 0.3, inside[1] - 0.2, inside[1] + 0.2, y0 + dy, y0 + dy + 0.15, `c:${col}`, { collide: false });
         this.interact('almirah', w, 0.65, th - 1.15, k, 'Open / close your almirah', 1.2);
+        if (this.mine) this.alcove(w, tl + 0.78, y0);
         this.interact('gate', w, 2.2, th - 1.3, k, 'Sleep (end the day)', 1.3);
         this.interact('studydesk', w, 3.15, tl + 1.2, k, 'Study at your desk', 1.1);
         this.interact('hlight', w, -0.05 + 0.25, t0 + 1.55, k, 'Switch the light on / off', 0.9);
@@ -1246,6 +1558,24 @@ export class Hostel {
     if (v === 'mine') this.legendBand('🛏', 'Your room', [0], w, 2.0, (t0 + t1) / 2);
   }
 
+  // The heritage room's arched wall niche with two concrete shelves and a loft slab over it (2006 photo, tour
+  // panorama), against the outer wall beside the window.
+  alcove(w, t, y0) {
+    const s1 = w.depth; const s0 = s1 - 0.32; const wd = 0.85; const ta = t; const tb = t + wd;
+    const plaster = 't:plaster:#efe8d8'; const conc = 'c:#c9c6bc';
+    for (const [a, b] of [[ta - 0.12, ta], [tb, tb + 0.12]]) this.bbox(w, s0, s1, a, b, y0, y0 + 2.15, plaster);
+    this.bbox(w, s0, s1, ta - 0.12, tb + 0.12, y0 + 1.85, y0 + 2.15, plaster, { collide: false });
+    this.bquad(w, s1 - 0.005, t + wd / 2, y0, wd, 1.85, '-s', 'c:#d9cfbb');
+    // the arched head, as a disc above the opening's crown, and the shelves
+    const [u, v] = w.map(s0 - 0.001, t + wd / 2);
+    const disc = new THREE.CircleGeometry(wd / 2, 16, 0, Math.PI);
+    disc.rotateY(Math.atan2(-w.ds[0], -w.ds[1])); disc.translate(u, y0 + 1.6, v); this.geo('c:#d9cfbb', disc);
+    for (const yy of [0.75, 1.3]) this.bbox(w, s0 + 0.02, s1, ta, tb, y0 + yy, y0 + yy + 0.05, conc, { collide: false });
+    this.bbox(w, s1 - 0.5, s1, ta - 0.12, tb + 0.12, y0 + 2.3, y0 + 2.36, conc, { collide: false });
+    this.bbox(w, s0 + 0.04, s0 + 0.2, t + 0.15, t + 0.4, y0 + 0.8, y0 + 1.05, 'c:#c0392b', { collide: false });
+    this.bbox(w, s0 + 0.04, s0 + 0.24, t + 0.5, t + 0.8, y0 + 1.35, y0 + 1.5, 'c:#2471a3', { collide: false });
+  }
+
   // ---------- courtyards and outside ----------
   // Bare concrete courtyards (QT), big enough for a cricket game in one and football in the other
   // (or just football, in a Bhawan with one courtyard).
@@ -1253,14 +1583,17 @@ export class Hostel {
     const ev = this.ev;
     const along = Math.atan2(ev[0], ev[1]); const back = Math.atan2(-ev[0], -ev[1]);
     const across = (sgn) => Math.atan2(sgn * this.eu[0], sgn * this.eu[1]);
-    for (const r of this.court) this.box(r.u0, r.u1, r.v0, r.v1, 0, 0.035, 't:concrete:#dcd6ca', { collide: false });
-    const line = (u0, u1, v0, v1) => this.box(u0, u1, v0, v1, 0.035, 0.04, 'c:#f2f2ee', { collide: false });
+    // Krishna's courtyards are lawns with mature trees (SWD: "Green courtyard"; drone view); the others concrete
+    for (const r of this.court) this.box(r.u0, r.u1, r.v0, r.v1, 0, 0.035, this.mine ? LAWN : 't:concrete:#dcd6ca', { collide: false });
+    // markings stand a little proud of Krishna's lawn (which is drawn pulled forward, like the concrete)
+    const lift = this.mine ? 0.03 : 0;
+    const line = (u0, u1, v0, v1) => this.box(u0, u1, v0, v1, 0.035 + lift, 0.04 + lift, 'c:#f2f2ee', { collide: false });
 
     // cricket: a 22-yard pitch down the middle of the first courtyard, stumps at both ends
     if (this.cricket) {
       const { u: cu, v: cv } = this.cricket;
       const half = 10.06;
-      this.box(cu - 1.5, cu + 1.5, cv - half - 1.3, cv + half + 1.3, 0.035, 0.045, 'c:#b8ab90', { collide: false });
+      this.box(cu - 1.5, cu + 1.5, cv - half - 1.3, cv + half + 1.3, 0.035, 0.045 + lift * 0.5, this.mine ? 'c:#c9b98f' : 'c:#b8ab90', { collide: false });
       for (const sgn of [-1, 1]) {
         const sv = cv + sgn * half;
         for (const du of [-0.11, 0, 0.11]) { this.cyl(cu + du, 0.045, sv, 0.018, 0.71, 'c:#f1e3c2', 6); }
@@ -1284,7 +1617,7 @@ export class Hostel {
     const c2 = this.court.at(-1);
     const fw = 16; const fl = c2.v1 - c2.v0 - 6;
     line(fu - fw, fu + fw, fv - 0.04, fv + 0.04);
-    const ring = new THREE.RingGeometry(4.0, 4.09, 48); ring.rotateX(-Math.PI / 2); ring.translate(fu, 0.041, fv); this.geo('c:#f2f2ee', ring);
+    const ring = new THREE.RingGeometry(4.0, 4.09, 48); ring.rotateX(-Math.PI / 2); ring.translate(fu, 0.041 + lift, fv); this.geo('c:#f2f2ee', ring);
     for (const sgn of [-1, 1]) {
       const gv = fv + sgn * (fl / 2);
       line(fu - 5, fu + 5, gv - 0.04, gv + 0.04);
@@ -1303,11 +1636,15 @@ export class Hostel {
     const lf = this.world(fu, c2.v1 - 2);
     this.campus.label('Courtyard · football', lf.x, 3.0, lf.z, { height: 0.42 });
 
-    // basketball hoop against the east arcade, facing into the second courtyard
+    if (this.mine) this.badminton();
+    // basketball hoop against the east arcade, facing into the second courtyard (not at Krishna: SWD lists
+    // badminton and volleyball there)
+    if (!this.mine) {
     const hu = c2.u1 - 1.0; const hv = fv;
     this.cyl(hu, 0, hv, 0.08, 3.0, 'm:#5c6670', 10); this.col(hu - 0.1, hu + 0.1, hv - 0.1, hv + 0.1, 0, 3);
     this.box(hu - 0.36, hu - 0.31, hv - 0.9, hv + 0.9, 2.9, 3.95, 'c:#f5f5f5', { collide: false });
     const hoop = new THREE.TorusGeometry(0.23, 0.015, 6, 20); hoop.rotateX(Math.PI / 2); hoop.translate(hu - 0.62, 3.05, hv); this.geo('c:#e65100', hoop);
+    }
 
     // benches along the arcades, lamp posts in the corners
     for (const r of this.court) {
@@ -1324,21 +1661,45 @@ export class Hostel {
     // the campus tree builder plants them as [x, z, scale]
     const c1 = this.court[0];
     this.shadeTrees = (this.twoCourts ? [this.world(c1.u1 - 5.5, c1.v0 + 5.5), this.world(c2.u0 + 5.5, c2.v1 - 5.5)] : [this.world(c2.u0 + 5.5, c2.v1 - 5.5)]).map((p) => [p.x, p.z, 1.0]);
+    if (this.mine) {
+      // mature neem and khejri round the edges of both lawns, clear of the pitch, the goals and the players
+      const more = [[c1.u0 + 5, c1.v0 + 5.5], [c1.u0 + 4.5, c1.v1 - 5], [c1.u1 - 4.5, c1.v1 - 5], [c1.u0 + 3.2, (c1.v0 + c1.v1) / 2 + 3],
+        [c2.u0 + 4.5, c2.v0 + 6], [c2.u1 - 4.5, c2.v0 + 6], [c2.u1 - 4.5, c2.v1 - 6], [c2.u0 + 3.0, (c2.v0 + c2.v1) / 2 + 2], [c2.u1 - 3.0, (c2.v0 + c2.v1) / 2 - 6]];
+      for (const [u, v] of more) { const p = this.world(u, v); this.shadeTrees.push([p.x, p.z, 1.25 + ((u * 7 + v) % 5) * 0.06]); }
+    }
+  }
+
+  // A badminton court on Krishna's first lawn, at its north end: lines, posts and the net.
+  badminton() {
+    const c1 = this.court[0]; const cu = (c1.u0 + c1.u1) / 2; const v0 = c1.v0 + 1.8; const v1 = v0 + 13.4; const vm = (v0 + v1) / 2;
+    const line = (u0, u1, a, b) => this.box(u0, u1, a, b, 0.06, 0.068, 'c:#f4f4ef', { collide: false });
+    for (const du of [-3.05, -2.59, 2.59, 3.05]) line(cu + du - 0.02, cu + du + 0.02, v0, v1);
+    for (const v of [v0, v0 + 0.76, vm - 1.98, vm + 1.98, v1 - 0.76, v1]) line(cu - 3.05, cu + 3.05, v - 0.02, v + 0.02);
+    line(cu - 0.02, cu + 0.02, v0, vm - 1.98); line(cu - 0.02, cu + 0.02, vm + 1.98, v1);
+    for (const du of [-3.1, 3.1]) { this.cyl(cu + du, 0, vm, 0.03, 1.55, 'm:#6c757d', 8); this.col(cu + du - 0.05, cu + du + 0.05, vm - 0.05, vm + 0.05, 0, 1.55); }
+    this.box(cu - 3.1, cu + 3.1, vm - 0.005, vm + 0.005, 0.9, 1.52, 'g:#2b2b2b', { collide: false });
+    this.box(cu - 3.1, cu + 3.1, vm - 0.012, vm + 0.012, 1.48, 1.53, 'c:#f4f4ef', { collide: false });
+    this.legend('🏸', 'Badminton (courtyard)', [0], cu, vm);
   }
 
   // Porch at the entrance and the cycle stand beside it.
   buildOutside() {
     const ve = this.ve;
-    for (const dv of [-1.85, 1.85]) this.box(-1.45, -0.95, ve + dv - 0.25, ve + dv + 0.25, 0, 3.0, 't:plasterWhite:#ecd8b8');
-    this.box(-1.6, 0, ve - 2.2, ve + 2.2, 3.0, 3.35, 't:plasterWhite:#ecd8b8', { collide: false });
-    this.box(-1.5, -0.1, ve - 1.6, ve + 1.6, 0, 0.12, 't:concrete:#d8d2c4', { collide: false });
+    if (!this.mine) {
+      for (const dv of [-1.85, 1.85]) this.box(-1.45, -0.95, ve + dv - 0.25, ve + dv + 0.25, 0, 3.0, 't:plasterWhite:#ecd8b8');
+      this.box(-1.6, 0, ve - 2.2, ve + 2.2, 3.0, 3.35, 't:plasterWhite:#ecd8b8', { collide: false });
+      this.box(-1.5, -0.1, ve - 1.6, ve + 1.6, 0, 0.12, 't:concrete:#d8d2c4', { collide: false });
+    }
     const v0 = ve + 4.5; const v1 = ve + 13.5;
     for (const [u, v] of [[-4.2, v0], [-4.2, v1], [-1.4, v0], [-1.4, v1]]) { this.box(u - 0.06, u + 0.06, v - 0.06, v + 0.06, 0, 2.4, 'm:#7b8288'); }
     this.box(-4.5, -1.1, v0 - 0.3, v1 + 0.3, 2.4, 2.48, 'c:#5b7c99', { collide: false });
     this.col(-4.5, -1.1, v0 - 0.2, v1 + 0.2, 0, 1.0);
     const r = rng(23);
     const cols = ['#c62828', '#1565c0', '#2e7d32', '#212121', '#6a1b9a', '#ef6c00'];
-    for (let v = v0 + 0.3; v < v1; v += 0.75) {
+    // Krishna: more rows of bicycles along the facade, north of the entrance bay (2006 photo, drone view)
+    const rows = [[v0 + 0.3, v1]];
+    if (this.mine) { rows.push([ve - 19, ve - 8.2]); this.col(-3.4, -2.2, ve - 19, ve - 8.2, 0, 0.9); }
+    for (const [ra, rb] of rows) for (let v = ra; v < rb; v += 0.75) {
       const col = cols[Math.floor(r() * cols.length)];
       for (const du of [-0.55, 0.55]) {
         const tor = new THREE.TorusGeometry(0.33, 0.025, 6, 16); // wheel in the u-y plane: the cycle points away from the wall
@@ -1355,11 +1716,119 @@ export class Hostel {
     this.npcSpots.lobbyChat = [{ at: this.world(1.2, ve - 1.2), yaw: this.entrance.yaw + Math.PI / 2 }, { at: this.world(1.2, ve + 0.1), yaw: this.entrance.yaw - Math.PI / 2 }];
   }
 
+  // ---------- Krishna Bhawan's outside ----------
+  // A vertical quad in the local frame from p0 = [u, v] to p1, y0 to y1; it faces the side where, walking from p0
+  // to p1, the outside is on your left. The texture repeats `rep` times across.
+  quad(key, p0, p1, y0, y1, rep = 1) {
+    const g = new THREE.BufferGeometry();
+    const P = [[p0[0], y0, p0[1]], [p1[0], y0, p1[1]], [p1[0], y1, p1[1]], [p0[0], y1, p0[1]]];
+    const idx = [0, 1, 2, 0, 2, 3];
+    const UV = [[0, 0], [rep, 0], [rep, 1], [0, 1]];
+    const dx = p1[0] - p0[0]; const dz = p1[1] - p0[1]; const l = Math.hypot(dx, dz);
+    const n = [-dz / l, 0, dx / l];
+    g.setAttribute('position', new THREE.Float32BufferAttribute(idx.flatMap((i) => P[i]), 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(idx.flatMap(() => n), 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(idx.flatMap((i) => UV[i]), 2));
+    this.geo(key, g);
+  }
+
+  // The outer face: cream render over the campus wall, bay by bay (arched grilled windows below, rectangular
+  // openings above), with a plinth, a string course at the first floor and a moulded cornice under the parapet.
+  buildFacade() {
+    const { W, L, ve } = this; const o = 0.1; const h = FLOORS * FH;
+    const b0 = ve - 6.65; const b1 = b0 + ENTRANCE_W;
+    const face = (p0, p1) => { const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); this.quad('x:kfacade', p0, p1, 0, h, len / MOD); };
+    face([-o, -o], [-o, b0]); face([-o, b1], [-o, L + o]); // west, either side of the entrance bay
+    face([W + o, L + o], [W + o, -o]); // east
+    face([W + o, -o], [-o, -o]); // north
+    face([-o, L + o], [W + o, L + o]); // south
+    const trim = 'c:#f4efe3'; const plinth = 'c:#d3c199';
+    const band = (y0, y1, d, key, skipBay) => {
+      if (skipBay) { this.box(-d, 0, -d, b0, y0, y1, key, { collide: false }); this.box(-d, 0, b1, L + d, y0, y1, key, { collide: false }); } else this.box(-d, 0, -d, L + d, y0, y1, key, { collide: false });
+      this.box(W, W + d, -d, L + d, y0, y1, key, { collide: false });
+      this.box(0, W, -d, 0, y0, y1, key, { collide: false }); this.box(0, W, L, L + d, y0, y1, key, { collide: false });
+    };
+    band(0, 0.5, 0.2, plinth, true);
+    band(FH - 0.14, FH + 0.12, 0.2, trim, true);
+    band(h - 0.32, h, 0.4, trim, false);
+    band(h - 0.42, h - 0.32, 0.28, 'c:#e2d6ba', false);
+    // the parapet's coping
+    band(h + 0.95, h + 1.05, 0.12, trim, false);
+  }
+
+  // The entrance bay (Krishna Bhawan, 2006 photo): it projects 2.4 m from the west face and rises a storey and a
+  // bit above the parapet. Below, a round-arched window, the arch with the green collapsible gate, the open arch
+  // and another window, with rosettes in the spandrels; the Devanagari name band over them; above, an open loggia
+  // with paired Tuscan columns and jaali panels in its parapet. Two steps up to the porch, one down into the lobby.
+  buildEntranceBay() {
+    const ve = this.ve; const b0 = ve - 6.65; const b1 = b0 + ENTRANCE_W; const f = -2.4; const f1 = f + 0.3;
+    const cream = 't:plaster:#eddcb5'; const white = 'c:#f6f1e6';
+    // returns (side walls), full height up to the raised attic
+    for (const [v0, v1] of [[b0, b0 + 0.35], [b1 - 0.35, b1]]) this.box(f, 0, v0, v1, 0, 8.45, cream);
+    // ground floor: solid stretches between the two arches (the windows are painted on), the arches open
+    const gate = [ve - 4.9, ve - 2.6]; const door = [ve - 1.15, ve + 1.15];
+    for (const [v0, v1] of [[b0 + 0.35, gate[0]], [gate[1], door[0]], [door[1], b1 - 0.35]]) this.box(f, f1, v0, v1, 0, 3.3, cream);
+    this.quad('x:kbay', [f - 0.02, b0], [f - 0.02, b1], 0, 4.4);
+    this.quad('x:kbay', [f1 + 0.02, b1], [f1 + 0.02, b0], 0, 4.4);
+    // the gate, shut
+    this.quad('x:kgate', [f + 0.15, gate[0]], [f + 0.15, gate[1]], 0.28, 2.45);
+    this.col(f, f1, gate[0], gate[1], 0, 2.5);
+    // steps, threshold and porch floor (the lobby inside is a step down)
+    const stone = 't:concrete:#cfc8b8';
+    this.box(f - 0.9, f - 0.45, ve - 5.4, ve + 1.8, 0, 0.14, stone, { walkable: true });
+    this.box(f - 0.45, f, ve - 5.4, ve + 1.8, 0, 0.28, stone, { walkable: true });
+    this.box(f, 0, b0 + 0.35, b1 - 0.35, 0, 0.28, 't:terrazzo:#d8d2c2', { walkable: true });
+    // the vestibule's walls (pale distemper), the loggia floor over it, a tube light
+    const blue = 'c:#e3e9e6';
+    this.quad(blue, [-0.04, b0 + 0.35], [-0.04, ve - 1.5], 0.28, 3.1); this.quad(blue, [-0.04, ve + 1.5], [-0.04, b1 - 0.35], 0.28, 3.1);
+    this.quad(blue, [-0.04, ve - 1.5], [-0.04, ve + 1.5], 2.7, 3.1);
+    this.box(f, 0, b0 + 0.35, b1 - 0.35, 3.1, 3.3, 'c:#ece7da', { collide: false });
+    this.box(-0.9, -0.82, ve - 0.6, ve + 0.6, 3.04, 3.1, 'e:#fffaf0', { collide: false });
+    // loggia: parapet with coping, paired columns, back wall, ceiling light, entablature
+    this.box(f, f + 0.2, b0 + 0.35, b1 - 0.35, 3.3, 4.3, cream, { collide: false });
+    this.box(f - 0.05, f + 0.25, b0, b1, 4.3, 4.4, white, { collide: false });
+    for (const vc of [b0 + 0.9, ve - 1.45, b1 - 0.9, b0 + 3.0, b1 - 3.0]) {
+      for (const dv of [-0.22, 0.22]) {
+        const v = vc + dv; const u = f + 0.12;
+        this.box(u - 0.17, u + 0.17, v - 0.17, v + 0.17, 4.4, 4.55, white, { collide: false });
+        this.cyl(u, 4.55, v, 0.13, 1.55, white, 12, 0.11);
+        this.box(u - 0.17, u + 0.17, v - 0.17, v + 0.17, 6.1, 6.22, white, { collide: false });
+      }
+    }
+    this.quad('x:loggiaBack', [-0.04, b0 + 0.35], [-0.04, b1 - 0.35], 3.3, 6.4);
+    this.box(-1.3, -1.22, ve - 0.6, ve + 0.6, 6.34, 6.4, 'e:#fffaf0', { collide: false });
+    this.box(f, 0, b0 + 0.35, b1 - 0.35, 6.4, 6.6, 'c:#ece7da', { collide: false });
+    this.box(f - 0.05, f + 0.3, b0, b1, 6.22, 6.95, cream, { collide: false });
+    this.box(f - 0.12, f + 0.3, b0 - 0.05, b1 + 0.05, 6.85, 6.97, white, { collide: false });
+    // the raised attic over the bay, with its coping
+    this.box(f, 0, b0, b1, 6.95, 8.45, cream, { collide: false });
+    this.box(f - 0.1, 0.1, b0 - 0.1, b1 + 0.1, 8.45, 8.6, white, { collide: false });
+    this.col(f, 0, b0, b1, 6.6, 8.6);
+    this.legend('🚲', 'Cycle rows', [0], -2.8, ve - 13);
+  }
+
+  // Square stair-head rooms (mumties) on the roof over every stair core, with small arched jaali openings; the main
+  // one (built with the roof) is open onto the terrace, the others are locked. Two carry black water tanks.
+  buildMumties() {
+    const y = FLOORS * FH;
+    let i = 0;
+    for (const sp of this.spaces) {
+      if (sp.k !== 0 || !(sp.type === 'core' || (sp.type === 'stair' && !sp.roof))) continue;
+      const w = this.bandOf(sp.wing); const { t0, t1 } = sp; const s0 = 0; const s1 = w.depth;
+      this.bbox(w, s0, s1, t0, t1, y, y + 2.5, 't:plaster:#ebe3cf');
+      this.bbox(w, s0 - 0.12, s1 + 0.12, t0 - 0.12, t1 + 0.12, y + 2.5, y + 2.68, 'c:#f4efe3', { collide: false });
+      const tc = (t0 + t1) / 2;
+      this.bquad(w, s0 - 0.01, tc, y, Math.min(2.5, t1 - t0), 2.5, '-s', 'x:mumty');
+      this.bquad(w, s1 + 0.01, tc, y, Math.min(2.5, t1 - t0), 2.5, '+s', 'x:mumty');
+      if (i++ % 3 === 0) for (const dt of [-0.8, 0.8]) this.bcyl(w, (s0 + s1) / 2, tc + dt, y + 2.68, 0.55, 1.0, 'c:#1f2326', 14);
+    }
+  }
+
   // ---------- queries ----------
   treeOk(x, z) {
     const [u, v] = this.local(x, z);
     if (u > -2 && u < this.W + 2 && v > -2 && v < this.L + 2) return false; // the building and its concrete courtyards
-    if (u > -8 && u < 0 && v > this.ve - 8 && v < this.ve + 16) return false; // porch and cycle stand
+    if (u > -8 && u < 0 && v > this.ve - (this.mine ? 20 : 8) && v < this.ve + 16) return false; // porch and cycle stand
     return true;
   }
 
@@ -1393,7 +1862,14 @@ export class Hostel {
     this.time += dt;
     if (playerPos) {
       // from outside, the facade hides the interior except through the entrance
-      this.g.visible = this.distance(playerPos.x, playerPos.z) < 15 && playerPos.y < 30;
+      let near = this.distance(playerPos.x, playerPos.z) < 15 && playerPos.y < 30;
+      // Krishna's outer face is opaque (painted windows), so from outside only the entrance bay looks in
+      if (near && this.mine) {
+        const [u, v] = this.local(playerPos.x, playerPos.z);
+        const inside = u > -0.2 && u < this.W + 0.2 && v > -0.2 && v < this.L + 0.2;
+        near = inside || (u < 0 && Math.abs(v - this.ve) < 14);
+      }
+      this.g.visible = near;
     }
     if (this.ttBall && this.ttBall.visible) {
       const [a, b] = this.ttEnds;
