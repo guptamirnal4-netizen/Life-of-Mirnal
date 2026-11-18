@@ -388,3 +388,28 @@ The gameplay room inside is a closed box: cream walls, a wood floor, red bench b
 - **`hostels-newer`:** Malviya-A and Malviya Mess are to the north.
 - **`gates-landmarks`:** the Gandhi Statue roundabout panorama links toward the SAC; the mural boundary wall seen there is not part of the SAC.
 - **The orchestrator:** the gameplay `auditorium` room can stay where it is (H, fix 4). Only cosmetic changes are proposed, with an optional shift of the door z by about -4 m to line up with the portico.
+
+## Build notes
+
+Module: `js/world/buildings/sac.js` (registered in `registry.js`), walk test `tests/browser/sac.mjs`. It replaces the OSM footprints "Student Activities Center (SAC)" and "Looters". Frame: the identity (world x, z), since the complex lines up with the campus axes.
+
+**What is built** (plan as in C; sizes are the research's visual estimates):
+
+- **West block** x -200..-170.5, z 290..325: eaves 9 m, ridge 10.6 m, north-south ridge, blue-grey sheet roof with three solar strips, low grilled windows plus a clerestory band. Inside (zone `sports`): the badminton hall (3 courts, nets, benches, rust-red trusses, tube lights), the Martial Arts mezzanine at P + 4.0 along the east wall (foam mats, punch bags, gallery wall with railed openings onto the courts) reached by a 22-riser straight stair along the north wall, the table-tennis hall (4 tables, E to play) through a partition door at x -178, and a squash court with a glass back wall. Doors north and south at x -186 with steps.
+- **East hall** ("SAC inside") x -170.5..-140.5, z 291..317: hall plinth at P = 0.45 m, open arcades (7 granite piers, white segmental arches) north and south with three steps down to the lawns, curved roof (spring 6 m, crown 8 m) with solar panels on its east half, east wall with the wooden door on the room door's axis.
+- **Gameplay room `auditorium`**: id, door, exit and spots unchanged (x -163.6..-145.6, z 296.6..312.6, door east at z 304.6). The hall is built round it: a lined enclosure at grade with three steps down from the plinth vestibule to its door, Kota floor overlay, the curtain mural over its stage wall and on the stage curtain, tube lights, yoga mats, a notice board. Aisles round it carry the honour boards (west wall), stacked chairs and mats. The room's own red bench blocks and stage come from bits-world and were left as they are (not in this module's files).
+- **Lobby and portico** on the same axis (z 304.6, inside the research's ±4 m of z 300): battered grey-blue frame 8 m tall, salmon chevron frieze, terracotta medallion, oval-coffered soffit, the "BITS / STUDENTS ACTIVITIES CENTRE" sign, wooden doors folded open, glazed side doors, three steps either side of a central 1:11 ramp, topiary planters, sandstone lamp stands, pink stamped forecourt to the road with mats, bicycle racks and round planters.
+- **East wings** either side of the lobby (closed; use unknown): hipped salmon roofs, deep white window surrounds, medallions.
+- **Covered corridors** with red-brick jali (north z 279..282.5, south z 326.5..330, links to the hall corners, N-S spines through the pavilion clusters), **lawns** north and south of the hall (the two OSM grass polygons that ran under the halls are removed from `D.areas`), paved courts.
+- **Club pavilions** 2 × 3 NW and 2 × 3 SW, barrel-vaulted inside: Gym, Gym 2, Snooker (zone `clubsN`); Dance Club, Classical Music & Dance, Music Room Gurukul (zone `clubsS`). The rest are closed "club rooms".
+- **Kiosks**: TOTT terrace (raised paving, parapets, steps, long tables with red chairs, TOTT, Juice Corner, Stationery, -301°F), the SE cluster with Jawed Habib Salon; **Looters**: black shed, neon sign on a fascia above the tent canopy, counter (E to order), food court with round tables, flowerbeds and railings, and the dark dining shed west of it.
+
+**Levels and stairs**: grade 0 (lawns, forecourt, the auditorium), hall plinth 0.45, pavilions 0.3, corridors 0.15, mezzanine 4.45. Every step is a walkable flight; door sills are walkable. The mezzanine stair rises 0.18 m per riser.
+
+**Changes outside the building geometry** (all inside this module): the OSM point "Student Activities Center" is moved to the north end of the forecourt (-122, 285), so its campus label no longer floats inside the badminton hall (nor in front of the portico frieze) and the explorer drops visitors by the portico; campus trees are kept off the complex through `campus.statuePts`, except on the lawns.
+
+**Approximations** beyond the research: room assignment inside the west block and pavilions, the mezzanine and stair position (D), the closed pavilions' use, the kiosk names other than TOTT, -301°F and Jawed Habib (Juice Corner, Stationery, General Store are placeholders), the dining shed's use.
+
+**Tests**: `PORT=8103 node dev/server.mjs`, then `node tests/browser/sac.mjs OUTDIR http://localhost:8103/` (FULL=1 for the whole campus, PERF=1 for timing). It walks in by the portico steps and ramp, through the lobby and hall into the auditorium and out, up and down both arcades, into badminton, up and down the mezzanine stair, through to table tennis and out of the south door, into the Gym, Gym 2 and Dance Club, up onto the TOTT terrace, and checks walls that must block.
+
+**Performance**: 49 merged meshes for the outside, 164 in all (interiors only drawn near them), about 76k triangles, under 1,000 colliders. Frame time against `?nomodules` stayed at the 16.7 ms vsync cap in every scene measured.

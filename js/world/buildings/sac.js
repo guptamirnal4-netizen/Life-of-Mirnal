@@ -1080,9 +1080,10 @@ function buildSac(kit, ctx) {
   if (D?.areas) D.areas.splice(0, D.areas.length, ...D.areas.filter((a) => !mine(a)));
   // The OSM point "Student Activities Center" sits in the middle of the sports hall, so its 6 m campus label floated
   // inside the badminton hall and the explorer dropped visitors there. Move it (in place: the explorer and minimap
-  // hold the object) to the forecourt in front of the portico, the real main entrance (research F).
+  // hold the object) to the north end of the forecourt, by the portico (the real main entrance, research F) but off
+  // its axis, so the 6 m label does not hang in front of the frieze.
   const poi = D?.pois?.find((q) => q.name === 'Student Activities Center');
-  if (poi) Object.assign(poi, { x: -119, z: AXIS });
+  if (poi) Object.assign(poi, { x: -122, z: 285 });
   // keep the scattered campus trees out of the halls, pavilions, corridors and courts (buildTrees skips anything
   // within 9 m of these points); the lawns and the road avenue keep theirs
   campus.statuePts ||= [];
@@ -1107,6 +1108,22 @@ function buildSac(kit, ctx) {
   kit.entrance('NW club pavilions', -189, 281, [0, 1]);
   kit.entrance('SW club pavilions', -178, 328, [0, -1]);
   kit.entrance('TOTT terrace steps', -154, 267.5, [0, 1]);
+  // fewer draw calls: fold near-identical one-off colours of the outside into their neighbours before kit.finish()
+  const ALIAS = {
+    'c:#2a2b2d': 'c:#1d2023', 'c:#1b1c1e': 'c:#1d2023', 'c:#2a2d31': 'c:#1d2023', 'c:#3b3f44': 'c:#1d2023',
+    'c:#7d8b97': 'c:#7f8689', 'c:#7d8689': 'c:#7f8689', 'c:#6f7a80': 'c:#7f8689', 'c:#8f9496': 'c:#8e9396', 'c:#a3abb0': 'c:#a3a7a8',
+    'c:#f3f0ea': 'c:#f2f2ee', 'c:#f4f2ec': 'c:#f2f2ee', 'c:#e6e6e2': 'c:#f2f2ee', 'c:#eef0f0': 'c:#f2f2ee',
+    'c:#ece3cf': 'c:#e9e6df', 'c:#e0dcd2': 'c:#e9e6df', 'c:#b4553c': 'c:#b5653f', 'c:#5a4632': 'c:#4a3a2a',
+    'c:#7d858c': 'm:#7d858c', 'c:#1c4d8c': 'm:#24324f', 't:wood:#6a4428': 't:wood:#7a5232', 'po:t:concrete:#a7a9a6': 'po:t:paving:#d6cfc1',
+  };
+  for (const parts of kit.parts.values()) {
+    for (const [from, to] of Object.entries(ALIAS)) {
+      if (!parts.has(from)) continue;
+      if (to.startsWith('po:')) po(to.slice(3));
+      if (!parts.has(to)) parts.set(to, []);
+      parts.get(to).push(...parts.get(from)); parts.delete(from);
+    }
+  }
   // NPCs: from the room's exit straight out through the lobby and portico to the road
   kit.navLinks.push([[room.exit.x, room.exit.z], [PO.x1 + 7, AXIS]]);
 }
