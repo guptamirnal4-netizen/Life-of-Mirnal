@@ -22,7 +22,7 @@ await page.getByRole('button', { name: 'Start the day' }).click();
 await g(() => { window.__locked = true; const G = window.__game; G.state.settings.view = 'first'; G.state.day.clock = 17 * 60 + 45; });
 await page.waitForTimeout(500);
 const names = await g(() => window.__game.campus.hostels.map((H) => H.name));
-check('seven walk-in Bhawans', names.length === 7, names.join(', '));
+check('ten walk-in Bhawans (seven Hostel, three CombHostel)', names.length === 10, names.join(', '));
 for (let i = 0; i < names.length; i++) {
   await g((i) => { const G = window.__game; const H = G.campus.hostels[i]; G.player.place(H.entrance.out.clone(), H.entrance.yaw + Math.PI); }, i);
   await page.waitForTimeout(300);
@@ -33,13 +33,14 @@ for (let i = 0; i < names.length; i++) {
   const r = await g((i) => {
     const G = window.__game; const H = G.campus.hostels[i]; const p = G.player.pos;
     const [u, v] = H.local(p.x, p.z);
-    return { room: G.campus.roomAt(p.x, p.z, p.y), u: +u.toFixed(1), dv: +(v - H.ve).toFixed(1), guide: document.querySelector('#bhawan-guide div div')?.textContent, interior: H.g.visible, others: G.campus.hostels.filter((x) => x !== H && x.g.visible).map((x) => x.name) };
+    return { room: G.campus.roomAt(p.x, p.z, p.y), inside: H.distance(p.x, p.z) <= 0, u: +u.toFixed(1), dv: +(v - H.ve).toFixed(1), guide: document.querySelector('#bhawan-guide div div')?.textContent, interior: H.g.visible, others: G.campus.hostels.filter((x) => x !== H && x.g.visible).map((x) => x.name) };
   }, i);
-  check(`${names[i]}: walked in through the entrance`, r.room === 'hostel' && r.u > 2, JSON.stringify(r));
+  check(`${names[i]}: walked in through the entrance`, (r.room === 'hostel' || r.inside) && r.u > 2, JSON.stringify(r));
   check(`${names[i]}: guide names it`, (r.guide || '').startsWith(names[i]));
   check(`${names[i]}: only its interior is drawn`, r.interior && r.others.length === 0, r.others.join(','));
   if (i === 1 || i === 5) await page.screenshot({ path: `${OUT}/bh-${i}-lobby.png` });
   // look into the courtyard from the corridor
+  if (!(await g((i) => !!window.__game.campus.hostels[i].court?.length, i))) continue; // CombHostels have no courtyard
   await g((i) => { const G = window.__game; const H = G.campus.hostels[i]; const c = H.court.at(-1); const p = H.world(6.6, (c.v0 + c.v1) / 2); const t = H.world(c.u1, (c.v0 + c.v1) / 2); G.player.place(p, Math.atan2(-(t.x - p.x), -(t.z - p.z))); G.state.settings.view = 'third'; }, i);
   await page.waitForTimeout(900);
   if (i === 1 || i === 5) await page.screenshot({ path: `${OUT}/bh-${i}-court.png` });

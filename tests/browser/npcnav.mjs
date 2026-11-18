@@ -104,9 +104,9 @@ check(allBad.length === 0, 'no NPC ever stands or walks inside a building footpr
 check(routeBad.length === 0, 'no planned NPC route cuts through a building or a tree');
 
 // Screenshot: people walking on a road (third person, behind the player near the hostel → NAB route)
-await page.evaluate(() => { const g = window.__game; g.npcs.streamRadius = 1e9; const s = g.slots.find((x) => x.type === 'lesson'); g.state.day.clock = s.start - 6; });
+await page.evaluate(() => { const g = window.__game; g.npcs.streamRadius = 1e9; const s = g.slots.find((x) => x.type === 'lesson'); if (s) g.state.day.clock = s.start - 6; });
 await page.waitForTimeout(200);
-await page.evaluate(() => { const g = window.__game; const s = g.slots.find((x) => x.type === 'lesson'); g.state.day.clock = s.start + 0.2; });
+await page.evaluate(() => { const g = window.__game; const s = g.slots.find((x) => x.type === 'lesson'); if (s) g.state.day.clock = s.start + 0.2; });
 await page.waitForTimeout(3500);
 await page.keyboard.press('KeyV');
 await page.evaluate(() => {
@@ -126,7 +126,28 @@ await import('node:fs').then((fs) => fs.writeFileSync(`${OUT}/nav-routes.json`, 
 // --- NAB passages with real key presses ---
 const passages = await page.evaluate(() => (window.__game.campus.passages || []).map((p) => ({ name: p.name, a: p.a, b: p.b })));
 log('passages', JSON.stringify(passages));
-check(passages.length === 4, 'NAB has two crossings through each of its two blocks (4 passages)');
+const nabModule = await page.evaluate(() => (window.__game.campus.activeModules || []).some((m) => m.id === 'nab'));
+if (nabModule) { // the sunken NAB replaces the at-grade crossings with portals and stairs (tests/browser/nab.mjs)
+  check(passages.length === 0, 'sunken NAB: no at-grade passages left');
+  passages.length = 0;
+} else check(passages.length === 4, 'NAB has two crossings through each of its two blocks (4 passages)');
+
+// --- people walk down into the sunken Rotunda on its floor, not over it at grade ---
+const rot = await page.evaluate(async () => {
+  const g = window.__game; const C = g.campus; const n = [...g.npcs.npcs.values()][0];
+  g.npcs.streamRadius = 1e9; n.chase = null; n.group.visible = true;
+  n.teleport(new n.pos.constructor(40, 0, 0));
+  n.walkTo(C.pathTo(n.pos, null, new n.pos.constructor(0, -4.5, 2)));
+  n.speed = 1.6; const out = [];
+  for (let i = 0; i < 200 && n.path.length; i++) { await new Promise((r) => setTimeout(r, 150)); out.push([Math.hypot(n.pos.x, n.pos.z), n.pos.y]); }
+  return { out, end: [n.pos.x, n.pos.y, n.pos.z], left: n.path.length, ground: C.groundAt ? C.groundAt(0, 2) : 0 };
+});
+if (rot.ground < 0) {
+  const inside = rot.out.filter(([r]) => r < 16);
+  log('rotunda walk', JSON.stringify({ end: rot.end, left: rot.left, inside: inside.length, maxInside: Math.max(...inside.map((q) => q[1])) }));
+  check(rot.left === 0 && Math.abs(rot.end[1] + 4.5) < 0.05, 'an NPC sent to the Rotunda arrives on its floor (-4.5)');
+  check(inside.length > 0 && inside.every(([, y]) => y < -4.3), 'inside the Rotunda an NPC walks on the sunken floor, never at grade');
+}
 const walk = async (from, yaw, ms) => {
   await page.evaluate(([f, y]) => { const g = window.__game; g.state.settings.view = 'first'; g.player.place(new g.player.pos.constructor(f[0], 0, f[1]), y); }, [from, yaw]);
   await page.waitForTimeout(150);

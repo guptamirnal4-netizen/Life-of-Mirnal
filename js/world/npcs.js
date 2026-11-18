@@ -710,10 +710,17 @@ export class NPC {
 
   teleport(p) {
     if (this.placeFilter) p = this.placeFilter(p);
-    this.baseY = p.y || 0;
+    this.baseY = p.y || this.dropY(p.x, p.z);
     this.pos.set(p.x, this.baseY, p.z);
     this.path = [];
     this.seated = false;
+  }
+
+  // Height for someone put down at (x, z) with no height given: grade, except over a sunken court (the Rotunda,
+  // NAB), where it is the floor reachable from grade. Off the pits it stays 0, so nobody lands on a bench.
+  dropY(x, z) {
+    if (!this.floorAt || this.floorAt(x, z, -50) === 0) return 0;
+    return this.floorAt(x, z, 0);
   }
 
   walkTo(points, { sit = false, face = null } = {}) {
@@ -727,9 +734,12 @@ export class NPC {
     let target = this.path[0];
     if (this.chase && ball) target = ball.pos;
     let walking = false;
+    // On a world that knows its floors (floorAt), feet follow the real floor: stairs, sunken courts, upper floors.
+    // Route points then only steer; an explicit non-zero y on the final point (a stage, a seat) still wins on arrival.
+    const follow = this.floorAt && !this.chase;
     if (target) {
       const ty = this.chase ? 0 : target.y || 0;
-      this.baseY += THREE.MathUtils.clamp(ty - this.baseY, -dt * 1.5, dt * 1.5);
+      if (!follow) this.baseY += THREE.MathUtils.clamp(ty - this.baseY, -dt * 1.5, dt * 1.5);
       const dx = target.x - this.pos.x;
       const dz = target.z - this.pos.z;
       const dist = Math.hypot(dx, dz);
@@ -740,8 +750,8 @@ export class NPC {
       } else if (dist <= step) {
         this.pos.x = target.x;
         this.pos.z = target.z;
-        if (!this.chase) this.baseY = ty;
         if (!this.chase) this.path.shift();
+        if (!this.chase) this.baseY = follow ? (this.path.length || !target.y ? this.floorAt(this.pos.x, this.pos.z, this.baseY) : ty) : ty;
         if (!this.path.length && !this.chase) {
           if (this.sitOnArrive) this.seated = true;
           if (this.faceOnArrive !== null) this.group.rotation.y = this.faceOnArrive;
@@ -749,6 +759,7 @@ export class NPC {
       } else {
         this.pos.x += (dx / dist) * step;
         this.pos.z += (dz / dist) * step;
+        if (follow) { const f = this.floorAt(this.pos.x, this.pos.z, this.baseY); this.baseY = f > this.baseY ? f : Math.max(f, this.baseY - dt * 6); }
         const want = Math.atan2(dx, dz);
         let diff = want - this.group.rotation.y;
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -918,6 +929,7 @@ export class NPCManager {
   add(id, opts) {
     if (this.npcs.has(id)) return this.npcs.get(id);
     const npc = new NPC(this.scene, { id, ...opts });
+    if (this.campus?.floorAt) npc.floorAt = (x, z, y) => this.campus.floorAt(x, z, y);
     // On a campus that knows where people can stand (the BITS world), never place anyone inside a wall or tree.
     npc.placeFilter = (p) => (this.campus?.freeSpot ? this.campus.freeSpot(p) : p);
     this.npcs.set(id, npc);
@@ -952,7 +964,7 @@ export class NPCManager {
     if (!last) return;
     n.pos.x = last.x;
     n.pos.z = last.z;
-    n.baseY = last.y || 0;
+    n.baseY = last.y || n.dropY(last.x, last.z);
     n.path = [];
     if (n.sitOnArrive) n.seated = true;
     if (n.faceOnArrive !== null && n.faceOnArrive !== undefined) n.group.rotation.y = n.faceOnArrive;

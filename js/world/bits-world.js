@@ -806,6 +806,26 @@ export class BitsCampus extends Campus {
     return 0;
   }
 
+  // Where someone standing at height y over (x, z) has their feet: the ground (or a sunken court's floor), raised by
+  // any walkable surface (stair tread, landing, upper floor) they can step onto from y. The player's rule
+  // (player.js floorAt): a surface counts if its top is no more than 0.7 m above y. Used by NPCs and the film, so
+  // people walk down the Rotunda, NAB and hostel stairs instead of floating at grade.
+  floorAt(x, z, y = 0) {
+    const all = this.classroomColliders ? this.colliders.length + this.classroomColliders.length : this.colliders.length;
+    if (!this.walkGrid || this.walkGrid.count !== all || this.walkGrid.cc !== this.classroomColliders) {
+      const grid = new Map();
+      for (const c of this.colliders) if (c.walkable) this.gridInsert(grid, c, c, 4);
+      for (const c of this.classroomColliders || []) if (c.walkable) this.gridInsert(grid, c, c, 4);
+      this.walkGrid = { grid, count: all, cc: this.classroomColliders };
+    }
+    let f = this.groundAt(x, z);
+    for (const c of this.walkGrid.grid.get(`${Math.floor(x / 4)},${Math.floor(z / 4)}`) || []) {
+      if (c.enabled === false || c.maxY <= f || c.maxY > y + 0.7) continue;
+      if (x > c.minX && x < c.maxX && z > c.minZ && z < c.maxZ) f = c.maxY;
+    }
+    return f;
+  }
+
   // The detailed building (module and kit) whose footprint holds (x, z), if any.
   moduleAt(x, z, pad = 0) {
     return (this.modules || []).find(({ kit }) => kit.distance(x, z) <= pad) || null;
@@ -1110,6 +1130,9 @@ export class BitsCampus extends Campus {
     for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(mw - i * 2.2, 0.7, md - i * 2.2), i ? marble : '#ece4d4', 0, 6.95 + i * 0.7, zm);
     add(new THREE.SphereGeometry(Math.min(mw, md) * 0.28, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), marble, 0, 8.7, zm);
     add(curve(1.0, 3), marble, 0, 8.7 + Math.min(mw, md) * 0.27, zm);
+    // The temple closes the axis from the Clock Tower over the sunken Rotunda and NAB, about 700 m away: keep its
+    // white marble out of the distance haze so it reads from the Clock Tower as it does on campus.
+    g.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.fog = false; } });
     // corner chhatris on the platform and palms around it
     for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.chhatri(cx + dx * (w / 2 - 3), 1.8, cz + dz * (d / 2 - 3), 1.3);
     this.palmPts ||= [];

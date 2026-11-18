@@ -92,7 +92,7 @@ const goTo = async (x, z, ms = 9000, tol = 0.35) => {
 const shot = async (name) => { if (SHOTS) await page.screenshot({ path: `${OUT}/${name}.png` }); };
 const near = (p, x, y, z, tol = 0.6) => Math.abs(p.x - x) < tol && Math.abs(p.z - z) < tol && Math.abs(p.y - y) < 0.12;
 
-await page.goto(`${BASE}?explore&only=main-building`, { waitUntil: 'load' });
+await page.goto(`${BASE}?explore${process.env.FULL ? "" : "&only=main-building"}`, { waitUntil: "load" }); // FULL=1: the whole campus (the Rotunda then opens into the NAB courtyard)
 await page.waitForFunction(() => window.__game?.explorer && window.__game.campus?.modules, null, { timeout: 90000 });
 await page.waitForTimeout(1500);
 const info = await g(() => {
@@ -234,7 +234,6 @@ void lx;
 const rot = [
   ['east aisle', [27, 0], [16, 0], [1, 0]],
   ['west aisle', [-27, 0], [-16, 0], [-1, 0]],
-  ['south aisle', [0, 27], [0, 16], [0, 1]],
   ['NE doorway stair', [14, -29.5], [14, -19], [0, -1]],
   ['NW doorway stair', [-14, -29.5], [-14, -19], [0, -1]],
 ];
@@ -245,6 +244,19 @@ for (const [name, top, bottom] of rot) {
   check(near(p, bottom[0], -4.5, bottom[1], 0.8), `Rotunda ${name}: down to the floor`, p);
   p = await goTo(top[0], top[1], 20000);
   check(near(p, top[0], 0, top[1], 0.8), `Rotunda ${name}: back up to grade`, p);
+}
+// south: with the sunken NAB the Rotunda floor runs level into its north courtyard; without it, a south aisle stair
+const nabOn = await page.evaluate(() => (window.__game.campus.activeModules || []).some((m) => m.id === 'nab'));
+if (nabOn) {
+  await at(0, -4.5, 8, 0, 1); await page.waitForTimeout(200);
+  p = await goTo(5, 40, 20000);
+  check(near(p, 5, -4.5, 40, 0.8), 'Rotunda floor level into the NAB courtyard', p);
+  p = await goTo(0, 8, 20000);
+  check(near(p, 0, -4.5, 8, 0.8), 'NAB courtyard level back into the Rotunda', p);
+} else {
+  await at(0, 0, 27, 0, -1); await page.waitForTimeout(200);
+  p = await goTo(0, 16, 20000); check(near(p, 0, -4.5, 16, 0.8), 'Rotunda south aisle: down to the floor', p);
+  p = await goTo(0, 27, 20000); check(near(p, 0, 0, 27, 0.8), 'Rotunda south aisle: back up to grade', p);
 }
 // the north wall stops you falling in from the forecourt
 await at(0, 0, -29, 0, 1); await walk(1500);

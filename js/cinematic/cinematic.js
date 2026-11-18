@@ -178,9 +178,13 @@ export class Cinematic {
         this.camera.updateProjectionMatrix();
       }
       this.cur = w === 'school' ? this.school : this.campus;
+      // feet on the real floor (stairs, the sunken Rotunda and NAB) where the world knows it
+      const fa = this.cur?.floorAt ? (x, z, y) => this.cur.floorAt(x, z, y) : null;
+      for (const n of [this.guide, this.prof, this.teacher, ...this.cast]) n.floorAt = fa;
       this.guide.setHeight(s.guideHeight || 1.74);
       this.guide.singing = false;
       this.guide.seated = false;
+      this.guide.floorY = 0;
       this.guide.group.visible = false;
       this.bike.visible = false;
       this.birds.group.visible = false;
@@ -274,6 +278,7 @@ export class Cinematic {
     n.teleport(V(p[0] ?? p.x, y, p[1] ?? p.z));
     n.group.rotation.y = yaw;
     n.seated = sit;
+    if (sit) { n.baseY = y; n.pos.y = y; } // a seat's height is given, not looked up (benches are walkable boxes)
     n.path = [];
     if (speed) n.speed = speed;
     if (to) n.walkTo(to.map((q) => (q.isVector3 ? q.clone() : V(q[0], 0, q[1]))));
@@ -303,12 +308,14 @@ export class Cinematic {
     const s = s0 + speed * ctx.t;
     const p = walk.at(s);
     const moving = s < walk.total;
-    g.pos.set(p.x, 0, p.z);
+    const gy = g.floorAt ? g.floorAt(p.x, p.z, g.floorY ?? 0) : 0;
+    g.floorY = gy;
+    g.pos.set(p.x, gy, p.z);
     g.group.rotation.y = walk.heading(Math.min(s, walk.total - 0.01));
     g.gait = gait;
     g.rideSpeed = speed;
     g.moveSpeed = speed;
-    g.animate(ctx.dt, moving, 0);
+    g.animate(ctx.dt, moving, gy);
     ctx.g = { p, yaw: g.group.rotation.y, s };
     if (gait === 'ride') {
       const dir = V(Math.sin(g.group.rotation.y), 0, Math.cos(g.group.rotation.y));
@@ -495,10 +502,10 @@ export class Cinematic {
           const seats = S?.seats || [];
           seats.forEach((st, k) => { if (k < 16 && k !== 6) self.kid(k, [st.pos.x, st.pos.z], { yaw: Math.PI, sit: true }); });
           const g = self.guide; const st = seats[6];
-          if (st) { g.group.visible = true; g.pos.set(st.pos.x, 0, st.pos.z); g.group.rotation.y = Math.PI; g.seated = true; }
+          if (st) { g.group.visible = true; g.pos.set(st.pos.x, st.pos.y || 0, st.pos.z); g.baseY = st.pos.y || 0; g.group.rotation.y = Math.PI; g.seated = true; }
           self.extra(self.cast.indexOf(self.teacher), [(scr.x0 + scr.x1) / 2 - 2, scr.z0 + 1.2], { yaw: 0 });
         },
-        tick: (ctx) => { self.guide.animate(ctx.dt, false, 0); self.teacher.group.rotation.y = Math.sin(ctx.t * 0.7) * 0.5; },
+        tick: (ctx) => { self.guide.animate(ctx.dt, false, self.guide.baseY || 0); self.teacher.group.rotation.y = Math.sin(ctx.t * 0.7) * 0.5; },
         caption: { kicker: 'Class 1', title: 'The classroom', at: 1.2, hold: 6 },
       },
       {
@@ -571,12 +578,12 @@ export class Cinematic {
         look: curve([[cr.x0 + 3, 1.0, cr.z0 + 0.6], [(cr.x0 + cr.x1) / 2 - 1, 1.5, cr.z0]]),
         setup: () => {
           C.rebuildClassroom?.(13, 'MATH F111 · Mathematics I');
-          (C.seats || []).forEach((st, k) => { if (k < 15) self.extra(k, [st.pos.x, st.pos.z], { yaw: Math.PI, sit: true }); });
+          (C.seats || []).forEach((st, k) => { if (k < 15) self.extra(k, [st.pos.x, st.pos.z], { yaw: Math.PI, sit: true, y: st.pos.y }); });
           const g = self.guide; g.group.visible = true; const st = C.seats?.[15];
-          if (st) { g.pos.set(st.pos.x, 0, st.pos.z); g.group.rotation.y = Math.PI; g.seated = true; g.gait = 'walk'; }
-          self.extra(self.cast.indexOf(self.prof), [(cr.x0 + cr.x1) / 2 - 2, cr.z0 + 1.2], { yaw: 0 });
+          if (st) { g.pos.set(st.pos.x, st.pos.y || 0, st.pos.z); g.baseY = st.pos.y || 0; g.group.rotation.y = Math.PI; g.seated = true; g.gait = 'walk'; }
+          self.extra(self.cast.indexOf(self.prof), [(cr.x0 + cr.x1) / 2 - 2, cr.z0 + 1.2], { yaw: 0, y: cr.y0 || 0 });
         },
-        tick: (ctx) => { self.guide.animate(ctx.dt, false, 0); const p = self.prof; p.group.rotation.y = Math.sin(ctx.t * 0.6) * 0.5; },
+        tick: (ctx) => { self.guide.animate(ctx.dt, false, self.guide.baseY || 0); const p = self.prof; p.group.rotation.y = Math.sin(ctx.t * 0.6) * 0.5; },
         caption: { kicker: 'NAB', title: 'Lecture Theatre', at: 1.2, hold: 6 },
       },
       {
@@ -584,7 +591,7 @@ export class Cinematic {
         pos: curve([[cl.x0 + 1.0, 2.0, cl.z1 - 0.6], [cl.x0 + 4.0, 2.0, cl.z1 - 0.6]]),
         look: curve([[cl.x0 + 3.5, 0.9, cl.z0 + 1.0], [cl.x0 + 7.0, 0.9, cl.z0 + 1.0]]),
         // the seats are in front of the monitors, which face south: sit facing north
-        setup: () => { (C.spots.complab || []).slice(0, 6).forEach((p, k) => { if (k !== 4) self.extra(k, [p.x, p.z + 0.1], { yaw: Math.PI, sit: true }); }); },
+        setup: () => { (C.spots.complab || []).slice(0, 6).forEach((p, k) => { if (k !== 4) self.extra(k, [p.x, p.z + 0.1], { yaw: Math.PI, sit: true, y: p.y || 0 }); }); },
         caption: { kicker: 'Main Building', title: 'Computer Lab', at: 0.8, hold: 5 },
       },
       {
@@ -601,7 +608,7 @@ export class Cinematic {
         setup: () => {
           C.setMessFood?.('lunch');
           // seats run table by table, three a side: the first three face +z, the next three -z
-          (C.spots.mess || []).forEach((p, k) => { if (k % 4 !== 3 && k < 24) self.extra(k, [p.x, p.z], { yaw: Math.floor(k / 3) % 2 ? Math.PI : 0, sit: true }); });
+          (C.spots.mess || []).forEach((p, k) => { if (k % 4 !== 3 && k < 24) self.extra(k, [p.x, p.z], { yaw: Math.floor(k / 3) % 2 ? Math.PI : 0, sit: true, y: p.y || 0 }); });
         },
         caption: { kicker: 'Lunch', title: 'VKB Mess', at: 1.0, hold: 6 },
       },

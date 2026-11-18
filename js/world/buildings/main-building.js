@@ -752,8 +752,13 @@ export default {
     // amphitheatre terraces E, S and W with stair aisles at φ = 90, 180, 270
     const TIERS = 10; const T_IN = 17; const T_D = 0.8; const T_H = -ROT_Y / TIERS;
     const AISLE = 1.25;
-    const banks = [[WALL_END, 90], [90, 180], [180, 270], [270, 360 - WALL_END]];
-    const aisleAt = new Set([90, 180, 270]);
+    // With the sunken NAB built, its north courtyard (also at -4.5) runs straight into the Rotunda: the terraces
+    // open over the sector the courtyard meets (phi 147.5...188.5, where NAB's u 30 and u 47.5 walls reach the rim),
+    // so the floor is continuous and the Clock Tower looks down the courtyard to the Saraswati Mandir.
+    const nabOn = (campus.activeModules || []).some((m) => m.id === 'nab');
+    const OPEN = [147.5, 188.5];
+    const banks = nabOn ? [[WALL_END, 90], [90, OPEN[0]], [OPEN[1], 270], [270, 360 - WALL_END]] : [[WALL_END, 90], [90, 180], [180, 270], [270, 360 - WALL_END]];
+    const aisleAt = new Set(nabOn ? [90, 270] : [90, 180, 270]);
     for (let k = 1; k <= TIERS; k++) {
       const r0 = T_IN + T_D * (k - 1); const r1 = r0 + T_D; const top = ROT_Y + T_H * k;
       const trim = (Math.asin(AISLE / r0) * 180) / Math.PI;
@@ -786,9 +791,10 @@ export default {
     // the stair aisles (24 risers of 0.1875 over the 8 m of terraces)
     kit.flight(T_IN, 0, ROT_Y, [1, 0], 24, 0.1875, 2 * AISLE, STONE, { tread: (TIERS * T_D) / 24 });
     kit.flight(-T_IN, 0, ROT_Y, [-1, 0], 24, 0.1875, 2 * AISLE, STONE, { tread: (TIERS * T_D) / 24 });
-    kit.flight(0, T_IN, ROT_Y, [0, 1], 24, 0.1875, 2 * AISLE, STONE, { tread: (TIERS * T_D) / 24 });
-    for (const [a, b] of [[[ROT_R + 1.5, 0], [12, 0]], [[-ROT_R - 1.5, 0], [-12, 0]], [[0, ROT_R + 1.5], [0, 12]]]) kit.navLinks.push([a, b]);
-    kit.entrance('Rotunda east steps', ROT_R + 0.8, 0, [1, 0]); kit.entrance('Rotunda west steps', -ROT_R - 0.8, 0, [-1, 0]); kit.entrance('Rotunda south steps', 0, ROT_R + 0.8, [0, 1]);
+    if (!nabOn) kit.flight(0, T_IN, ROT_Y, [0, 1], 24, 0.1875, 2 * AISLE, STONE, { tread: (TIERS * T_D) / 24 });
+    for (const [a, b] of [[[ROT_R + 1.5, 0], [12, 0]], [[-ROT_R - 1.5, 0], [-12, 0]], nabOn ? [[0, 12], [5, 30]] : [[0, ROT_R + 1.5], [0, 12]]]) kit.navLinks.push([a, b]);
+    kit.entrance('Rotunda east steps', ROT_R + 0.8, 0, [1, 0]); kit.entrance('Rotunda west steps', -ROT_R - 0.8, 0, [-1, 0]);
+    if (!nabOn) kit.entrance('Rotunda south steps', 0, ROT_R + 0.8, [0, 1]);
     // bougainvillea beds at the NE and NW rims, date palms either side of the south opening
     for (const s of [-1, 1]) {
       const bs = new THREE.Shape();
@@ -804,6 +810,9 @@ export default {
     campus.statuePts ||= [];
     campus.statuePts.push([C - 4, -43], [C + 4, -43], [-TR1 + 1.4, TZTOP - 1], [TR0 + 1.4, TZTOP - 1]);
     for (let x = W0 + 4; x < E1; x += 11) campus.statuePts.push([x, -49]);
+    // the view axis: from the porch over the Rotunda and NAB to the Saraswati Mandir (about 9 degrees east of
+    // south). No scattered tree may stand between the porch and the Rotunda rim.
+    for (let z = -42; z <= -24; z += 4) campus.statuePts.push([C + 0.154 * (z + 50), z]);
 
     // ---- gameplay spots: assembly on the Rotunda floor, the principal on the porch terrace ----
     campus.spots.assembly = [];
