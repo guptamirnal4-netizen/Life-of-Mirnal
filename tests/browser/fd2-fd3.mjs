@@ -264,7 +264,9 @@ if (SHOTS) {
   await view('aerial-both', [-20, 170, 120], [-20, 0, -50]);
   await view('aerial-fd3', [-60, 90, 60], [-110, 0, -45]);
   await view('aerial-fd2', [150, 90, 40], [90, 0, -75]);
-  await view('int-fd2-first-verandah', [70, 7.0, -78], [100, 6.5, -85]);
+  // the first-floor verandah of FD-II's west range, looking north along it
+  { const [x0, z0] = await W('fd2', 16.9, 70); const [x1, z1] = await W('fd2', 16.9, 30); await view('int-fd2-first-verandah', [x0, 7.0, z0], [x1, 6.6, z1]); }
+  { const [x0, z0] = await W('fd3', 46.8, 99); const [x1, z1] = await W('fd3', 46.8, 90); await view('int-fd3-ground-verandah-south', [x0, 1.7, z0], [x1, 1.7, z1]); }
 }
 
 check(errors.length === 0, 'no console errors');

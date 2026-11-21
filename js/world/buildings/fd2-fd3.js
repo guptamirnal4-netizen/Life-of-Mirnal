@@ -284,6 +284,12 @@ function buildQuad(K, Q, ctx) {
   // the wall's thickness
   for (const wl of Object.values(walls)) {
     for (const o of wl.ops) if (Math.abs(o.y0 - FL1) < 0.01 && o.kind !== 'window') A(wl.axis, o.a - o.w / 2, o.a + o.w / 2, wl.c - wl.thick / 2 - 0.02, wl.c + wl.thick / 2 + 0.02, FL1 - 0.3, FL1, SLAB, { walkable: true });
+    // and a stone threshold through the ground-floor room and gameplay doors
+    for (const o of wl.ops) {
+      if (o.y0 !== 0 || (o.kind !== 'roomdoor' && o.kind !== 'gameplay')) continue;
+      const [a0, a1, c0, c1] = [o.a - o.w / 2, o.a + o.w / 2, wl.c - wl.thick / 2 - 0.03, wl.c + wl.thick / 2 + 0.03];
+      if (wl.axis === 'u') ground(a0, a1, c0, c1, 0.03, STONE); else ground(c0, c1, a0, a1, 0.03, STONE);
+    }
   }
   // is (along a, floor y) clear of every opening in this wall (by `pad` metres)?
   const clear = (wl, a, half, y0, y1, pad = 0.35) => !wl.ops.some((o) => a + half > o.a - o.w / 2 - pad && a - half < o.a + o.w / 2 + pad && y1 > o.y0 && y0 < o.y1);
@@ -430,7 +436,7 @@ function buildQuad(K, Q, ctx) {
     }
     // lawn, a perimeter path and the cross paths to the arches on the centre lines
     const cu = (ct.u0 + ct.u1) / 2; const cv = (ct.v0 + ct.v1) / 2;
-    ground(ct.u0 + 0.3, ct.u1 - 0.3, ct.v0 + 0.3, ct.v1 - 0.3, 0.035, LAWN);
+    ground(ct.u0, ct.u1, ct.v0, ct.v1, 0.035, LAWN); // right up to the verandah paving's edge
     ground(ct.u0 + 0.3, ct.u1 - 0.3, ct.v0 + 0.6, ct.v0 + 2.2, 0.045, STONE); ground(ct.u0 + 0.3, ct.u1 - 0.3, ct.v1 - 2.2, ct.v1 - 0.6, 0.045, STONE);
     ground(ct.u0 + 0.6, ct.u0 + 2.2, ct.v0 + 2.2, ct.v1 - 2.2, 0.045, STONE); ground(ct.u1 - 2.2, ct.u1 - 0.6, ct.v0 + 2.2, ct.v1 - 2.2, 0.045, STONE);
     ground(cu - 1.1, cu + 1.1, ct.v0 + 2.2, cv - 2.4, 0.046, STONE); ground(cu - 1.1, cu + 1.1, cv + 2.4, ct.v1 - 2.2, 0.046, STONE);
@@ -503,6 +509,11 @@ function buildQuad(K, Q, ctx) {
   for (const st of Q.stairs) {
     const wl = walls[st.wall];
     const hole = K.dogleg(st.u0, st.u1, st.v0, st.v1, 0, FL1, { along: st.along, reverse: st.reverse, wall: null, name: st.name, key: 't:terrazzo:#c9c6bd' });
+    { // the stair hall's ground floor, through the opening to the verandah paving
+      const c0 = wl.c - wl.thick / 2 - 0.02; const c1 = wl.c + wl.thick / 2 + 0.02;
+      if (wl.axis === 'u') ground(st.u0, st.u1, Math.min(st.v0, c0), Math.max(st.v1, c1), 0.025, 't:terrazzo:#c9c6bd');
+      else ground(Math.min(st.u0, c0), Math.max(st.u1, c1), st.v0, st.v1, 0.025, 't:terrazzo:#c9c6bd');
+    }
     // spare floor at the start end is a first-floor landing next to the front wall (the floor above the way in)
     if (st.along === 'u') {
       const [l0, l1] = st.reverse ? [hole.u1, st.u1] : [st.u0, hole.u0];
