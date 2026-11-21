@@ -21,5 +21,6 @@ import library from './library.js';
 import nab from './nab.js';
 import mainBuilding from './main-building.js';
 import sac from './sac.js';
+import sportsGrounds from './sports-grounds.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding, sac];
+export const BUILDING_MODULES = [library, nab, mainBuilding, sac, sportsGrounds];
