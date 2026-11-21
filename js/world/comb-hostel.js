@@ -217,15 +217,21 @@ function archHead(cx, hw, spring, apex, bulge = 0.12) {
   return out;
 }
 
-function scrollGrille(g, x0, x1, top, bot, color, step = 46) {
-  g.strokeStyle = color; g.lineWidth = 5; g.lineCap = 'round';
+// A decorative window grille: vertical bars with a staggered lattice of scrolled ovals between them, a frame
+// along the bottom.
+function scrollGrille(g, x0, x1, top, bot, color, step = 34) {
+  g.strokeStyle = color; g.lineCap = 'round';
+  g.lineWidth = 4;
   for (let x = x0 + step / 2; x < x1; x += step) { g.beginPath(); g.moveTo(x, top); g.lineTo(x, bot); g.stroke(); }
-  for (let x = x0; x < x1; x += step) {
-    for (let y = top + 20; y < bot; y += 58) {
-      g.beginPath(); g.moveTo(x + step / 2, y); g.bezierCurveTo(x + 2, y + 3, x + 2, y + 28, x + 18, y + 28); g.bezierCurveTo(x + 28, y + 28, x + 28, y + 16, x + 20, y + 15); g.stroke();
-      g.beginPath(); g.moveTo(x + step / 2, y + 29); g.bezierCurveTo(x + step - 2, y + 32, x + step - 2, y + 57, x + 28, y + 57); g.bezierCurveTo(x + 18, y + 57, x + 18, y + 45, x + 26, y + 44); g.stroke();
+  g.lineWidth = 3.5;
+  let row = 0;
+  for (let y = top + 18; y < bot - 10; y += 30, row++) {
+    for (let x = x0 + (row % 2 ? step / 2 : 0); x < x1 + step; x += step) {
+      g.beginPath(); g.ellipse(x, y, step * 0.36, 13, 0, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(x, y, 3.5, 0, Math.PI * 2); g.stroke();
     }
   }
+  g.lineWidth = 7; g.beginPath(); g.moveTo(x0, bot - 4); g.lineTo(x1, bot - 4); g.stroke();
 }
 
 function rosette(g, x, y, r, col) {
@@ -573,7 +579,7 @@ function porch(H, ve, { name, open = [true, false, false], gate = 'scroll', st =
   H.box(f - 0.2, f + 0.4, ve - PW / 2 - 0.2, ve + PW / 2 + 0.2, R - 0.42, R - 0.24, c(st.band || st.trim), { collide: false });
   H.box(f + 0.4, 0, vi0, vi1, R - 0.4, R - 0.22, c('#f1ede4'), { collide: false });
   H.box(-1.3, -1.22, ve - 0.6, ve + 0.6, R - 0.46, R - 0.4, 'e:#fffaf0', { collide: false });
-  const slab = worldBoxGeometry(PD, 0.22, PW, TEX_SIZE.concrete); slab.translate(f / 2, R - 0.11, ve); H.geo('t:concrete:#d6d0c4', slab);
+  const slab = worldBoxGeometry(PD, 0.22, PW, TEX_SIZE.concrete); slab.translate(f / 2, R - 0.11, ve); H.geo('t:concrete:#ddd3c0', slab);
   H.box(f, f + 0.25, ve - PW / 2, ve + PW / 2, R, R + 0.95, wall, { collide: false });
   H.box(f - 0.1, f + 0.35, ve - PW / 2 - 0.1, ve + PW / 2 + 0.1, R + 0.95, R + 1.07, c('#f4efe4'), { collide: false });
   if (st.band) H.box(f - 0.03, f, ve - PW / 2, ve + PW / 2, R + 0.62, R + 0.72, c(st.band), { collide: false });
@@ -608,7 +614,7 @@ function slab(H, u0, u1, v0, v1) {
   if (u1 - u0 < 0.01 || v1 - v0 < 0.01) return;
   const g = worldBoxGeometry(u1 - u0, 0.04, v1 - v0, TEX_SIZE.concrete);
   g.translate((u0 + u1) / 2, R - 0.02, (v0 + v1) / 2);
-  H.geo('t:concrete:#d6d0c4', g);
+  H.geo('t:concrete:#ddd3c0', g);
 }
 
 // Rows of solar panels on an arm's roof (the drone view shows them on some arms only).
@@ -820,7 +826,7 @@ function roofShape(B, outer, holes) {
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / TEX_SIZE.concrete, uv.getY(i) / TEX_SIZE.concrete);
   g.rotateX(-Math.PI / 2);
   g.translate(0, R, 0);
-  B.geo('t:concrete:#d6d0c4', g);
+  B.geo('t:concrete:#ddd3c0', g);
 }
 
 // Bhagirath: the comb mirrored, its porch facing west towards Gandhi and Krishna, the gates shut.
@@ -853,16 +859,21 @@ function block(host, b, spec) {
   const st = STYLE[spec.style];
   facade(B, [outer, ...holes], isIn, st, { parapet: true });
   roofShape(B, outer, holes);
-  // towers: over the middle of the longest outer faces, wherever a 3.4 m square fits inside
+  // towers (stair heads and tanks): along the longest outer faces, one per 25-40 m, wherever a 3.4 m square fits
   const E = edgesOf(outer, isIn).sort((p, q) => q.len - p.len);
+  const perimeter = E.reduce((a, e) => a + e.len, 0);
+  const want = Math.max(2, Math.round(perimeter / 70));
   let towers = 0;
   for (const e of E) {
-    if (towers >= Math.max(2, Math.round(e.len / 60)) || e.len < 12) break;
-    const m = [(e.a[0] + e.b[0]) / 2 - e.n[0] * 2.2, (e.a[1] + e.b[1]) / 2 - e.n[1] * 2.2];
-    const ok = [[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]].every(([du, dv]) => isIn(m[0] + du, m[1] + dv));
-    if (!ok) continue;
-    mumty(B, m[0] - 1.7, m[0] + 1.7, m[1] - 1.7, m[1] + 1.7, towers % 2 === 0);
-    towers++;
+    if (towers >= want || e.len < 12) break;
+    const n = Math.max(1, Math.round(e.len / 40));
+    for (let j = 0; j < n && towers < want; j++) {
+      const s = (e.len * (j + 0.5)) / n;
+      const m = [e.a[0] + e.d[0] * s - e.n[0] * 2.2, e.a[1] + e.d[1] * s - e.n[1] * 2.2];
+      if (![[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]].every(([du, dv]) => isIn(m[0] + du, m[1] + dv))) continue;
+      mumty(B, m[0] - 1.7, m[0] + 1.7, m[1] - 1.7, m[1] + 1.7, towers % 2 === 0);
+      towers++;
+    }
   }
   // the doorway: a dark recess, steps and a canopy, a quarter of the way along the longest face
   const e = E[0]; const s = e.len * 0.25;
@@ -899,7 +910,7 @@ function srGate(host) {
   // the name board on two posts beside the gate
   for (const v of [4.2, 8.2]) B.box(-0.06, 0.06, v - 0.06, v + 0.06, 0, 2.9, 'c:#2b2b2b');
   B.box(-0.05, 0.05, 3.9, 8.5, 2.2, 2.95, 'c:#f7f7f4', { collide: false });
-  const sign = new THREE.PlaneGeometry(4.5, 0.66); sign.rotateY(-Math.PI / 2); sign.translate(-0.06, 2.58, 6.2);
+  const sign = new THREE.PlaneGeometry(4.5, 0.66); sign.rotateY(Math.PI / 2); sign.translate(0.06, 2.58, 6.2); // faces the way in, from the campus
   B.geo('n:sign:श्रीनिवास रामानुजन भवन', sign);
   bake(B, host);
 }
