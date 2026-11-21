@@ -233,3 +233,18 @@ Hand-offs:
 - **hostels-shankar-vyas-vk:** RP's north-west arm touches VK's east wing at about x 266–283, z 15–34. Coordinate the shared wall.
 - **landscape-water / roads-paths:** the tree belt between Bhagirath and Ashok (x ≈ 300–310); the forecourt, gate pillars and planter at Ashok's porch; the road between Ashok and CVR.
 - **workshops-halls:** none.
+
+## Build notes (phase 7, hostels-newer)
+
+Built in `js/world/comb-hostel.js` (CombHostel overrides only; the shared Hostel base class is untouched). Test: `tests/browser/hostels-newer.mjs`.
+
+- **Ashok, Rana Pratap, Malviya-A (walk-in combs).** The OSM outline is squared up into a spine plus arms. Facade all round in the shared "new Bhawan" design: cream render, sand-beige trim and maroon bands, cusped arched ground-floor windows with white scrolled grilles, deep first-floor bays between projecting fins, cornice and coped parapet. The three-arch porch sits on the spine's road face, with raised cusped surrounds. The left arch is open and the middle and right ones have white iron gates. It has the Devanagari name band (अशोक-भवन, राणाप्रताप-भवन, पंडित मदन मोहन मालवीय भवन), a first-floor loggia with paired turned columns, its own parapet, a forecourt and a cycle stand. Inside: vestibule, then lobby, study room, common room, washrooms and rooms along the spine. Each arm has a corridor and rooms, and a dog-leg wing stair where the arm leaves the spine, under a roof mumty. The main stair runs up to the roof terrace (parapets, tanks, washing lines), and solar panels sit on two arms only. Interiors are zoned like the other Bhawans.
+- **Bhagirath (closed).** The same comb, mirrored, with its porch facing west. Light-blue reveals and green collapsible gates (SWD photo), all three arches shut. It stays closed until the boys/girls question in section I is settled.
+- **Malviya-B, SR, Meera (closed, footprints not in the data file).** Their outlines are defined in `ANNEX` at the end of `comb-hostel.js` (OSM ODbL, converted with COORDINATES.md) and appended to `BITS_CAMPUS.buildings` at module load. This happens only if the data doesn't already have them (matched by `annex` id or name), so moving them into `data/bits-campus.js` later is a no-op here.
+  - Malviya-B, relation 5372379: outer ring x -265.7…-216.3, z 135.5…206, with four courts. Comb style.
+  - SR Bhawan, relation 5372462: outer ring x -170.8…13.1, z -302.9…-197.8, with two courts. White "modern" style with sunshades. Its gate (yellow pillars, a steel gate with diagonal bars, a name board) stands on the service road at about (5, -237); that position is an approximation.
+  - Meera, relation 20803053: way 360838104 (the jagged block, x -205.7…-155.8, z 664.6…697.7, comb style) and way 360838157 (the long bar, x -186.4…-88.3, z 645.9…673.2, peach and white).
+  - The exact vertex lists to add to the data file are the `outer` and `holes` arrays in `ANNEX`.
+- **Sight line.** Nothing built here comes within 157 m of the Clock Tower to Saraswati Mandir axis.
+- **Performance.** Measured from outside, against 032ec0e: CPU per frame is up 0.0–0.25 ms (about 0–6 %) and draw calls up 10–20. Frame time stays at vsync (16.7 ms) in both.
+- **Approximations.** No interior evidence for these Bhawans, so room sizes, corridor sides and stair positions are inferred. Each closed block's single doorway sits a quarter of the way along its longest face. Meera's block colours are assigned by guess.

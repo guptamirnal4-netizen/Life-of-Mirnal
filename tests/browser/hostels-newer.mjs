@@ -280,7 +280,7 @@ if (SHOTS) {
   await view('malviya-aerial', [-60, 90, ve3 + 70], [30, 0, ve3]);
   await worldView('bhagirath-street', [212, 1.7, 236], [240, 4, 247]);
   await worldView('bhagirath-ashok-aerial', [200, 110, 340], [300, 0, 240]);
-  await worldView('malviya-b-street', [-282, 1.7, 182], [-258, 4, 170]);
+  await worldView('malviya-b-street', [-286, 1.7, 160], [-258, 4, 172]);
   await worldView('malviya-a-b-aerial', [-300, 80, 240], [-210, 0, 165]);
   await worldView('sr-street', [12, 1.7, -224], [-40, 4, -236]);
   await worldView('sr-gate', [22, 1.7, -240], [3, 2, -237]);
