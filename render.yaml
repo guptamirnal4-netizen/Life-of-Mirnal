@@ -1,0 +1,28 @@
+# Render Blueprint: the multiplayer paintball game server only (the static site stays on Vercel).
+# Builds from the repo root so the server can import the shared rules in js/paintball/, but installs only
+# server/package.json's production dependencies (Colyseus): no dev dependencies, no three.js or browser assets.
+services:
+  - type: web
+    name: play-with-bitsians-server
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --omit=dev --prefix server
+    startCommand: npm run server
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - server/**
+        - js/paintball/**
+        - render.yaml
+        - package.json
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Render provides PORT; the server binds 0.0.0.0:$PORT. Extra browser origins (comma-separated) besides
+      # https://life-of-mirnal.vercel.app and localhost:
+      - key: ALLOWED_ORIGINS
+        value: ""

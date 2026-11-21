@@ -62,6 +62,7 @@ export class PaintballRoom extends Room {
       if (q.length > 60) q.splice(0, q.length - 60);
     });
     on('ready', lobby((client, p, msg) => { p.ready = !!msg.ready; }));
+    on('nick', lobby((client, p, msg) => { p.nickname = cleanNick(msg.nickname, [...s.players.entries()].filter(([id]) => id !== client.sessionId).map(([, q]) => q.nickname)); }));
     on('custom', (client, p, msg) => {
       if (ACTIVE.has(s.phase)) return client.send('error', { code: 'in-match', message: 'Change your look between paintball matches.' });
       Object.assign(p, cleanLook(msg, p));

@@ -1,0 +1,18 @@
+{
+  "name": "play-with-bitsians-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multiplayer paintball game server (Colyseus 0.18) for Play with BITSians. Imports the shared rules from ../js/paintball/.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "server": "node index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@colyseus/core": "^0.18.29",
+    "@colyseus/schema": "^5.0.50",
+    "@colyseus/ws-transport": "^0.18.5",
+    "express": "^5.1.0"
+  }
+}
