@@ -104,7 +104,7 @@ export class MatchView {
     const show = alive && this.view === 'first' && !zoomed;
     if (id && id !== this.vmId) {
       if (this.vm) cam.remove(this.vm);
-      this.vm = blaster(id); this.vm.rotation.y = Math.PI; this.vm.scale.setScalar(1.35); this.vmId = id;
+      this.vm = blaster(id); this.vm.rotation.y = Math.PI; this.vm.scale.setScalar(0.85); this.vmId = id;
       this.vm.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 5; } });
       cam.add(this.vm);
     }
@@ -112,7 +112,7 @@ export class MatchView {
       this.vm.visible = !!show;
       const reload = this.me && this.me.reloadUntil > state.now ? 0.25 : 0;
       this.kick = Math.max(0, (this.kick || 0) - dt * 6);
-      this.vm.position.set(0.2, -0.21 - reload, -0.42 + this.kick * 0.06);
+      this.vm.position.set(0.24, -0.24 - reload, -0.5 + this.kick * 0.05);
       this.vm.rotation.x = reload * 1.4 + this.kick * 0.1;
     }
   }
@@ -177,7 +177,7 @@ export class MatchView {
     mesh.scale.setScalar(m.e === 'launcher' ? 2.6 : m.e === 'spread' ? 0.8 : 1);
     mesh.position.set(m.x, m.y, m.z);
     // my own paintballs start at the blaster's muzzle, not between my eyes
-    if (m.o === this.room.sessionId) { mesh.position.y -= 0.18; this.kick = 1; }
+    if (m.o === this.room.sessionId) { mesh.position.y -= 0.16; this.kick = 1; }
     this.fx.add(mesh);
     this.balls.set(m.i, { mesh, v: new THREE.Vector3(m.vx, m.vy, m.vz), g: e.gravity, life: e.range / e.speed + 1.5 });
     const d = this.camera.position.distanceTo(mesh.position);

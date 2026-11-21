@@ -17,7 +17,7 @@ const OUT = process.argv[2] || '/private/tmp/claude-501/-Users-mirnal-Documents-
 fs.mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((res) => { const s = net.createServer(); s.listen(0, () => { const p = s.address().port; s.close(() => res(p)); }); });
-const fails = []; const errors = [];
+const fails = []; const errors = []; const expected = [];
 const check = (ok, what) => { console.log(ok ? 'PASS' : 'FAIL', what); if (!ok) fails.push(what); };
 
 const GAME_PORT = await freePort();
@@ -40,11 +40,17 @@ const PB = `pbserver=${encodeURIComponent(`ws://localhost:${GAME_PORT}`)}`;
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
 async function newPage(name, opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, permissions: ['microphone', 'clipboard-read', 'clipboard-write'], ...opts });
+  const { expectNetworkFailures, ...ctxOpts } = opts;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, permissions: ['microphone', 'clipboard-read', 'clipboard-write'], ...ctxOpts });
   const page = await ctx.newPage();
   page.setDefaultTimeout(30000);
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ERR_CONNECTION_REFUSED/.test(m.text())) errors.push(`${name}: ${m.text()}`); });
+  page.on('console', (m) => {
+    if (m.type() !== 'error' || /favicon/.test(m.text())) return;
+    // Chrome logs the failed request itself in the two deliberate failure cases (a wrong room code, no server)
+    if (opts.expectNetworkFailures && /Failed to load resource|ERR_CONNECTION_REFUSED/.test(m.text())) return expected.push(`${name}: ${m.text()}`);
+    errors.push(`${name}: ${m.text()}`);
+  });
   page.name = name;
   return page;
 }
@@ -75,12 +81,12 @@ try {
   for (const p of [A, B, C]) await p.waitForFunction(() => window.__pb?.state?.players.size === 3, null, { timeout: 30000 });
   check(true, 'three pages in one room (code typed, share link opened)');
   // a wrong code is refused plainly
-  const D = await newPage('D');
+  const D = await newPage('D', { expectNetworkFailures: true });
   await D.goto(`${BASE}?paintball&${PB}`, { waitUntil: 'load' });
   await D.locator('input[aria-label="Room code"]').fill('ZZZZZ');
   await D.locator('[data-pb=join]').click();
-  await D.locator('[data-pb=status]').waitFor();
-  check(/No room with that code|Could not join/.test(await D.locator('[data-pb=status]').innerText()), 'a wrong code is refused with a clear message');
+  const wrong = await D.waitForFunction(() => /No room with that code|Could not join/.test(document.querySelector('[data-pb=status]')?.textContent || ''), null, { timeout: 15000 }).then(() => true, () => false);
+  check(wrong, 'a wrong code is refused with a clear message');
   await D.context().close();
 
   // customise on B: character, outfit, mask, accessory, equipment
@@ -121,8 +127,8 @@ try {
   await sleep(400);
   const seen = await A.evaluate((start) => { const v = window.__pb.view; const out = {}; for (const [id, a] of v.avatars) if (id !== window.__pb.room.sessionId) out[id] = Math.hypot(a.npc.group.position.x - start[id][0], a.npc.group.position.z - start[id][1]); return out; }, startPos);
   check(Object.keys(seen).length === 2 && Object.values(seen).every((d) => d > 2), `page A sees B and C move (${JSON.stringify(seen)})`);
-  const seenByB = await B.evaluate(() => [...window.__pb.view.avatars.entries()].filter(([id, a]) => id !== window.__pb.room.sessionId && a.npc.group.visible).length);
-  check(seenByB === 2, 'page B renders the other two players');
+  const seenByB = await B.waitForFunction(() => [...window.__pb.view.avatars.entries()].filter(([id, a]) => id !== window.__pb.room.sessionId && a.npc.group.visible).length === 2, null, { timeout: 6000 }).then(() => true, () => false);
+  check(seenByB, 'page B renders the other two players (after spawn protection stops blinking them)');
 
   // set up a tag: A faces B across a clear lane (test placement), then fires from the page
   const ids = await A.evaluate(() => ({ a: window.__pb.room.sessionId }));
@@ -232,18 +238,20 @@ try {
   check(true, 'Campus Free Roam opens');
   await T.goto(BASE, { waitUntil: 'load' });
   await T.waitForTimeout(500);
-  await T.evaluate(() => window.__game.playFilm());
+  await T.evaluate(() => { window.__game.playFilm(); });
   await T.waitForFunction(() => !!window.__game.film, null, { timeout: 30000 });
   check(true, 'the film still plays');
   // the paintball button with the server down says so plainly (no fake rooms)
-  await T.goto(`${BASE}?paintball&pbserver=${encodeURIComponent('ws://localhost:1')}`, { waitUntil: 'load' });
-  await T.locator('[data-pb=create]').click();
-  await T.locator('[data-pb=status]').waitFor();
-  check(/Waking the game server|Connecting/.test(await T.locator('[data-pb=status]').innerText()), 'an unreachable server shows the waking message (with a retry later)');
-  await T.context().close();
+  const U = await newPage('unreachable', { expectNetworkFailures: true });
+  await U.goto(`${BASE}?paintball&pbserver=${encodeURIComponent(`ws://localhost:${await freePort()}`)}`, { waitUntil: 'load' });
+  await U.locator('[data-pb=create]').click();
+  const waking = await U.waitForFunction(() => /Waking the game server/.test(document.querySelector('[data-pb=status]')?.textContent || ''), null, { timeout: 20000 }).then(() => true, () => false);
+  check(waking, 'an unreachable server shows "Waking the game server… (can take ~30 s)"');
+  await T.context().close(); await U.context().close();
 } catch (e) {
   check(false, `exception: ${e.stack || e.message}`);
 } finally {
+  console.log('EXPECTED network failures (deliberate wrong code / no server):', expected.length);
   console.log('ERRORS', JSON.stringify(errors));
   check(errors.length === 0, 'no console errors');
   await browser.close();

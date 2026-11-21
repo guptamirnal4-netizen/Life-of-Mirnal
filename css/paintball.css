@@ -65,7 +65,7 @@
 #pb-hud .timer.ot { color: #ffd23d; }
 #pb-hud .tscore { padding: 4px 10px; border-radius: 10px; font-weight: 800; background: rgba(10,12,28,0.6); border-bottom: 4px solid var(--team); }
 #pb-hud .myscore { position: absolute; top: 10px; left: 12px; padding: 6px 12px; border-radius: 12px; background: rgba(10,12,28,0.6); font-weight: 700; }
-#pb-hud .feed { position: absolute; top: 56px; right: 12px; display: grid; gap: 4px; justify-items: end; max-width: 46vw; }
+#pb-hud .feed { position: absolute; top: 112px; right: 12px; display: grid; gap: 4px; justify-items: end; max-width: 46vw; }
 #pb-hud .feed div { background: rgba(10,12,28,0.65); padding: 4px 10px; border-radius: 10px; font-size: 14px; animation: pb-in 0.25s; }
 @keyframes pb-in { from { transform: translateX(30px); opacity: 0; } }
 #pb-hud .paint { position: absolute; left: 14px; bottom: 16px; width: min(260px, 40vw); }
@@ -128,8 +128,10 @@
 #pb-touch .p-menu { left: calc(66px + env(safe-area-inset-left)); top: calc(96px + env(safe-area-inset-top)); }
 body.pb-mode #touch .tbtn { display: none; }
 body.touch #pb-hud .paint { bottom: 16px; left: 50%; transform: translateX(-50%); width: 40vw; }
-body.touch #pb-hud .ammo { bottom: auto; top: 110px; right: 12px; }
+body.touch #pb-hud .ammo { bottom: auto; top: 58px; right: auto; left: 50%; transform: translateX(-50%); text-align: center; }
+body.touch #pb-hud .reload { margin: 0 auto; }
 body.touch #pb-hud .ammo .count { font-size: 22px; }
 body.touch #pb-hud .minimap { width: 120px; height: 69px; }
 body.touch #pb-hud .hint { display: none; }
-body.touch #pb-hud .feed { top: 86px; }
+body.touch #pb-hud .feed { top: 84px; }
+body.touch #pb-hud .ammo .name { font-size: 12px; }

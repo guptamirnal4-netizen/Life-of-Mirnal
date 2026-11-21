@@ -13,7 +13,7 @@ export const BLURB = {
   standard: 'All-rounder: steady, accurate, three hits to tag.',
   rapid: 'Sprays foam paintballs fast; light paint per hit.',
   burst: 'Three paintballs per trigger pull.',
-  spread: 'A fan of seven paintballs; deadly up close.',
+  spread: 'A fan of seven paintballs; great up close.',
   precision: 'Long range, heavy paint; right-click to zoom.',
   launcher: 'Lobs a paint shell that splashes everyone nearby.',
 };

@@ -20,6 +20,7 @@ export function originAllowed(origin, extra = []) {
 }
 
 export async function startServer({ port = Number(process.env.PORT) || 2567, host = process.env.HOST || '0.0.0.0', test = process.env.PB_TEST === '1', origins = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean), quiet = false } = {}) {
+  matchMaker.controller.standardHttpStatus = true; // a missing room is a 404, not Colyseus' 522 (SDK 0.18.10+ reads the body)
   // Browsers: only the game's own origins may call the matchmaking HTTP routes or open a WebSocket.
   matchMaker.controller.getCorsHeaders = (headers) => {
     const o = headers.get('origin');

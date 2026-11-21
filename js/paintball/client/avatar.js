@@ -36,7 +36,7 @@ export function makeAvatar(scene, look, { id = 'pb', maskColour = null, showName
   npc.gait = 'run';
   npc.pbLook = lookKey(look, maskColour);
   mask(npc, maskColour || look.mask);
-  accessory(npc, look.accessory, look.mask);
+  accessory(npc, look.accessory, look.outfit === look.mask ? '#f5f6fa' : look.outfit);
   equip(npc, look.equip || 'standard');
   return npc;
 }

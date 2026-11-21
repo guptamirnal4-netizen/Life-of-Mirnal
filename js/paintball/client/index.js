@@ -9,7 +9,7 @@ import { VoiceChat } from './voicechat.js';
 import { makeAvatar, disposeAvatar } from './avatar.js';
 import { h, statBars, BLURB, EQUIPMENT_LIST, confetti, copyText, fmtTime } from './ui.js';
 import * as sfx from './sounds.js';
-import { arenaGroup } from '../models.js';
+import { arenaGroup, poseAim } from '../models.js';
 import { ARENAS, ARENAS_BY_ID } from '../arena.js';
 import { MODES, MODES_BY_ID, TEAMS, TIMING, modeLabel, MAX_PLAYERS } from '../rules.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../equipment.js';
@@ -53,7 +53,7 @@ export class PaintballMode {
     this.arena = a;
   }
 
-  get state() { return this.room?.state; }
+  get state() { const s = this.room?.state; return s?.players ? s : null; } // null until the first state sync
   get me() { return this.room ? this.state?.players.get(this.room.sessionId) : null; }
   get inMatch() { return !!this.room && ACTIVE.has(this.state?.phase); }
   get viewName() { return this.view?.view || 'first'; }
@@ -197,7 +197,7 @@ export class PaintballMode {
       h('span', { class: 'name' }, p.nickname, id === myId ? ' (you)' : ''),
       p.host && h('span', { class: 'pb-badge host' }, 'HOST'),
       !p.connected && h('span', { class: 'pb-badge off' }, 'reconnecting'),
-      mode.teams && h('span', { class: 'pb-badge' }, teamName(p.team)),
+      mode.teams > 0 && h('span', { class: 'pb-badge' }, teamName(p.team)),
       h('span', { class: `pb-badge${p.ready ? ' ready' : ''}` }, p.ready ? 'READY' : 'not ready'),
       this.voice?.on && id !== myId && p.voice && h('button', { class: 'small', title: 'Mute this player', onclick: () => this.voice.mutePeer(id, !this.voice.muted.has(id)) }, this.voice.muted.has(id) ? '🔇' : '🔈'));
     const slots = Math.max(0, Math.min(MAX_PLAYERS, mode.players[1]) - ps.length);
@@ -211,13 +211,13 @@ export class PaintballMode {
       this.copied === 'fail' && h('div', { class: 'pb-note' }, `Share this link: ${shareLink(this.room.roomId)}`),
       h('h3', {}, `Players ${ps.length}/${Math.min(MAX_PLAYERS, mode.players[1])}`),
       h('div', { class: 'pb-players', 'data-pb': 'players' }, ...ps.map(playerRow), ...Array.from({ length: Math.min(slots, 4) }, () => h('div', { class: 'pb-slot' }, 'Open slot · share the code')), slots > 4 && h('div', { class: 'pb-note' }, `+${slots - 4} more open slots`)),
-      mode.teams && h('div', { class: 'pb-teams' }, ...Array.from({ length: mode.teams }, (_, t) => h('div', { class: 'pb-team', style: `--team:${TEAMS[t].colour}` }, h('b', {}, `Team ${TEAMS[t].name}`), h('div', { class: 'pb-note' }, ps.filter(([, p]) => p.team === t).map(([, p]) => p.nickname).join(', ') || 'empty')))),
+      mode.teams > 0 && h('div', { class: 'pb-teams' }, ...Array.from({ length: mode.teams }, (_, t) => h('div', { class: 'pb-team', style: `--team:${TEAMS[t].colour}` }, h('b', {}, `Team ${TEAMS[t].name}`), h('div', { class: 'pb-note' }, ps.filter(([, p]) => p.team === t).map(([, p]) => p.nickname).join(', ') || 'empty')))),
       h('h3', {}, 'Paintball match'),
       h('div', { class: 'pb-row' },
         sel(MODES.map((m) => [m.id, m.id === 'ffa' ? 'Individual (Duel / Free-for-All)' : `${m.name} · teams of ${m.size}`]), s.mode, (v) => this.room.send('config', { mode: v }), 'Mode'),
         sel(ARENAS.map((a) => [a.id, a.name]), s.arena, (v) => this.room.send('config', { arena: v }), 'Arena'),
         sel(durations.map((d) => [d, d >= 60 ? `${d / 60} min` : `${d} s (test)`]), s.duration, (v) => this.room.send('config', { duration: Number(v) }), 'Duration'),
-        host && mode.teams && h('button', { class: 'small', 'data-pb': 'randomise', onclick: () => this.room.send('randomise', {}) }, '🎲 Re-randomise teams')),
+        host && mode.teams > 0 && h('button', { class: 'small', 'data-pb': 'randomise', onclick: () => this.room.send('randomise', {}) }, '🎲 Re-randomise teams')),
       !host && h('div', { class: 'pb-note' }, 'The host picks the mode, arena and length.'),
       h('h3', {}, 'Voice chat'),
       h('div', { class: 'pb-row' },
@@ -306,7 +306,7 @@ export class PaintballMode {
   touchButtons() {
     if (!this.touch.on) return null;
     const box = h('div', { id: 'pb-touch' });
-    const hold = (cls, label, down, up) => { const b = h('button', { class: `tbtn ${cls}`, 'aria-label': cls }, label); b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); down(); }); const u = () => { b.classList.remove('down'); up(); }; b.addEventListener('pointerup', u); b.addEventListener('pointercancel', u); return b; };
+    const hold = (cls, label, down, up) => { const b = h('button', { class: `tbtn ${cls}`, 'aria-label': cls }, label); b.addEventListener('pointerdown', (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch { /* synthetic or ended pointer */ } b.classList.add('down'); down(); }); const u = () => { b.classList.remove('down'); up(); }; b.addEventListener('pointerup', u); b.addEventListener('pointercancel', u); return b; };
     const tap = (cls, label, fn) => h('button', { class: `tbtn ${cls}`, 'aria-label': cls, onclick: fn }, label);
     // drag on the fire button to aim while firing
     const fire = hold('p-fire', '🎯', () => { this.view.fireHeld = true; }, () => { this.view.fireHeld = false; });
@@ -370,12 +370,12 @@ export class PaintballMode {
     const s = this.state; const mode = MODES_BY_ID[s.mode]; const myId = this.room.sessionId;
     const rows = results ? [...s.results.rankings].map((r) => [r.id, r]) : [...s.players.entries()].sort((a, b) => b[1].score - a[1].score);
     return h('table', { class: 'pb-table', 'data-pb': 'scoreboard' },
-      h('tr', {}, h('th', {}, '#'), h('th', {}, 'Player'), mode.teams && h('th', {}, 'Team'), h('th', {}, 'Score'), h('th', {}, 'Tags'), h('th', {}, 'Assists'), h('th', {}, 'Times tagged'), h('th', {}, '')),
+      h('tr', {}, h('th', {}, '#'), h('th', {}, 'Player'), mode.teams > 0 && h('th', {}, 'Team'), h('th', {}, 'Score'), h('th', {}, 'Tags'), h('th', {}, 'Assists'), h('th', {}, 'Times tagged'), h('th', {}, '')),
       ...rows.map(([id, r], i) => {
         const p = s.players.get(id);
         return h('tr', { class: id === myId ? 'me' : '' }, h('td', {}, String(r.place || i + 1)),
           h('td', {}, h('span', { class: 'tdot', style: `background:${mode.teams ? teamColour(r.team) : p?.mask || '#888'}` }), r.nickname, p?.host ? ' 👑' : ''),
-          mode.teams && h('td', {}, teamName(r.team)), h('td', { class: 'n' }, String(r.score)), h('td', { class: 'n' }, String(r.tags)), h('td', { class: 'n' }, String(r.assists)), h('td', { class: 'n' }, String(r.timesTagged)),
+          mode.teams > 0 && h('td', {}, teamName(r.team)), h('td', { class: 'n' }, String(r.score)), h('td', { class: 'n' }, String(r.tags)), h('td', { class: 'n' }, String(r.assists)), h('td', { class: 'n' }, String(r.timesTagged)),
           h('td', {}, p?.talking ? '🔊' : ''));
       }));
   }
@@ -406,7 +406,7 @@ export class PaintballMode {
   renderResults() {
     const s = this.state; const R = s.results; const me = this.me; const mode = MODES_BY_ID[s.mode];
     const host = me?.host;
-    const iWon = !R.draw && ((mode.teams && R.teams.length && R.teams[0].team === me.team) || (!mode.teams && R.rankings[0]?.id === this.room.sessionId));
+    const iWon = !R.draw && ((mode.teams > 0 && R.teams.length && R.teams[0].team === me.team) || (!mode.teams > 0 && R.rankings[0]?.id === this.room.sessionId));
     this.mount(h('div', { class: 'pb-screen see-through', 'data-pb': 'results' }, confetti(), h('div', { class: 'pb-card pb-stack' },
       h('h1', {}, `${GAME_NAME} · results`),
       h('div', { class: 'pb-winner' }, R.draw ? '🤝 Draw!' : `🏆 ${R.winner} wins!`),
@@ -415,7 +415,7 @@ export class PaintballMode {
         h('div', {}, h('span', { class: 'pb-note' }, 'WINNER'), h('b', {}, R.draw ? '—' : R.winner)),
         h('div', {}, h('span', { class: 'pb-note' }, 'RUNNER-UP'), h('b', {}, R.runnerUp || '—')),
         h('div', {}, h('span', { class: 'pb-note' }, 'MVP'), h('b', {}, `⭐ ${R.mvpName || '—'}`))),
-      mode.teams && h('div', { class: 'pb-teams' }, ...[...R.teams].map((t) => h('div', { class: 'pb-team', style: `--team:${t.colour}` }, h('b', {}, `#${t.place} ${t.name}`), h('div', {}, `${t.score} points · ${t.tags} tags`)))),
+      mode.teams > 0 && h('div', { class: 'pb-teams' }, ...[...R.teams].map((t) => h('div', { class: 'pb-team', style: `--team:${t.colour}` }, h('b', {}, `#${t.place} ${t.name}`), h('div', {}, `${t.score} points · ${t.tags} tags`)))),
       this.scoreTable(true),
       h('div', { class: 'pb-note' }, `Paintball equipment used: ${me?.used ? me.used.split(',').map((id) => EQUIPMENT_BY_ID[id]?.short).join(', ') : 'none'}. Results stay in this room until it closes; nothing is saved anywhere.`),
       h('div', { class: 'pb-row' },
@@ -572,12 +572,14 @@ class Preview {
     this.key = key;
     if (this.npc) disposeAvatar(this.npc);
     this.npc = makeAvatar(this.scene, look, { id: 'preview', showName: false });
+    this.npc.pbPreview = true;
   }
   render(dt) {
     if (!this.npc) return;
     this.t += dt;
     this.npc.group.rotation.y = Math.sin(this.t * 0.6) * 0.9;
     this.npc.animate(dt, false, 0);
+    poseAim(this.npc, -0.1);
     this.npc.detailed = false; this.npc.face.visible = true; this.npc.trim.visible = true; // close-up: always show the face
     this.renderer.render(this.scene, this.camera);
   }
