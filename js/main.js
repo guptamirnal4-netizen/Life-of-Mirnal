@@ -4,7 +4,8 @@ import { BitsCampus } from './world/bits-world.js';
 import { createMinimap } from './ui/minimap.js';
 import { createBhawanGuide } from './ui/bhawan-guide.js';
 import { createTouchControls } from './ui/touch.js';
-import { Cinematic } from './cinematic/cinematic.js';
+import { PaintballFilm, SCENES as FILM_SCENES } from './cinematic/paintball-film.js';
+import { savedFilmPosition } from './cinematic/film-ui.js';
 import { GraphicsEngine } from './graphics/GraphicsEngine.js';
 import { PROFILES, PROFILE_ORDER, DEFAULT_PROFILE } from './graphics/GraphicsConfig.js';
 import { Player } from './world/player.js';
@@ -1452,7 +1453,7 @@ function openPause() {
     isCollege(state.classNum) && h('button', { 'data-voice': 'bhawan guide', onclick: () => { toast(bhawanGuide.toggle() ? 'Bhawan guide on' : 'Bhawan guide off'); closeAll(); requestLock(); } }, 'Bhawan guide on / off'),
     h('button', { 'data-voice': 'settings', onclick: () => openSettings() }, 'Settings'),
     h('button', { 'data-voice': 'help controls', onclick: () => openHelp() }, 'How to play'),
-    h('button', { 'data-voice': 'film campus tour watch', onclick: () => playFilm() }, '🎬 Watch the campus film'),
+    h('button', { 'data-voice': 'film campus tour watch', onclick: () => playFilm() }, '🎬 Watch the film'),
     h('button', { 'data-voice': 'quit title', onclick: () => { save(true); closeAll(); showTitle(); } }, 'Save & quit to title')),
   { title: 'Paused', closable: true });
 }
@@ -1461,6 +1462,7 @@ function openPause() {
 const titleEl = document.getElementById('title');
 function showTitle() {
   mode = 'title';
+  titleBackdrop = false;
   exitLock();
   document.getElementById('hud').classList.add('hidden');
   titleEl.classList.remove('hidden');
@@ -1483,7 +1485,11 @@ function showTitle() {
   const choice = (emoji, title, sub, college) => h('button', { class: 'mode-card', 'data-voice': title, onclick: () => startNew(college) },
     h('span', { class: 'mode-emoji' }, emoji),
     h('span', { class: 'mode-text' }, h('b', {}, title), h('small', {}, sub)));
+  const filmPos = savedFilmPosition();
+  setTitleBackdrop();
   menu.replaceChildren(...[
+    h('button', { class: 'primary title-film', 'data-voice': 'watch the film movie', onclick: () => playFilm() }, '🎬 Watch the film'),
+    filmPos && h('button', { class: 'title-resume', 'data-voice': 'resume the film', onclick: () => playFilm({ at: filmPos.t }) }, `▶ Resume the film · ${Math.floor(filmPos.t / 60)}:${String(Math.floor(filmPos.t % 60)).padStart(2, '0')}`),
     h('div', { class: 'title-label' }, 'Start a new game'),
     h('div', { class: 'mode-grid' },
       FEATURES.school && choice('🎒', 'Mirnal’s School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
@@ -1561,7 +1567,7 @@ onOverlayChange((open) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (mode === 'film' && e.code === 'Escape' && film && !film.capturing) return film.finish();
+  if (mode === 'film' && film) { if (!film.capturing) film.ui.key(e); return; }
   if (mode === 'explore' && explorer) return explorer.key(e);
   if (mode !== 'playing') return;
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -1895,17 +1901,19 @@ function updateHUD(slot) {
   hud.resume.classList.toggle('hidden', !!document.pointerLockElement || touch.on || isOpen() || mode !== 'playing');
 }
 
-// ---------- The campus film ----------
-// Mirnal's journey from Class 1 to BITS Pilani, in the game engine (js/cinematic/cinematic.js). From the title screen or the
-// pause menu; ?film in the URL plays it on load. capture: driven frame by frame by dev/render-film.mjs.
+// ---------- The film ----------
+// "Play with BITSians": a paintball story on the BITS Pilani campus, in the game engine (js/cinematic/paintball-film.js).
+// From the title screen (first action) or the pause menu; ?film in the URL plays it on load. capture: driven frame by
+// frame by dev/render-film.mjs. at: start (or resume) at that time.
 let film = null;
-function playFilm({ capture = false } = {}) {
+let filmReturn = null; // { t, back } while the viewer explores a place from the film
+function playFilm({ capture = false, at = 0, back = null } = {}) {
   if (film) return film;
   closeAll();
   exitLock();
   minimap.closeBig();
   bhawanGuide.hide();
-  const back = { mode, college: campus === bitsCampus && !!bitsCampus, quality: graphics.quality.name, hidden: [] };
+  back ||= { mode, college: campus === bitsCampus && !!bitsCampus, quality: graphics.quality.name, hidden: [] };
   for (const n of npcs.npcs.values()) if (n.group.visible) { n.group.visible = false; back.hidden.push(n); }
   avatar.group.visible = false;
   bike.visible = false;
@@ -1915,43 +1923,75 @@ function playFilm({ capture = false } = {}) {
   minimap.setVisible(false);
   graphics.setQuality(capture ? 'ultra' : state?.settings.graphics || (touch.on ? 'medium' : 'high'));
   mode = 'film';
-  film = new Cinematic({ scene, camera, campus: bitsCampus, school: schoolCampus, setWorld: (kind) => useWorld(kind), graphics, bike, range: COLLEGE_RANGE });
-  film.capturing = capture;
-  film.start({ onEnd: () => endFilm(back), showSkip: !capture, music: capture ? null : 'audio/film-score.m4a' });
+  film = new PaintballFilm({
+    scene, camera, campus: bitsCampus, graphics, range: COLLEGE_RANGE,
+    hooks: {
+      // "Explore this place": pause, open Campus Free Roam at the place, offer "Return to the film"
+      explore: (place, t) => { filmReturn = { t, back }; endFilm(back, { title: false }); openExplorer('college', { place, fromFilm: true }); },
+      // "Open the lobby": the multiplayer paintball game (wired by the paintball client when it is present)
+      lobby: () => { const open = window.__game?.openPaintball; if (typeof open !== 'function') return false; endFilm(back); open(); return true; },
+    },
+  });
+  film.back = back;
+  film.start({ onEnd: () => endFilm(back), capture, music: capture ? null : 'audio/film-score.m4a', at });
   return film;
 }
 
-function endFilm(back) {
+function endFilm(back, { title = true } = {}) {
   if (!film) return;
   film.stop();
   film = null;
   for (const n of back.hidden) n.group.visible = true;
   graphics.setQuality(back.quality);
+  if (!title) return;
   if (back.mode === 'playing') {
     useWorld(back.college ? 'college' : 'school');
     mode = 'playing';
     document.getElementById('hud').classList.remove('hidden');
     if (back.college) campus.messKey = null;
-    // the film writes its own lessons on the classroom boards: put this year's back
-    if (state && state.phase === 'day') {
-      campus.rebuildClassroom(state.classNum, classroomTitle());
-      const seat = campus.seats[campus.playerSeatIndex];
-      deskInteract.pos.set(seat.desk.x, 1, seat.desk.z + 0.3);
-    }
     return;
   }
-  useWorld('school');
-  player.place(new THREE.Vector3(0, 0, 58), 0);
-  camera.position.set(0, 6, 62);
-  camera.lookAt(0, 2, 0);
+  if (FEATURES.school) {
+    useWorld('school');
+    player.place(new THREE.Vector3(0, 0, 58), 0);
+    camera.position.set(0, 6, 62);
+    camera.lookAt(0, 2, 0);
+  }
   showTitle();
+}
+
+// The title screen's backdrop: the BITS Pilani campus at golden hour, a slow drift past the Clock Tower (the school
+// while FEATURES.school is on). The college world is heavy, so the title card shows at once and the backdrop fades
+// in once it is built.
+let titleBackdrop = false;
+function setTitleBackdrop() {
+  if (FEATURES.school) return;
+  const ready = () => {
+    if (mode !== 'title') return;
+    useWorld('college');
+    minimap.setVisible(false);
+    titleBackdrop = true;
+    titleEl.classList.add('backdrop');
+  };
+  if (bitsCampus) ready();
+  else requestAnimationFrame(() => setTimeout(ready, 30));
+}
+function titleFrame(dt) {
+  const a = Math.sin(elapsed * 0.025) * 0.55;
+  camera.position.set(-10 + Math.sin(a) * 125, 34 + Math.sin(elapsed * 0.04) * 4, -50 + Math.cos(a) * 125);
+  camera.lookAt(-12, 20, -82);
+  if (camera.fov !== 45) { camera.fov = 45; camera.updateProjectionMatrix(); }
+  const clock = 17 * 60 + 20;
+  campus.setClock?.(clock);
+  graphics.update(dt, { clock, focus: new THREE.Vector3(-12, camera.position.y, -60), view: 'cinematic' });
+  graphics.render();
 }
 
 // ---------- The 3D map ----------
 // Look round the school or BITS Pilani without playing (js/explorer/explorer.js): fly over it like a map, pick a
 // place, walk inside. From the title screen; ?explore (or ?explore=school) in the URL opens it on load.
 let explorer = null;
-function openExplorer(kind = 'college') {
+function openExplorer(kind = 'college', { place = null, fromFilm = false } = {}) {
   if (explorer || film) return explorer;
   closeAll();
   exitLock();
@@ -1974,19 +2014,36 @@ function openExplorer(kind = 'college') {
     },
   });
   explorer.switchTo(kind);
+  if (place) { const p = explorer.places?.find((q) => q.name === place); if (p) explorer.select(p); }
+  if (fromFilm && filmReturn) {
+    explorer.ui.bar.prepend(h('button', { class: 'primary ex-film', 'data-voice': 'return to the film', onclick: () => returnToFilm() }, '🎬 Return to the film'));
+    toast(place ? `📍 ${place} · the film is paused. “Return to the film” picks it up again.` : '🗺️ Campus Free Roam · the film is paused.', 3500);
+  }
   return explorer;
 }
 
-function endExplorer() {
+// Back from Campus Free Roam to the film, at the moment the viewer left it.
+function returnToFilm() {
+  const r = filmReturn;
+  filmReturn = null;
+  endExplorer({ title: false });
+  playFilm({ at: r?.t || 0, back: r?.back ? { ...r.back, hidden: [] } : null });
+}
+
+function endExplorer({ title = true } = {}) {
   if (!explorer) return;
   exitLock();
   explorer.stop();
   explorer = null;
   avatar.group.visible = false;
-  useWorld('school');
-  player.place(new THREE.Vector3(0, 0, 58), 0);
-  camera.position.set(0, 6, 62);
-  camera.lookAt(0, 2, 0);
+  if (!title) return;
+  filmReturn = null;
+  if (FEATURES.school) {
+    useWorld('school');
+    player.place(new THREE.Vector3(0, 0, 58), 0);
+    camera.position.set(0, 6, 62);
+    camera.lookAt(0, 2, 0);
+  }
   showTitle();
 }
 
@@ -2031,6 +2088,7 @@ function frame() {
   const dt = Math.min(clockTimer.getDelta(), 0.05);
   elapsed += dt;
   if (mode === 'film') { if (film && !film.capturing) film.update(dt); return; }
+  if (mode === 'title' && titleBackdrop) return titleFrame(dt);
   if (mode === 'explore' && explorer) return exploreFrame(dt);
   if (mode === 'playing' && state) {
     const paused = isOpen();
