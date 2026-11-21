@@ -25,5 +25,6 @@ import mainBuilding from './main-building.js';
 import sac from './sac.js';
 import sportsGrounds from './sports-grounds.js';
 import fd2fd3 from './fd2-fd3.js';
+import messes from './messes.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding, fd2fd3, sac, sportsGrounds, fd1, ...workshops];
+export const BUILDING_MODULES = [library, nab, mainBuilding, fd2fd3, sac, sportsGrounds, fd1, ...workshops, messes];
