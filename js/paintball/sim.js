@@ -1,0 +1,161 @@
+// Paintball simulation shared by the game server (authoritative) and the browser (client-side prediction):
+// player movement against the arena's solids and net fence, and paintball sweeps. Plain math, no three.js or DOM,
+// so the server and the client step exactly the same code.
+import { MOVE } from './rules.js';
+
+// The client sends one input per INPUT_DT step; the server replays them at the same step.
+export const INPUT_DT = 1 / 30;
+// The player's body for paintball hits: an upright cylinder from the feet to the top of the head.
+export const BODY = { radius: 0.38, height: MOVE.height };
+
+export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
+
+// Aim direction for a yaw / pitch, the same convention as the camera (rotation order YXZ, -z forward at yaw 0).
+export function aimDir(yaw, pitch) {
+  const c = Math.cos(pitch);
+  return { x: -Math.sin(yaw) * c, y: Math.sin(pitch), z: -Math.cos(yaw) * c };
+}
+
+// Whatever the client sends, only these fields with these ranges are used.
+export function sanitizeInput(i = {}) {
+  let f = clamp(fin(Number(i.f)), -1, 1); let s = clamp(fin(Number(i.s)), -1, 1);
+  const m = Math.hypot(f, s); if (m > 1) { f /= m; s /= m; }
+  return {
+    seq: Math.max(0, Math.floor(fin(Number(i.seq)))),
+    f, s,
+    run: !!i.run, jump: !!i.jump, fire: !!i.fire, reload: !!i.reload,
+    slot: i.slot === 1 ? 1 : 0,
+    yaw: fin(Number(i.yaw)) % (Math.PI * 2),
+    pitch: clamp(fin(Number(i.pitch)), -1.45, 1.45),
+  };
+}
+
+// Push a circle of radius r at (x, z) out of a solid's footprint.
+function pushOut(p, s, r) {
+  if (s.kind === 'cyl') {
+    const dx = p.x - s.x; const dz = p.z - s.z; const d = Math.hypot(dx, dz); const min = s.r + r;
+    if (d >= min) return;
+    if (d < 1e-6) { p.x = s.x + min; return; }
+    p.x = s.x + (dx / d) * min; p.z = s.z + (dz / d) * min;
+    return;
+  }
+  const nx = clamp(p.x, s.minX, s.maxX); const nz = clamp(p.z, s.minZ, s.maxZ);
+  const dx = p.x - nx; const dz = p.z - nz; const d2 = dx * dx + dz * dz;
+  if (d2 >= r * r) return;
+  if (d2 > 1e-10) { const d = Math.sqrt(d2); p.x += (dx / d) * (r - d); p.z += (dz / d) * (r - d); return; }
+  // centre inside the box: leave by the nearest face
+  const opts = [[s.minX - r - p.x, 0], [s.maxX + r - p.x, 0], [0, s.minZ - r - p.z], [0, s.maxZ + r - p.z]];
+  opts.sort((a, b) => Math.abs(a[0] + a[1]) - Math.abs(b[0] + b[1]));
+  p.x += opts[0][0]; p.z += opts[0][1];
+}
+
+// One movement step. p: { x, y, z, vy } (mutated). The jump is lower than the lowest bunker, so bunkers are walls
+// at every height and the floor is the grass (y 0).
+export function stepMove(p, inp, dt, arena, frozen = false) {
+  const r = MOVE.radius;
+  if (!frozen) {
+    const sp = inp.run ? MOVE.run : MOVE.walk;
+    const fx = -Math.sin(inp.yaw); const fz = -Math.cos(inp.yaw); // forward
+    const rx = Math.cos(inp.yaw); const rz = -Math.sin(inp.yaw); // right
+    const vx = (fx * inp.f + rx * inp.s) * sp; const vz = (fz * inp.f + rz * inp.s) * sp;
+    p.x += vx * dt;
+    for (const s of arena.solids) pushOut(p, s, r);
+    p.z += vz * dt;
+    for (const s of arena.solids) pushOut(p, s, r);
+    if (inp.jump && p.y <= 0.0001) p.vy = MOVE.jump;
+  }
+  p.vy -= MOVE.gravity * dt;
+  p.y += p.vy * dt;
+  if (p.y <= 0) { p.y = 0; p.vy = 0; }
+  const b = arena.bounds;
+  p.x = clamp(p.x, b.minX + r, b.maxX - r); p.z = clamp(p.z, b.minZ + r, b.maxZ - r);
+  return p;
+}
+
+// ---------- paintball sweeps ----------
+// Segment a → b (3D, t in [0, 1]) against an upright cylinder; returns entry t or -1.
+export function segCyl(a, b, cx, cz, rad, y0, y1) {
+  const dx = b.x - a.x; const dy = b.y - a.y; const dz = b.z - a.z;
+  const ox = a.x - cx; const oz = a.z - cz;
+  const A = dx * dx + dz * dz; const B = 2 * (ox * dx + oz * dz); const C = ox * ox + oz * oz - rad * rad;
+  let best = -1;
+  if (C <= 0 && a.y >= y0 && a.y <= y1) return 0; // starts inside
+  if (A > 1e-12) {
+    const disc = B * B - 4 * A * C;
+    if (disc >= 0) {
+      const t = (-B - Math.sqrt(disc)) / (2 * A);
+      if (t >= 0 && t <= 1) { const y = a.y + dy * t; if (y >= y0 && y <= y1) best = t; }
+    }
+  }
+  // top cap (falling in from above)
+  if (Math.abs(dy) > 1e-12) {
+    const t = (y1 - a.y) / dy;
+    if (t >= 0 && t <= 1 && (best < 0 || t < best)) {
+      const x = a.x + dx * t - cx; const z = a.z + dz * t - cz;
+      if (x * x + z * z <= rad * rad) best = t;
+    }
+  }
+  return best;
+}
+
+// Segment against a box solid (y from 0 to h): slab method; returns { t, n } or null.
+export function segBox(a, b, s) {
+  const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const lo = { x: s.minX, y: 0, z: s.minZ }; const hi = { x: s.maxX, y: s.h, z: s.maxZ };
+  let t0 = 0; let t1 = 1; let n = null;
+  for (const k of ['x', 'y', 'z']) {
+    if (Math.abs(d[k]) < 1e-12) { if (a[k] < lo[k] || a[k] > hi[k]) return null; continue; }
+    let ta = (lo[k] - a[k]) / d[k]; let tb = (hi[k] - a[k]) / d[k]; let sign = -1;
+    if (ta > tb) { [ta, tb] = [tb, ta]; sign = 1; }
+    if (ta > t0) { t0 = ta; n = { x: 0, y: 0, z: 0 }; n[k] = sign; }
+    if (tb < t1) t1 = tb;
+    if (t0 > t1) return null;
+  }
+  return { t: t0, n: n || { x: 0, y: 1, z: 0 } };
+}
+
+// First thing a paintball moving a → b hits among the arena (bunkers, grass, net), or null.
+// Returns { t, kind: 'solid'|'ground'|'net', n (surface normal), id }.
+export function sweepArena(a, b, arena) {
+  let best = null;
+  for (const s of arena.solids) {
+    if (s.kind === 'cyl') {
+      const t = segCyl(a, b, s.x, s.z, s.r, 0, s.h);
+      if (t >= 0 && (!best || t < best.t)) {
+        const x = a.x + (b.x - a.x) * t - s.x; const z = a.z + (b.z - a.z) * t - s.z; const y = a.y + (b.y - a.y) * t;
+        const l = Math.hypot(x, z) || 1; const top = y >= s.h - 1e-3;
+        best = { t, kind: 'solid', id: s.id, n: top ? { x: 0, y: 1, z: 0 } : { x: x / l, y: 0, z: z / l } };
+      }
+    } else {
+      const h = segBox(a, b, s);
+      if (h && (!best || h.t < best.t)) best = { t: h.t, kind: 'solid', id: s.id, n: h.n };
+    }
+  }
+  if (b.y < 0 && a.y >= 0) { const t = a.y / (a.y - b.y); if (!best || t < best.t) best = { t, kind: 'ground', n: { x: 0, y: 1, z: 0 } }; }
+  const bd = arena.bounds;
+  for (const [k, lim, nk] of [['x', bd.minX, 1], ['x', bd.maxX, -1], ['z', bd.minZ, 1], ['z', bd.maxZ, -1]]) {
+    const da = a[k] - lim; const db = b[k] - lim;
+    if ((da >= 0) === (db >= 0) || Math.abs(da - db) < 1e-12) continue;
+    const t = da / (da - db);
+    if (!best || t < best.t) { const n = { x: 0, y: 0, z: 0 }; n[k] = nk; best = { t, kind: 'net', n }; }
+  }
+  return best;
+}
+
+// Is the straight line a → b blocked by a bunker? (splash cover)
+export function blocked(a, b, arena) {
+  for (const s of arena.solids) {
+    if (s.kind === 'cyl' ? segCyl(a, b, s.x, s.z, s.r, 0, s.h) >= 0 : segBox(a, b, s)) return true;
+  }
+  return false;
+}
+
+// Segment against a player standing at (p.x, p.y, p.z). Returns { t, precision } or null; a hit at or above
+// the head line (MOVE.head above the feet) is a precision paint hit.
+export function segPlayer(a, b, p) {
+  const t = segCyl(a, b, p.x, p.z, BODY.radius, p.y, p.y + BODY.height);
+  if (t < 0) return null;
+  const y = a.y + (b.y - a.y) * t;
+  return { t, precision: y - p.y >= MOVE.head };
+}

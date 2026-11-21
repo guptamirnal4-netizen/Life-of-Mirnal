@@ -1496,6 +1496,7 @@ function showTitle() {
       choice('🎓', 'Mirnal’s College Life', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
     saveInfo && h('button', { class: 'primary', onclick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } }, `Continue · ${saveInfo}`),
     h('button', { 'data-voice': 'map explore 3d free roam campus', onclick: () => openExplorer() }, FEATURES.school ? '🗺️ Explore the 3D map · school and college' : '🗺️ Campus Free Roam · BITS Pilani'),
+    h('button', { 'data-voice': 'paintball multiplayer friends play', 'data-pb': 'title-paintball', onclick: () => openPaintball() }, '🎯 Multiplayer Paintball'),
     h('div', { class: 'title-row' },
       saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
       h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
@@ -1569,6 +1570,7 @@ onOverlayChange((open) => {
 document.addEventListener('keydown', (e) => {
   if (mode === 'film' && film) { if (!film.capturing) film.ui.key(e); return; }
   if (mode === 'explore' && explorer) return explorer.key(e);
+  if (mode === 'paintball' && paintball) return paintball.key(e);
   if (mode !== 'playing') return;
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (e.code === 'Escape') {
@@ -2067,6 +2069,57 @@ function exploreFrame(dt) {
   graphics.render();
 }
 
+// ---------- Multiplayer paintball ----------
+// Play with BITSians (js/paintball/client/): private rooms on the Colyseus server, a paintball match on the Med-C
+// Ground of the same BitsCampus. From the title screen, ?paintball, ?room=CODE, or window.__game.openPaintball().
+let paintball = null;
+let paintballLoading = null;
+function openPaintball(opts = {}) {
+  if (paintball) { if (opts.code && !paintball.room) paintball.open(opts); return Promise.resolve(paintball); }
+  if (paintballLoading) return paintballLoading;
+  if (film) endFilm({ mode: 'title', hidden: [], quality: graphics.quality.name });
+  if (explorer) { explorer.stop(); explorer = null; }
+  closeAll();
+  exitLock();
+  minimap.closeBig();
+  bhawanGuide.hide();
+  titleEl.classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  setBike(false);
+  avatar.group.visible = false;
+  const hidden = [];
+  for (const n of npcs.npcs.values()) if (n.group.visible) { n.group.visible = false; hidden.push(n); }
+  mode = 'paintball';
+  paintballLoading = import('./paintball/client/index.js').then(({ PaintballMode }) => {
+    paintball = new PaintballMode({
+      scene, camera, canvas, player, touch,
+      loadWorld: () => { useWorld('college'); minimap.setVisible(false); return bitsCampus; },
+      onExit: () => {
+        paintball = null;
+        for (const n of hidden) n.group.visible = true;
+        scene.remove(camera);
+        useWorld('school');
+        player.place(new THREE.Vector3(0, 0, 58), 0);
+        camera.position.set(0, 6, 62);
+        camera.lookAt(0, 2, 0);
+        showTitle();
+      },
+    });
+    scene.add(camera); // the first-person paintball blaster hangs off the camera
+    paintball.open(opts);
+    paintballLoading = null;
+    return paintball;
+  }).catch((err) => { paintballLoading = null; console.error(err); toast('Multiplayer paintball could not load.'); showTitle(); });
+  return paintballLoading;
+}
+function paintballFrame(dt) {
+  paintball?.update(dt);
+  touch.update({ playing: !!paintball?.inMatch, college: false, prompt: false, seated: false });
+  graphics.setQuality(state?.settings.graphics || (touch.on ? 'medium' : 'high'));
+  graphics.update(dt, { clock: 15.5 * 60, focus: paintball?.focus || player.pos, view: paintball?.inMatch ? paintball.viewName : 'map' });
+  graphics.render();
+}
+
 // ---------- Live map ----------
 // The route to the current objective along the roads (refreshed every second), for the minimap and the big map.
 let mapRoute = { at: -99, key: '', pts: null };
@@ -2091,6 +2144,7 @@ function frame() {
   if (mode === 'film') { if (film && !film.capturing) film.update(dt); return; }
   if (mode === 'title' && titleBackdrop) return titleFrame(dt);
   if (mode === 'explore' && explorer) return exploreFrame(dt);
+  if (mode === 'paintball') return paintballFrame(dt);
   if (mode === 'playing' && state) {
     const paused = isOpen();
     player.enabled = !paused && (document.pointerLockElement === canvas || touch.on);
@@ -2182,6 +2236,7 @@ frame();
 const launch = new URLSearchParams(location.search);
 if (launch.has('film')) playFilm();
 else if (launch.has('explore')) openExplorer(launch.get('explore') === 'school' ? 'school' : 'college');
+else if (launch.has('room') || launch.has('paintball')) openPaintball({ code: launch.get('room') || '' });
 
 // Exposed for automated testing in the browser.
-window.__game = { playFilm, openExplorer, get explorer() { return explorer; }, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };
+window.__game = { playFilm, openExplorer, openPaintball, get paintball() { return paintball; }, get explorer() { return explorer; }, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };

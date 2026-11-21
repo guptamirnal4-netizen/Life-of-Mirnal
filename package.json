@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "start": "node dev/server.mjs",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "server": "node server/index.js",
+    "test:mp": "node tests/mp/paintball.mjs",
+    "test:paintball-browser": "node tests/browser/paintball.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
+    "@colyseus/core": "^0.18.29",
+    "@colyseus/schema": "^5.0.50",
+    "@colyseus/sdk": "^0.18.10",
+    "@colyseus/ws-transport": "^0.18.5",
     "three": "^0.160.0"
   },
   "devDependencies": {
