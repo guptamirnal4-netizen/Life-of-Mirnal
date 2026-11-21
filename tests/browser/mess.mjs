@@ -77,7 +77,9 @@ check(after.meals.breakfast === true && after.sem === 1 && Math.abs(after.clock 
 await g(() => window.__game.handleInteractable('mess'));
 await page.waitForTimeout(200);
 check(/already had breakfast/.test(await page.locator('#toast').innerText()), 'second breakfast is refused');
-await g(() => { window.__game.state.day.clock = 10 * 60; window.__game.handleInteractable('mess'); });
+await g(() => { window.__game.state.day.clock = 10 * 60; });
+await page.waitForTimeout(600); // let the 09:00 bell toast fire first so it does not overwrite the mess toast
+await g(() => window.__game.handleInteractable('mess'));
 await page.waitForTimeout(200);
 log('closed:', await page.locator('#toast').innerText());
 check(/closed now\. Lunch is served from 13:00/.test(await page.locator('#toast').innerText()), 'outside meal times the mess says when the next meal is');

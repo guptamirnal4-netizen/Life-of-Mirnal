@@ -543,8 +543,9 @@ function buildVKB(kit, ctx, X) {
     const [p0, p1] = inward > 0 ? [v, v + T] : [v - T, v];
     for (const [a, b] of [[uEnd, doorAt - 0.9], [doorAt + 0.9, iu1]]) X.B(a, b, p0, p1, 0, CEIL, K.white, { collide: true });
     X.B(doorAt - 0.9, doorAt + 0.9, p0, p1, 2.4, CEIL, K.white);
-    X.B(doorAt - 0.97, doorAt - 0.9, p0 - 0.03, p1 + 0.03, 0, 2.4, K.doorFrame); X.B(doorAt + 0.9, doorAt + 0.97, p0 - 0.03, p1 + 0.03, 0, 2.4, K.doorFrame);
-    X.B(doorAt - 0.97, doorAt + 0.97, p0 - 0.03, p1 + 0.03, 2.4, 2.47, K.doorFrame);
+    // the jambs and head stand 2 cm proud of the reveal faces (no coplanar faces to z-fight)
+    X.B(doorAt - 0.97, doorAt - 0.88, p0 - 0.03, p1 + 0.03, 0, 2.38, K.doorFrame); X.B(doorAt + 0.88, doorAt + 0.97, p0 - 0.03, p1 + 0.03, 0, 2.38, K.doorFrame);
+    X.B(doorAt - 0.97, doorAt + 0.97, p0 - 0.03, p1 + 0.03, 2.38, 2.47, K.doorFrame);
     if (!open) { X.B(doorAt - 0.9, doorAt + 0.9, (p0 + p1) / 2 - 0.03, (p0 + p1) / 2 + 0.03, 0, 2.4, K.door, { collide: true }); }
   };
   // the wall under the north end of the hall: the outline edge along v = vN only covers u < uEnd

@@ -3,11 +3,56 @@
 // messes are closed; the ANC yard through its gate to the stall counter; the C'not arcade (one step up) along the
 // shops; screenshots; frame time against ?nomodules.
 // node tests/browser/messes.mjs [OUTDIR] [URL]   (a dev server must be running; default http://localhost:8106/)
+// PERF=1 node tests/browser/messes.mjs . [URL]     frame timing only: ?nomodules against ?only=messes
 import { chromium } from 'playwright-core';
 const OUT = process.argv[2] || '.';
 const URL = process.argv[3] || 'http://localhost:8106/';
 const ONLY = process.env.ONLY || '';
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu'] });
+// ---------- PERF=1: rAF gaps, CPU ms per frame and draw calls, ?nomodules against this module ----------
+if (process.env.PERF) {
+  const SECS = Number(process.env.PERF_SECS || 5);
+  const stats = (a) => { const s = [...a].sort((x, y) => x - y); const avg = s.reduce((p, c) => p + c, 0) / (s.length || 1); return { avg: +avg.toFixed(2), p95: +(s[Math.floor(s.length * 0.95)] || 0).toFixed(2) }; };
+  const scenes = [
+    ['outside: VKB west front', [232, 1.6, 166], [254, 3, 158]],
+    ['outside: VKB/RP aerial', [215, 40, 200], [265, 0, 150]],
+    ['outside: ANC street', [210, 1.6, 360], [232, 2, 351]],
+    ["outside: C'not street", [425, 1.6, 800], [440, 3, 780]],
+    ['inside: VKB hall', [249, 1.6, 152], [258, 1.5, 165]],
+  ];
+  for (const q of ['nomodules', 'only=messes']) {
+    const pg = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    pg.setDefaultTimeout(60000);
+    await pg.addInitScript(() => {
+      const P = (window.__perf = { cpu: [], gaps: [], draws: [], last: 0, curDraws: 0 });
+      const raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (cb) => raf((t) => { if (P.last) P.gaps.push(t - P.last); P.last = t; P.curDraws = 0; const s = performance.now(); cb(t); P.cpu.push(performance.now() - s); P.draws.push(P.curDraws); });
+      for (const C of [window.WebGL2RenderingContext, window.WebGLRenderingContext]) {
+        if (!C) continue;
+        for (const f of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) { const o = C.prototype[f]; if (o) C.prototype[f] = function (...a) { P.curDraws++; return o.apply(this, a); }; }
+      }
+    });
+    await pg.goto(`${URL}?explore&${q}`, { waitUntil: 'load' });
+    await pg.waitForFunction(() => window.__game?.explorer && window.__game.campus, null, { timeout: 90000 });
+    await pg.waitForTimeout(1500);
+    await pg.evaluate(() => { const c = document.getElementById('game'); Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => c }); const E = window.__game.explorer; const p = E.places.find((r) => /Clock Tower/.test(r.name)); E.select(p); E.enter(p); E.view = 'first'; });
+    await pg.waitForTimeout(1200);
+    for (const [name, pos, look] of scenes) {
+      await pg.evaluate(([p, l]) => {
+        const G = window.__game; G.player.place(new G.player.pos.constructor(p[0], p[1] - 1.6, p[2]), 0);
+        G.player.yaw = Math.atan2(-(l[0] - p[0]), -(l[2] - p[2])); G.player.pitch = Math.atan2(l[1] - p[1], Math.hypot(l[0] - p[0], l[2] - p[2])); G.player.velY = 0; G.player.frozen = true;
+      }, [pos, look]);
+      await pg.waitForTimeout(1500);
+      await pg.evaluate(() => { const P = window.__perf; P.cpu = []; P.gaps = []; P.draws = []; });
+      await pg.waitForTimeout(SECS * 1000);
+      const P = await pg.evaluate(() => ({ cpu: window.__perf.cpu, gaps: window.__perf.gaps, draws: window.__perf.draws }));
+      console.log(JSON.stringify({ build: q, scene: name, frame_ms: stats(P.gaps), cpu_ms: stats(P.cpu), draws: stats(P.draws).avg }));
+    }
+    await pg.close();
+  }
+  await browser.close();
+  process.exit(0);
+}
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 page.setDefaultTimeout(60000);
 const errors = [];
