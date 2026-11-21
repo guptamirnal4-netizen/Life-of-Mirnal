@@ -289,3 +289,42 @@ All local paths are under `/private/tmp/claude-501/-Users-mirnal-Documents-Whisp
 - **`workshops-halls`:** the plan shows the New Workshop (7101–7109, 7201–7208) north of the spine.
 - **`landscape-water`:** the two front gardens of the Institute Building (described in Block 1 B).
 - **Orchestrator:** decide who owns FD-II and FD-III geometry in the two "Main Building" footprints. Approve moving `sciencelab` (gameplay ids are unchanged; only its position moves).
+
+## Build notes (module `js/world/buildings/fd2-fd3.js`, test `tests/browser/fd2-fd3.mjs`)
+
+**What is built.** One module (`fd2-fd3`) replaces both OSM footprints: "Main Building (West Wing)" = FD-III and
+"Main Building (East Wing)" = FD-II. Each quad has its own Kit frame squared to its OSM outline (FD-II turned about
+9°, FD-III following its sheared west edge at about 6.7°). The module's own kit is the world frame and only holds the
+two link blocks that join the quads to the `main-building` spine ends (x -70 and x 39.5, z -69.5 to the spine's
+front parapet line).
+
+- Two storeys, ground floor y 0, first floor 5.4, roof 9.9 with a 0.75 m parapet: the spine's levels, so the ranges
+  meet it level. Cream plaster, maroon plinth and string-courses, a cornice, jali vent tiles, pilasters, relief
+  windows with chajjas, paired windows upstairs, domed chhatris on the two front corners.
+- FD-III: an outer ring of ranges round **two courts** split by a cross range (recommendation 6). FD-II: one large
+  court. Each court has a cusped-arch arcade on the ground floor and a paired-column, balustraded verandah above,
+  with lawns, perimeter and cross paths and a round flower bed. The courts become the footprints' `holes`, so the
+  campus scatter plants trees in them and keeps people and trees off the ranges.
+- Entrances: a south main entrance with an arched porch carrying the division's name, and a north rear entrance,
+  each a 4 m passage through the range into the court (notice boards, lights, way-finding signs).
+- Stairs: two dog-leg stairs per quad (kit.dogleg) from the ground verandah to the first-floor verandah ring, in
+  stair halls with walls up to the roof, a solid dwarf wall between the flights, terrazzo floors and walkable sills
+  across the wall where the stair head meets the verandah.
+- Department rooms (enterable, furnished, ceilings, tube lights, signs; each its own zone layer):
+  FD-III: Chemistry Laboratory 3103, Department of Chemistry, S9 Xerox & Print, Computational Chemistry Lab 3163
+  (cross range), Chemistry Faculty Chambers 3268 (first floor). FD-II: Mechanical Engineering, Students' Union
+  Office, SWD Office, Department of EEE, Lecture Room 2241 (first floor). Department name plates on the verandahs
+  for Pharmacy, Physics, Biological Sciences, RC Club and the other lecture rooms.
+- Gameplay rooms (`reception`, `complab` in FD-III; `principal` in FD-II) stay where placeRooms put them, each in an
+  enclosed bay open to its facade door, with paving, a light and a maroon door surround.
+
+**Approximations.** Room positions follow the official room-number plan schematically (±20%); stair positions are
+guesses (the plan's crossed squares). Ranges are solid bands with relief doors and windows except the rooms listed.
+The OSM names still show on the map labels ("Main Building (West/East Wing)"); renaming them to FD-III / FD-II is
+in bits-world / the campus data, which this module may not edit.
+
+**View axis.** Nothing of this module lies within x -50…31 south of z -50; the test checks that no collider of
+`fd2-fd3` sits on the Clock Tower → Saraswati Mandir axis.
+
+**Performance.** About +100 draw calls over `?only=main-building` from outside (two quads, merged per material);
+frame time stays at the 16.7 ms vsync cap in every scene of `PERF=1 node tests/browser/fd2-fd3.mjs`.
