@@ -26,7 +26,20 @@ await g(() => { const c = document.getElementById('game'); Object.defineProperty
 await g(() => { window.__k = window.__game.campus.modules.find((m) => m.m.id === 'messes').kit; });
 const info = await g(() => { const k = window.__k; const C = window.__game.campus; const r = C.rooms.mess; return { adopted: k.vkb.adopted, off: k.vkb.collidersOff, hall: k.vkb.hall, wash: k.vkb.wash, seats: k.vkb.seats.length, spots: C.spots.mess.length, subs: k.subKits.length, room: [r.x0, r.x1, r.z0, r.z1, r.door.at], exit: [r.exit.x, r.exit.z], P: k.local(r.x0, r.door.at), canteen: C.interactables.find((i) => i.id === 'canteen')?.pos, cs: C.spots.canteen?.length }; });
 console.log(JSON.stringify(info));
-if (ONLY === 'info') { console.log('ERRORS', JSON.stringify(errors)); await browser.close(); process.exit(0); }
+if (ONLY === 'dbg') {
+  console.log(JSON.stringify(await g(() => {
+    const G = window.__game; const C = G.campus; const k = window.__k;
+    const out = [];
+    for (const [u, v] of [[9.17, 16.26], [2.11, 26.68], [0.71, 26.81]]) {
+      const p = k.world(u, v);
+      const hits = C.colliders.filter((c) => c.enabled !== false && !c.walkable && c.minY < 1.5 && c.maxY > 0.2 && p.x > c.minX - 0.4 && p.x < c.maxX + 0.4 && p.z > c.minZ - 0.4 && p.z < c.maxZ + 0.4).map((c) => ({ b: c.building || '-', lo: k.local(c.minX, c.minZ).map((x) => +x.toFixed(2)), hi: k.local(c.maxX, c.maxZ).map((x) => +x.toFixed(2)), y: [c.minY, +c.maxY.toFixed(2)] }));
+      out.push({ u, v, hits });
+    }
+    const npcs = []; for (const [id, n] of G.npcs?.npcs || []) { const q = n.pos || n.group?.position; if (q && Math.hypot(q.x - 255, q.z - 160) < 20) npcs.push([id, k.local(q.x, q.z).map((x) => +x.toFixed(1))]); }
+    return { out, npcs };
+  })));
+}
+if (ONLY === 'info' || ONLY === 'dbg') { console.log('ERRORS', JSON.stringify(errors)); await browser.close(); process.exit(0); }
 
 // ---------- helpers: place and walk in the VKB frame (k) or world ----------
 const at = (u, v, du = 1, dv = 0, { world = false, kit = '__k' } = {}) => g(([u, v, du, dv, world, kit]) => {
@@ -40,8 +53,8 @@ const where = (kit = '__k') => g((kit) => {
   const Gm = window.__game; const k = window[kit]; const p = Gm.player.pos; const [u, v] = k.local(p.x, p.z);
   return { u: +u.toFixed(2), v: +v.toFixed(2), y: +p.y.toFixed(2), x: +p.x.toFixed(2), z: +p.z.toFixed(2), game: Gm.campus.roomAt(p.x, p.z) };
 }, kit);
-const go = async (u, v, { world = false, timeout = 20000, kit = '__k' } = {}) => {
-  await page.keyboard.down('KeyW');
+const go = async (u, v, { world = false, timeout = 30000, kit = '__k' } = {}) => {
+  await page.keyboard.down('ShiftLeft'); await page.keyboard.down('KeyW'); // walk slowly: no overshoot between steering steps
   const t0 = Date.now(); let last = null; let still = 0; let d = 1e9;
   while (Date.now() - t0 < timeout) {
     const s = await g(([u, v, world, kit]) => {
@@ -57,7 +70,7 @@ const go = async (u, v, { world = false, timeout = 20000, kit = '__k' } = {}) =>
     last = s;
     await page.waitForTimeout(80);
   }
-  await page.keyboard.up('KeyW');
+  await page.keyboard.up('KeyW'); await page.keyboard.up('ShiftLeft');
   await page.waitForTimeout(250);
   return d < 0.5;
 };
@@ -99,15 +112,17 @@ await shot('vkb-03-serving-wall');
 await blocked('the serving wall blocks (north of the counter)', [hall.u1 - 1.5, Pv - 6], [hall.u1 + 2, Pv - 6], (w) => w.u < hall.u1);
 await blocked('a hatch blocks', [hall.u1 - 0.8, Pv - 4.0], [hall.u1 + 2, Pv - 2.4], (w) => w.u < hall.u1);
 // ---------- 2. round the hall: west aisle, second door out and back in, south end ----------
-await route('west aisle north to the kiosk', [[hall.u0 + 2.5, Pv], [hall.u0 + 2.5, hall.v0 + 1.2]], (w) => w.u < hall.u0 + 3);
+await route('back to the cross aisle, west past the kiosk to the north end', [[hall.u1 - 3.0, Pv - 3.2], [hall.u1 - 3.0, Pv], [hall.u0 + 2.6, Pv], [hall.u0 + 2.6, hall.v0 + 1.0]], (w) => w.u < hall.u0 + 3 && w.v < hall.v0 + 1.5);
+await g(() => { window.__game.player.yaw = window.__k.yaw(-1, 1); });
+await settle(500);
 await shot('vkb-04-north-end');
-await route('into the wash room', [[12.6, hall.v0 + 0.8], [12.6, wash.v1 - 2]], (w) => w.v < wash.v1 && w.v > wash.v0);
+await route('into the wash room', [[12.6, hall.v0 + 1.0], [12.6, wash.v1 - 2]], (w) => w.v < wash.v1 && w.v > wash.v0);
 await settle(500);
 await g(() => { window.__game.player.yaw = window.__k.yaw(0, 1); });
 await shot('vkb-05-wash-room');
 await blocked('wash room north wall blocks', [9, wash.v0 + 1.5], [9, wash.v0 - 3], (w) => w.v > wash.v0);
-await route('back into the hall', [[12.6, wash.v1 - 1], [12.6, hall.v0 + 1.2], [hall.u0 + 2.2, hall.v0 + 1.2]], (w) => w.v > hall.v0);
-await route('down the west aisle to the second door', [[hall.u0 + 1.6, Pv], [hall.u0 + 1.6, Pv + 8.8]], (w) => Math.abs(w.v - (Pv + 8.8)) < 0.6);
+await route('back into the hall', [[12.6, wash.v1 - 1], [12.6, hall.v0 + 1.0], [hall.u0 + 2.6, hall.v0 + 1.0]], (w) => w.v > hall.v0);
+await route('down the west aisle to the second door', [[hall.u0 + 2.6, Pv], [hall.u0 + 1.6, Pv + 2], [hall.u0 + 1.6, Pv + 8.8]], (w) => Math.abs(w.v - (Pv + 8.8)) < 0.6);
 await route('out through the second west door', [[-2.5, Pv + 8.8]], (w) => w.u < 0 && w.game === null);
 await shot('vkb-06-second-door-outside');
 await route('back in through the second door', [[hall.u0 + 1.5, Pv + 8.8]], (w) => w.u > hall.u0);
@@ -118,11 +133,12 @@ await blocked('table rows block a walk across them', [hall.u0 + 4, Pv + 3.5], [h
 const seats = await g(() => { const C = window.__game.campus; return C.spots.mess.map((p) => C.roomAt(p.x, p.z)); });
 check(seats.length >= 12 && seats.every((r) => r === 'mess'), `${seats.length} NPC seats, all in the gameplay room`);
 // a free walk out by the main door
-await route('out of the main door', [[hall.u0 + 1.5, Pv], [-1.8, Pv - 0.3]], (w) => w.game === null && w.u < 0);
+await route('out of the main door', [[hall.u0 + 2.4, Pv + 3.5], [hall.u0 + 1.6, Pv], [-1.8, Pv]], (w) => w.game === null && w.u < 0);
 // ---------- 3. VKB shots ----------
 await at(hall.u0 + 4.6, hall.v0 + 1.0, 0.3, 1);
 await settle(1000);
 await shot('vkb-07-hall-long-view');
+await g(() => window.__game.explorer.ui.panel?.classList.add('folded'));
 await view([info.exit[0] - 40, 26, info.exit[1] + 30], [info.exit[0] + 18, 0, info.exit[1]]);
 await settle(1500);
 await shot('vkb-08-aerial');
@@ -141,13 +157,13 @@ for (const [n, b] of Object.entries(msg)) {
   const [cx, cz] = b.c; const sx = b.bb.minX - 6; // approach from the west at the centroid's z
   await blocked(`${n}: its wall blocks`, [sx, cz], [cx, cz], (w) => w.x < cx - 2, { world: true });
 }
-await view([msg['RP mess'].c[0] + 40, 30, msg['RP mess'].c[1] - 30], msg['RP mess'].c.length ? [msg['RP mess'].c[0], 0, msg['RP mess'].c[1]] : [0, 0, 0]);
+await view([msg['RP mess'].c[0] + 45, 28, msg['RP mess'].c[1] - 30], [msg['RP mess'].c[0], 0, msg['RP mess'].c[1]]);
 await settle(1500); await shot('rp-aerial');
 await view([msg['Malviya Mess'].c[0] + 10, 18, msg['Malviya Mess'].c[1] + 40], [msg['Malviya Mess'].c[0], 2, msg['Malviya Mess'].c[1]]);
 await settle(1500); await shot('malviya-aerial');
-await view([msg['Shankar Vyas Mess'].c[0] - 45, 6, msg['Shankar Vyas Mess'].c[1] + 10], [msg['Shankar Vyas Mess'].c[0], 3, msg['Shankar Vyas Mess'].c[1]]);
+await view([msg['Shankar Vyas Mess'].c[0] - 38, 7, msg['Shankar Vyas Mess'].c[1] + 34], [msg['Shankar Vyas Mess'].c[0], 3, msg['Shankar Vyas Mess'].c[1]]);
 await settle(1500); await shot('sv-street');
-await view([msg['Ram-Budh mess'].c[0] + 40, 8, msg['Ram-Budh mess'].c[1] + 20], [msg['Ram-Budh mess'].c[0], 2, msg['Ram-Budh mess'].c[1]]);
+await view([msg['Ram-Budh mess'].c[0] + 42, 7, msg['Ram-Budh mess'].c[1] + 6], [msg['Ram-Budh mess'].c[0], 3, msg['Ram-Budh mess'].c[1]]);
 await settle(1500); await shot('rb-street');
 
 // ---------- 5. ANC: through the gate to the counter ----------
@@ -167,18 +183,21 @@ if (anc.local) {
   await settle(1500); await shot('anc-03-aerial');
 }
 // ---------- 6. C'not: up onto the arcade, along the shops ----------
-const cn = await g(() => { const ks = window.__k.subKits.slice(-2); window.__cn = ks[0]; const k = ks[0]; const b = k.bounds(); return { b, c: k.world((b.u0 + b.u1) / 2, b.v1 + 6) }; });
-const cnb = cn.b;
-const mu = (cnb.u0 + cnb.u1) / 2;
-await at(mu, cnb.v1 + 5, 0, -1, { kit: '__cn' });
-await settle(800);
+const cn = await g(() => { const ks = window.__k.subKits.filter((k) => k.row); window.__cn = ks[0]; const r = ks[0].row; const bay = (r.u1 - r.u0) / Math.round((r.u1 - r.u0) / 4.2); return { ...r, bay, c: ks[0].world((r.u0 + r.u1) / 2, r.sf + r.out * 12) }; });
+const { sf, out, bay } = cn;
+const ua = cn.u0 + 8.5 * bay; const ub = cn.u0 + 10.5 * bay;
+await at(ua, sf + out * 6, 0, -out, { kit: '__cn' });
+await settle(900);
 await shot('cnot-01-street');
-await route("C'not: up the step onto the arcade", [[mu + 2.1, cnb.v1 - 1.3]], (w) => w.y > 0.25, { kit: '__cn' });
-await route("C'not: along the arcade", [[mu + 10.5, cnb.v1 - 1.3]], (w) => w.y > 0.25, { kit: '__cn' });
-await blocked("C'not: a shop counter blocks", [mu + 10.5, cnb.v1 - 1.3], [mu + 10.5, cnb.v1 - 6], (w) => w.v > cnb.v1 - 3, { kit: '__cn' });
-await route("C'not: back down to the street", [[mu + 10.5, cnb.v1 + 3]], (w) => w.y < 0.05, { kit: '__cn' });
-await view([cn.c.x - 30, 14, cn.c.z + 26], [cn.c.x, 2, cn.c.z]);
-await settle(1500); await shot('cnot-02-aerial');
+await route("C'not: up the step onto the arcade", [[ua, sf - out * 1.3]], (w) => w.y > 0.25, { kit: '__cn' });
+await g(() => { window.__game.player.yaw = window.__cn.yaw(-1, 0); });
+await settle(600);
+await shot('cnot-02-arcade');
+await route("C'not: along the arcade", [[ub, sf - out * 1.3]], (w) => w.y > 0.25, { kit: '__cn' });
+await blocked("C'not: a shop counter blocks", [ub, sf - out * 1.3], [ub, sf - out * 6], (w) => (out > 0 ? w.v > cn.ar - 0.5 : w.v < cn.ar + 0.5), { kit: '__cn' });
+await route("C'not: back down to the street", [[ub, sf + out * 3]], (w) => w.y < 0.05, { kit: '__cn' });
+await view([cn.c.x - 28, 12, cn.c.z + 22], [cn.c.x, 2, cn.c.z - 6]);
+await settle(1500); await shot('cnot-03-aerial');
 
 console.log('ERRORS', JSON.stringify(errors));
 console.log(fails.length ? `FAILED ${fails.length}: ${fails.join(' | ')}` : 'ALL PASS');

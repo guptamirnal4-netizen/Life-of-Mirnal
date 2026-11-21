@@ -91,7 +91,7 @@ function frameFor(outer, a = gridAngle(outer)) {
   const eu = [Math.cos(a), Math.sin(a)]; const ev = [-Math.sin(a), Math.cos(a)];
   const us = outer.map(([x, z]) => x * eu[0] + z * eu[1]); const vs = outer.map(([x, z]) => x * ev[0] + z * ev[1]);
   const u0 = Math.min(...us); const v0 = Math.min(...vs);
-  return { O: [u0 * eu[0] + v0 * ev[0], u0 * eu[1] + v0 * ev[1]], eu, ev, angle: Math.atan2(ev[0], ev[1]) };
+  return { O: [u0 * eu[0] + v0 * ev[0], u0 * eu[1] + v0 * ev[1]], eu, ev, angle: Math.atan2(ev[0], ev[1]), W: Math.max(...us) - u0, L: Math.max(...vs) - v0 };
 }
 
 // Square an outline up in the kit's frame: every edge runs along u or v; lines closer than 0.4 m merge.
@@ -144,7 +144,7 @@ const MAKERS = {
   kota: () => canvasTex(512, 512, (g, W) => { // grey-green Kota slabs, 0.6 m, light and dark mixed
     const n = 4; const s = W / n;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-      const base = jitter(rnd() < 0.5 ? '#8f9a8c' : '#a5ad9f', 0.1); g.fillStyle = base; g.fillRect(i * s, j * s, s, s);
+      const base = jitter(rnd() < 0.5 ? '#98a08b' : '#b0b29f', 0.1); g.fillStyle = base; g.fillRect(i * s, j * s, s, s);
       for (let k = 0; k < 140; k++) { g.fillStyle = jitter(base, 0.12); g.globalAlpha = 0.35; g.fillRect(i * s + rnd() * s, j * s + rnd() * s, 5, 3); }
       g.globalAlpha = 1; g.strokeStyle = '#5f675d'; g.lineWidth = 2; g.strokeRect(i * s + 1, j * s + 1, s - 2, s - 2);
     }
@@ -427,7 +427,7 @@ function buildWall(kit, X, spec, w) {
   };
   // openings sharing a span (a window with a vent above) cut the same strip of wall
   const spans = [];
-  for (const o of ops) { const last = spans[spans.length - 1]; if (last && Math.abs(last.at - o.at) < 1e-6 && Math.abs(last.w - o.w) < 0.6) { last.holes.push(o); last.w = Math.max(last.w, o.w); } else spans.push({ at: o.at, w: o.w, holes: [o] }); }
+  for (const o of ops) { const last = spans[spans.length - 1]; if (last && Math.abs(last.at - o.at) < 1e-6) { last.holes.push(o); last.w = Math.max(last.w, o.w); } else spans.push({ at: o.at, w: o.w, holes: [o] }); }
   let s = w.a0;
   for (const sp of spans) {
     const a = sp.at - sp.w / 2; const b = sp.at + sp.w / 2;
@@ -604,8 +604,8 @@ function buildVKB(kit, ctx, X) {
     for (let v = sv0 + 1; v < sv1 - 0.8; v += 1.1) { X.cyl(kb - 0.25, v, 0.94, 0.3, 0.4, K.steel, { seg: 14 }); X.cyl(kb - 0.25, v + 0.5, 1.73, 0.18, 0.26, K.steel2, { seg: 12 }); }
     kit._rot(kb - 0.02, Pv, [-1, 0], [[-0.6, 0.6, 2.6, 2.65, 0, 0.06, K.lamp]]);
     // steel tables with attached seats, in rows across the hall; a cross aisle on the door's axis
-    const colU = [iu0 + 2.7 + 1.5, iu0 + 2.7 + 3 + 1.6 + 1.5];
-    const rows = [-8.06, -5.06, -2.06, 2.14, 5.14, 8.14, 11.14].map((d) => Pv + d).filter((v) => v - 1 > iv0 && v + 1 < iv1);
+    const colU = [iu0 + 3.1 + 1.5, iu0 + 3.1 + 3 + 1.6 + 1.5]; // west aisle 3.1 m (door, kiosk), central 1.6 m, serving 2.3 m
+    const rows = [-8.06, -5.06, -2.06, 2.14, 5.14, 8.14, 11.14].map((d) => Pv + d).filter((v) => v - 2.17 > iv0 && v + 2.17 < iv1); // 1.2 m clear at the ends
     const seats = [];
     for (const v of rows) for (const u of colU) seats.push(...steelTable(kit, X, u, v));
     vkb.seats = seats;
@@ -748,6 +748,16 @@ function adoptRoom(kit, campus, r, { Pu, Pv, iu0 }) {
   for (let i = 0; i < 8; i++) st(new THREE.CylinderGeometry(0.17, 0.15, 0.018, 18), 0, 1.0 + i * 0.02, 2.65);
   st(new THREE.CylinderGeometry(0.09, 0.11, 0.3, 14), 0, 1.15, -2.65);
   for (const dx of [-0.25, 0.25]) st(new THREE.CylinderGeometry(0.035, 0.03, 0.09, 10), dx, 1.045, -2.6);
+  for (const dz of [-2, -0.7, 0.6, 1.9]) st(new THREE.CylinderGeometry(0.35, 0.3, 0.25, 16), 0, 1.125, dz);
+  kit.layer('hall', () => { // sneeze guard on the diners' side: steel posts, a glass screen and a top rail
+    const [fu, fv] = L(W - 1.2 - 0.47, 0);
+    for (const dv of [-2.9, -1.35, 0, 1.35, 2.9]) kit.box(fu - 0.02, fu + 0.02, fv + dv - 0.02, fv + dv + 0.02, 1.0, 1.62, K.steel, { collide: false });
+    kit.box(fu - 0.03, fu + 0.03, fv - 2.92, fv + 2.92, 1.6, 1.64, K.steel, { collide: false });
+    kit.box(fu - 0.006, fu + 0.006, fv - 2.9, fv + 2.9, 1.18, 1.6, K.glass, { collide: false });
+    kit.box(fu - 0.45, fu - 0.43, fv - 2.92, fv + 2.92, 0.98, 1.0, K.steel, { collide: false }); // tray slide
+    for (const dv of [-2.6, 0, 2.6]) kit.box(fu - 0.45, fu, fv + dv - 0.015, fv + dv + 0.015, 0.96, 0.98, K.steel, { collide: false });
+    kit.col(fu - 0.45, fu, fv - 2.92, fv + 2.92, 0, 1.0);
+  });
   const g = mergeGeometries(geos);
   g.applyMatrix4(new THREE.Matrix4().makeTranslation(kit.O[0], 0, kit.O[1]).multiply(new THREE.Matrix4().makeRotationY(kit.angle)));
   const food = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }));
@@ -811,8 +821,8 @@ function buildANC(campus, back, D) {
   // paved yard and the floor under the canopy
   X.flat(wallU, u0, ya, yb, 0.03, X.po(K.slabs));
   // tin canopy on steel posts (sloping from 3.3 at the wall to 2.9 at the front), fascia with lights and the name
-  const nPost = Math.round((v1 - v0 + 1) / 3.4); const vs = [];
-  for (let k = 0; k <= nPost; k++) vs.push(v0 - 0.5 + ((v1 - v0 + 1) * k) / nPost);
+  const vs = []; // posts on the stall partitions, so none stands in front of a counter
+  for (let k = 0; k <= 5; k++) vs.push(k === 0 ? v0 - 0.5 : k === 5 ? v1 + 0.5 : v0 + ((v1 - v0) * k) / 5);
   for (const v of vs) { X.B(cu0 + 0.1 - 0.05, cu0 + 0.1 + 0.05, v - 0.05, v + 0.05, 0, 2.88, K.steel2, { collide: true }); }
   {
     const len = u0 - cu0 + 0.3; const rise = 0.4; const tilt = Math.atan2(rise, len);
@@ -888,7 +898,7 @@ function buildANC(campus, back, D) {
   }
   kit.finish();
   // gameplay: the 'canteen' counter, its staff and the seats (bits-world's own ANC is replaced)
-  const c = kit.world(...spots.counter); const s = kit.world(...spots.staff); const lab = kit.world(cu0 - 0.6, (v0 + v1) / 2);
+  const c = kit.world(...spots.counter); const s = kit.world(...spots.staff); const lab = kit.world(cu0 - 3, (v0 + v1) / 2);
   return { kit, canteen: c, staff: s, seats: seatSpots, label: [lab.x, lab.z] };
 }
 
@@ -967,6 +977,7 @@ function shopRow(campus, b, { street, names }) {
     X.B(...S(u - s * 0.01, u + s * 0.02), (ar + bf) / 2 - 0.6, (ar + bf) / 2 + 0.6, 1.5, 2.5, K.dark);
   }
   for (let k = 1; k < n; k += 4) { const u = u0 + k * bay + 1; X.cyl(u, (ar + bf) / 2, ROOF, 0.6, 1.2, K.tank, { seg: 14 }); }
+  kit.row = { u0, u1, sf, out, ar, PL };
   return { kit, X, poly, u0, u1, sf, out };
 }
 const SIGN_STYLE = (name) => ({ bg: ['#1565c0', '#c62828', '#f9a825', '#2e7d32', '#6a1b9a', '#ef6c00', '#00838f', '#4e342e'][[...name].reduce((h, ch) => h + ch.charCodeAt(0), 0) % 8], fg: '#ffffff', font: 'bold 60px system-ui, sans-serif', border: '#ffffff' });
