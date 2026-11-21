@@ -19,8 +19,10 @@
 //   openings at ctx.cuts and keep them reachable.
 import library from './library.js';
 import nab from './nab.js';
+import fd1 from './fd1.js';
+import workshops from './workshops.js';
 import mainBuilding from './main-building.js';
 import sac from './sac.js';
 import sportsGrounds from './sports-grounds.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding, sac, sportsGrounds];
+export const BUILDING_MODULES = [library, nab, mainBuilding, sac, sportsGrounds, fd1, ...workshops];

@@ -205,3 +205,26 @@ Hand-offs:
 - **`library`:** the plan confirms the Library is directly north of FD-I. The drone frame shows its dome and pink brick.
 - **`roads-paths`:** service road north of FD-I; tree-lined road along the west side (x about 150–165); paths into the west entrance and between FD-I and the Workshop.
 - **`main-building` / `fd2-fd3`:** the same official plan shows FD III (west) and FD II (east) on either side of the central Audi/clock-tower block, each with one large courtyard, plus room numbers (2xxx, 3xxx). This may help with the OSM naming of `FD-II` and the "FD 2"/"FD3" POIs.
+
+## Build notes (js/world/buildings/fd1.js, test tests/browser/fd1-workshops.mjs)
+
+**Built from the research:**
+
+- Two storeys at 5.0 m floor to floor (review.md), roof at 10.0 m, parapet to 11.1 m with stepped-up corners and a raised parapet over the entrance. The 日 plan follows the OSM outline and its two holes: north and south courtyards (lawn, cross paths, the well platform in the north court, the small pump room in the SE corner of the south court).
+- Cream plaster with beige bands, a chajja over every window row, pilasters at the partition lines and a concrete plinth; two rows of rectangular timber-framed windows (no arches), smaller high windows at the stair halls.
+- Courtyard verandahs on square pillars on both floors with edge beams, first-floor parapets and roof parapets; the cross wing is an open pillared arcade on the ground floor from the west entrance hall to the east projection, with classrooms 1225-1234 above it.
+- Rooms per the timetable reading (section C): ground-floor labs 11xx (Concrete, Structures, Transportation, Environmental, Water Resources, Drawing Hall, ChemE labs, Hydraulics, Soil, Surveying, GIS ...), first-floor lecture rooms 12xx, the FD-I office (NW), the store (SW). Each has a door with a number plate (one atlas texture) and high corridor windows; labs get type-specific furniture (island benches with fume hoods, loading frames and a UTM, flumes and sumps, survey tripods, GIS desks), classrooms a platform, board, bench desks and fans. Tube lights on drop rods everywhere.
+- The west main entrance: a porch on four columns with "FACULTY DIVISION I" on its fascia, double doors into the entrance hall (notice board, benches). Further doors: NW corner, SW corner, the east projection's north and south doors.
+- The SHED in front of the south wing (steel posts, cross bracing, sheet roof, timber and an old machine), a few PV clusters, stair heads (mumties) with water tanks.
+
+**Built where OSM is wrong or silent:**
+
+- The east projection (missing from OSM) as u 96...109, v 39.5...66.5 in the module frame (about x 279...290, z -122...-95): an entrance hall with a notice board and the "FACULTY DIVISION I · LABORATORIES" sign, the main stair, lab 1126 below and seminar hall 1236 above. Its footprint is registered with the campus at build time (`addFootprint`) so trees and people keep out; the data file is untouched.
+- The FD-I/Workshop gap: the Workshop module (workshops.js) now starts 5-8 m south of FD-I's south face, so the two no longer touch.
+
+**Approximations:**
+
+- Stairs: four dog-legs (NW and SW corners of the west wing, SE corner, the east projection), G to F1 only, 14 risers of 0.179 m per flight. Their positions come from the roof mumties and the plan symbols; none was photographed (review.md).
+- Room widths are even divisions of each band; the plan gives the order, not the sizes.
+- The gameplay room `staffroom` stays where placeRooms puts it, in the SW corner block. The module walls it off inside the block and frames its existing south door through the facade (reveals and a "FD-I · STAFF ROOM" sign), so lessons and missions keep working; the test walks in and out through that door.
+- Interiors are zoned per wing and floor (N0/N1, W0/W1, S0/S1, E0/E1, X1, P0/P1) and only drawn near the player.

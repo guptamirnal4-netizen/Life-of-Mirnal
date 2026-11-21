@@ -323,3 +323,38 @@ What the game does now (`SCR/game-*.png`): every building in this area is an ext
 - **`fd1`:** confirms the overlap between the Workshop and FD-I.
 - **`gates-landmarks`:** VFAST is close to the Main Gate ("VFAST-Placement-Gate Connecting" panorama).
 - **`landscape-water`:** add the LTC lawn, the VFAST lawn and the RKIC courtyard.
+
+## Build notes (js/world/buildings/workshops.js, test tests/browser/fd1-workshops.mjs)
+
+One registry entry per building, all with id `workshops` (so `?only=workshops` builds the group), each in its own Kit frame so interior zones stay local. Footprints not in OSM (LTC, VFAST) are registered with the campus at build time (`addFootprint` from fd1.js); the data file is not edited. Label heights of the OSM footprints are corrected at build time (`ctx.buildings[0].h`).
+
+**BITS Workshop (old Central Workshop):**
+
+- A one-storey shed 72 × 36 m turned 9° like the OSM north edge, with five north-light teeth of 7.2 m: eaves 5.4 m, crests 8.1 m, a glazed steel-framed clerestory on each tooth facing north, sheet roofs with ribs sloping south, gutters in the valleys, red trusses every 6 m on valley girders and stanchions every 12 m.
+- **Trimmed back:** it no longer follows the OSM outline. The north wall sits 5-8 m south of FD-I's south face and the south wall about 4 m clear of the service road, which crosses the OSM outline. The OSM `h: 13` became 8.1 m.
+- Inside (verified look): stone flags, pale blue-grey walls with a dado and black conduit, tubes on drop rods, three green stationary engines on plinths, rows of lathes, mills and pillar drills, benches and stools, an electrical panel and a red compressor tank, a blackboard and display boards, the walled tool room open above to the trusses, and the CRISS Robotics bay at the east end (tables with robots, banner, tool boards).
+- Approximations: exterior colour (unknown; light grey plaster), door positions (the main door west on the OSM annex as a lean-to porch with "BITS WORKSHOP", a sliding door south to the road, the CRISS door east, a small north door), the glazing facing north.
+
+**New BITS Workshop ("CENTRAL WORKSHOP"):**
+
+- On the OSM quad, raised to about 9.6 m (OSM 6.6 m is too low per the panorama). Two tall machine halls (turning in Hall 1, milling and drilling in Hall 2) behind a white facade with an ochre base band, pilasters, lower windows and a continuous clerestory band; red trusses under a low-pitch roof behind the parapet; grey floor with yellow aisle lines; high-bay lights.
+- The two-storey entrance and admin block on the east with the recessed glazed entrance in a projecting ochre frame and the "CENTRAL WORKSHOP" sign, reached by a paved drive between low ochre walls. Lobby with reception counter, a glazed-partition office and stores; first floor drafting room and CAD lab.
+- The mezzanine along Hall 1's east end on concrete walls (tool crib below), black railings, reached by one straight steel flight of 24 risers (0.183 m) along the north wall, as research suggested; it connects to the drafting room.
+- The glazed CNC room in Hall 2 (blue floor, two machining centres) stands in for the Mechanical Engineering Lab panorama, whose building is unknown.
+- Other doors (positions approximate): a steel roller-shutter loading door in Hall 2's west wall, north of the CNC room so it opens onto the hall floor, and a red fire door in Hall 1's north wall.
+
+**Rakesh Kapoor Innovation Centre:**
+
+- The OSM stepped outline, three levels at 3.75 m on a 0.45 m plinth (roof 11.7 m, parapet 12.6 m; OSM 9.9 m is low). Ochre walls with full-height cream pilasters, dark-framed windows with cream hoods, a dark grey plinth.
+- The open courtyard (missing from OSM, seen in imagery): three steps down from the arcade, setts with lawn strips, a circular motif and bollards; grey round columns, galleries with steel railings on the upper levels, orange timber-slat soffits.
+- The south portico (the entrance side is unknown; south faces the service road): a cream gateway with a red frame and "RAKESH KAPOOR INNOVATION CENTRE", steps, the grey stone name wall with its curved plinth, grey pavers with maroon bands, pole lamps.
+- Rooms named from the official list (IoT Tinkering, Maker Space, UI/UX, AI, API, AR/VR, CG-CV, Fin-Tech labs, the Vinati Organics, Hari Menon and Prem Talreja conference rooms, co-working, the Technology Enabling Centre on level 2), but which room is where is an approximation.
+- Stairs: two stacked dog-legs (G-1-2), in the east bump and in the north projection, as research assumed ("2 stairs at opposite corners"). A local dog-leg helper leaves out kit.dogleg's top rail so flights can stack.
+
+**Rakesh Verma Convention Centre:** built as the imagery shows it, a construction site on the OSM plot: a blue hoarding with an open gate and signs, the guest-room block's RC frame three floors up (props, rebar starters, brick infill starting), footings and column starters for the convention block, a tower crane, cabins, sand and aggregate heaps, a mixer. Nothing above the ground slab is reachable.
+
+**VFAST:** at the research estimate x 507...549, z 300...342 (no OSM footprint). A single-storey cream U open to the north with a red-brown parapet band, verandahs on square piers facing the lawn, guest rooms (bed, wardrobe, desk, AC) with paired door and window on the verandah, the two-storey ends: the lobby (yellow walls, grey and white diamond floor, timber reception counter, wooden sofas, a timber stair under an arch to a suite) and the dining hall (diamond tiles, grid ceiling, timber tables, servery hatch and buffet). The arm depths and room count are approximations.
+
+**Lecture Theatre Complex:** at x 288...347, z -231...-135 (review.md range, west edge moved 3 m east to keep 12 m clear of FD-I's east projection). Pink and cream: a ring of single-storey arcades (semicircular arches on square piers, pink voussoirs and rustication bands) round a lawn with the raised circular stage, flowering shrubs, steps and a railed ramp. Three raked lecture theatres on the west under sloped roofs (LT1 400 seats, LT2 and LT3 150 seats): bench desks fanned towards the stage on 0.2 m risers, the raised stage with lecture table and lectern, two green boards, the projector screen, the red LED clock, a stepped white grid ceiling with fans, double doors front left and right onto the arcade. Two-storey classroom blocks (80-seat rooms, the LTC office) on the north, east and south whose first floors open onto the arcade roofs as a verandah; one dog-leg in the east block; arched passages through all three blocks; roof tanks and the telecom mast. Which theatre is where and the block plans are approximations; the gameplay `classroom` stays in NAB (orchestrator's call).
+
+**Not built:** Srinivas Ramanujan Bhawan (hand-off to `hostels-newer`).
