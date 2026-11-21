@@ -280,6 +280,11 @@ function buildQuad(K, Q, ctx) {
     }
   };
   for (const wl of Object.values(walls)) solidWall(wl);
+  // walkable sills through first-floor openings (stair heads, upstairs room doors), so the floor never gaps across
+  // the wall's thickness
+  for (const wl of Object.values(walls)) {
+    for (const o of wl.ops) if (Math.abs(o.y0 - FL1) < 0.01 && o.kind !== 'window') A(wl.axis, o.a - o.w / 2, o.a + o.w / 2, wl.c - wl.thick / 2 - 0.02, wl.c + wl.thick / 2 + 0.02, FL1 - 0.3, FL1, SLAB, { walkable: true });
+  }
   // is (along a, floor y) clear of every opening in this wall (by `pad` metres)?
   const clear = (wl, a, half, y0, y1, pad = 0.35) => !wl.ops.some((o) => a + half > o.a - o.w / 2 - pad && a - half < o.a + o.w / 2 + pad && y1 > o.y0 && y0 < o.y1);
 
