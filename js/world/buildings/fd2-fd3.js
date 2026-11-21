@@ -241,8 +241,8 @@ function buildQuad(K, Q, ctx) {
   const rooms = Q.rooms.map((r) => ({ ...r, rect: bandRect(r.wall, r.a0, r.a1, r.depth) }));
   for (const r of rooms) {
     const y = yOf(r.floor); const len = r.a1 - r.a0;
-    r.door = r.a0 + 1.3;
-    op(r.wall, r.door, 1.3, y, y + 2.6, 'roomdoor');
+    r.door = r.a0 + 1.4;
+    op(r.wall, r.door, 1.5, y, y + 2.6, 'roomdoor');
     r.windows = [];
     const nw = Math.max(1, Math.floor((len - 3.2) / 2.6));
     for (let k = 0; k < nw; k++) { const at = r.a0 + 2.6 + (k + 0.5) * ((len - 3.0) / nw); r.windows.push(at); op(r.wall, at, 1.5, y + 1.0, y + 2.6, 'window'); }
@@ -556,7 +556,7 @@ function buildQuad(K, Q, ctx) {
     if (r.floor) walk(rect.u0 - 0.2, rect.u1 + 0.2, rect.v0, rect.v1, FL1 - 0.3, FL1, SLAB);
     else D(rect.u0, rect.u1, rect.v0, rect.v1, H0 - 0.02, H0 + 0.1, WHITE);
     // door leaf (open into the room), frame and glazed windows
-    K.door(wl.axis === 'u', r.door, wl.c, y, 1.3, { height: 2.6, thick: wl.thick, side: intoBand(wl) });
+    K.door(wl.axis === 'u', r.door, wl.c, y, 1.5, { height: 2.6, thick: wl.thick, side: intoBand(wl) });
     for (const at of r.windows) K.window(wl.axis === 'u', at, wl.c, y + 1.0, 1.5, 1.6, { glass: 'g:#9fc3d6', thick: wl.thick });
     const sw = Math.min(4.2, 0.95 + r.sign.length * 0.11); const sa = Math.min(r.a1 - sw / 2 - 0.1, r.door + sw / 2 - 0.8);
     K.sign(r.sign, wl.axis === 'u' ? sa : wl.face, wl.axis === 'u' ? wl.face : sa, y + 2.75, wl.axis === 'u' ? [0, wl.side] : [wl.side, 0], { width: sw, height: 0.3, bg: '#1f3a5f', fg: '#ffffff', font: 'bold 56px Arial, sans-serif' });

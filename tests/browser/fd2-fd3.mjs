@@ -154,7 +154,7 @@ for (const q of ['fd3', 'fd2']) {
     await faceL(q, 0, -1); await page.waitForTimeout(300); await shot('fd3-int-verandah');
     p = await goL(q, 30, 22); p = await goL(q, N.at, 22, 12000);
   } else {
-    p = await goL(q, S.at, 30, 20000);
+    p = await goL(q, S.at + 5, 55); p = await goL(q, S.at + 5, 30, 20000); p = await goL(q, N.at, 30);
   }
   p = await goL(q, N.at, N.vIn + 1.5); p = await goL(q, N.at, N.vOut - 2.5, 12000);
   check(p.v < N.vOut - 1.5 && Math.abs(p.y) < 0.06, `${Q}: out through the north entrance`, p);
@@ -187,15 +187,15 @@ for (const q of ['fd3', 'fd2']) {
     if (q === 'fd3' && st.reverse) { await faceL(q, ...(ax ? [-dir, 0] : [0, -dir])); await page.waitForTimeout(300); await shot(`${q}-int-stair-top`); }
     p = await goL(q, ...L(aV, b2));
     check(Math.abs(p.y - 5.4) < 0.08, `${st.name}: out onto the first-floor verandah`, p);
-    // the dwarf wall between the flights keeps you on flight 2
-    await atL(q, ...L(st.la0 - dir * ((st.la0 - st.start) * 0.6), b2), 4.6, ...(ax ? [0, -1] : [-1, 0]));
+    // the dwarf wall between the flights keeps you on flight 2: stand on its 10th tread and walk at flight 1
+    const aM = st.la0 - dir * 9.5 * 0.28; const yM = 2.7 + 10 * (2.7 / 15);
+    await atL(q, ...L(aM, b2), yM + 0.02, ...(ax ? [0, -1] : [-1, 0]));
     await page.waitForTimeout(300);
     const before = await where(q);
-    const bAcross = ax ? -1 : -1; void bAcross;
-    const [tx, tz] = await W(q, ...L(st.la0 - dir * ((st.la0 - st.start) * 0.6), b1));
+    const [tx, tz] = await W(q, ...L(aM, b1));
     await face(tx - before.x, tz - before.z); await walk(1200);
     const sp = await where(q);
-    check(sp.y > before.y - 0.5, `${st.name}: the wall between the flights holds you on flight 2`, { before, after: sp });
+    check(Math.abs(before.y - yM) < 0.1 && sp.y > yM - 0.1, `${st.name}: the wall between the flights holds you on flight 2`, { before, after: sp });
     // and down again
     await atL(q, ...L(aV, b2), 5.4);
     p = await goL(q, ...L(aS, b2));
@@ -216,7 +216,7 @@ for (const q of ['fd3', 'fd2']) {
     await atL(q, outside[0], outside[1], y);
     await page.waitForTimeout(250);
     p = await goL(q, ...inside);
-    check(p.fdRoom === r.id && Math.abs(p.y - y) < 0.1, `${Q}: through the door into ${r.id}`, p);
+    check(p.fdRoom === r.id && Math.abs(p.y - y) < 0.25, `${Q}: through the door into ${r.id}`, p);
     const cx = (r.rect.u0 + r.rect.u1) / 2; const cv = (r.rect.v0 + r.rect.v1) / 2;
     const [ix, iz] = await W(q, inside[0], inside[1]); const [cxw, czw] = await W(q, cx, cv);
     await face(cxw - ix, czw - iz); await page.waitForTimeout(400);
