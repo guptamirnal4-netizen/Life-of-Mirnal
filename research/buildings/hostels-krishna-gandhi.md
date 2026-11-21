@@ -339,3 +339,27 @@ Krishna is still built by the shared `Hostel` class. Everything specific to it s
 - No volleyball court. The second lawn keeps the game's football pitch because the hostel-mates' evening football uses it.
 
 **Performance:** from outside, Krishna's interior is drawn only through the entrance bay (within 15 m of it) or once you are inside the footprint. The outer face is opaque, so nothing else could be seen. Draw calls: about +1% facing the building from outside, about 4% fewer walking past its long face, and about +3–5% in the corridor (about 103 interior meshes). Frame times were measured with tests/browser/perf.mjs against the base build. They varied run to run by more than the difference between builds, because the machine load average was 3 to 17.
+
+## Build notes (Gandhi Bhawan, phase 7 in js/world/hostel.js)
+
+**Shared by all six (Gandhi, Ram, Budh, Shankar, Vyas, Vishwakarma).** They are still built by the shared `Hostel` class. The per-Bhawan differences live in the `STYLE` table in js/world/hostel.js, and nothing about Krishna (`this.mine`) changed. Each Bhawan now has:
+- a cream outer face with its painted bay texture, a plinth, a first-floor string course, a cornice and a parapet coping;
+- a projecting 10.4 m entrance bay on the west face with its Devanagari name band, a shut green collapsible gate and an open arch, two steps up to the porch and one step down into the lobby;
+- salmon courtyard faces and a cream string course and cornice round each courtyard;
+- garden courtyards with lawn, trees, a cross of paths, shrubs, benches and four lamp posts each, instead of concrete cricket and football grounds;
+- kota-stone corridor floors;
+- six stair cores besides the main stair: the east stair plus NW, NE and SW corners and both ends of the middle wing. Each core sits under a roof mumty, and every one is walkable up and down;
+- one open round arch in the middle of every courtyard side that has no arcade, so every courtyard can be reached from the corridor.
+
+Tests: tests/browser/hostels-courtyard.mjs walks in through each entrance, up and down every stair, onto the roof and back, and into and out of every courtyard. It also checks that the gate and the walled courtyard sides block. bhawans.mjs, stairsdown.mjs and krishna.mjs still pass.
+
+**Needs an orchestrator change.** tests/hostel.test.js (not in this builder's files) still expects OSM's courtyard count and OSM corners. Vyas and Vishwakarma now have two courtyards, and Vyas's two north corners move 35 m. The fix is to expect 2 courtyards for those two Bhawans and to skip Vyas's north corners in the corner check. With that one test change applied, the unit tests pass.
+
+**Not changed.** Roof material is still `roofSolar`, set by bits-world.js `roofOf`, which this builder does not own. The research says the real roofs are not covered in PV.
+
+**Gandhi**
+- The entrance bay is a loggia like Krishna's, with cusped arches, the name band "गांधी भवन", and dark scroll grilles in the arched outer windows.
+- The entrance sits at 0.62 of the west face, as in the research.
+- Arcades run on every courtyard side, with grilles on the first floor.
+- About eight black water tanks stand on a raised frame over the middle wing.
+- Courtyard 1 has a basketball court with keys, a centre circle, and hoops on posts with backboards and arms. Courtyard 2 has a badminton court on a concrete pad.

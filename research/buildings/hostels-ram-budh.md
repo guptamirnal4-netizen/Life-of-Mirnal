@@ -321,3 +321,33 @@ Recommendations, **[approximation]**:
 - `hostels-newer`: Malviya-A west of Ram. In the drone view it is a sawtooth or comb block with PV on every finger [visual estimate].
 - `nab` / New Academic Block: Ram Stairs and Budh Stairs (OSM steps) link these hostels east to the NAB lawns. The unnamed 20 × 38 m block at (−57, 210) needs an owner.
 - Orchestrator: decide Budh Bhawan's open or closed status (see A).
+
+## Build notes (Ram and Budh Bhawan, phase 7 in js/world/hostel.js)
+
+**Shared by all six (Gandhi, Ram, Budh, Shankar, Vyas, Vishwakarma).** They are still built by the shared `Hostel` class. The per-Bhawan differences live in the `STYLE` table in js/world/hostel.js, and nothing about Krishna (`this.mine`) changed. Each Bhawan now has:
+- a cream outer face with its painted bay texture, a plinth, a first-floor string course, a cornice and a parapet coping;
+- a projecting 10.4 m entrance bay on the west face with its Devanagari name band, a shut green collapsible gate and an open arch, two steps up to the porch and one step down into the lobby;
+- salmon courtyard faces and a cream string course and cornice round each courtyard;
+- garden courtyards with lawn, trees, a cross of paths, shrubs, benches and four lamp posts each, instead of concrete cricket and football grounds;
+- kota-stone corridor floors;
+- six stair cores besides the main stair: the east stair plus NW, NE and SW corners and both ends of the middle wing. Each core sits under a roof mumty, and every one is walkable up and down;
+- one open round arch in the middle of every courtyard side that has no arcade, so every courtyard can be reached from the corridor.
+
+Tests: tests/browser/hostels-courtyard.mjs walks in through each entrance, up and down every stair, onto the roof and back, and into and out of every courtyard. It also checks that the gate and the walled courtyard sides block. bhawans.mjs, stairsdown.mjs and krishna.mjs still pass.
+
+**Needs an orchestrator change.** tests/hostel.test.js (not in this builder's files) still expects OSM's courtyard count and OSM corners. Vyas and Vishwakarma now have two courtyards, and Vyas's two north corners move 35 m. The fix is to expect 2 courtyards for those two Bhawans and to skip Vyas's north corners in the corner check. With that one test change applied, the unit tests pass.
+
+**Not changed.** Roof material is still `roofSolar`, set by bits-world.js `roofOf`, which this builder does not own. The research says the real roofs are not covered in PV.
+
+**Ram**
+- The entrance is a closed block with round arches, three tall first-floor windows and an attic.
+- The outer face has tall round-headed windows with a rectangular window over each.
+- Arcades run on the east, north, south and middle-wing sides. The west wing's courtyard face is salmon with barred windows.
+- The north court is a lawn with trees. The south court is paved, with two rows of square planters holding small trees.
+- A ribbed, finned block about 4 m tall stands on the north wing's roof.
+
+**Budh**
+- Same entrance block and faces as Ram, except the east outer face, which is an arcade with circular-pattern grilles under an open first-floor gallery with sunshades.
+- About eight black tanks stand on the middle wing.
+- Both courts are lawns with trees.
+- Budh's open/closed status is still the orchestrator's call. Its rooms are locked as before.

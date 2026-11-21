@@ -9,7 +9,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const g = (fn, arg) => page.evaluate(fn, arg);
 const results = [];
 const check = (name, ok, info = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${info}`); };
-await page.goto('http://localhost:8080/', { waitUntil: 'load' });
+await page.goto(process.argv[3] || 'http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 await g(() => { window.__game.voice.mock = true; const c = document.getElementById('game'); Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (window.__locked ? c : null) }); });
 const t0 = Date.now();
