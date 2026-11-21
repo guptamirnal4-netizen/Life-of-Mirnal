@@ -341,6 +341,7 @@ One registry entry per building, all with id `workshops` (so `?only=workshops` b
 - The two-storey entrance and admin block on the east with the recessed glazed entrance in a projecting ochre frame and the "CENTRAL WORKSHOP" sign, reached by a paved drive between low ochre walls. Lobby with reception counter, a glazed-partition office and stores; first floor drafting room and CAD lab.
 - The mezzanine along Hall 1's east end on concrete walls (tool crib below), black railings, reached by one straight steel flight of 24 risers (0.183 m) along the north wall, as research suggested; it connects to the drafting room.
 - The glazed CNC room in Hall 2 (blue floor, two machining centres) stands in for the Mechanical Engineering Lab panorama, whose building is unknown.
+- Other doors (positions approximate): a steel roller-shutter loading door in Hall 2's west wall, north of the CNC room so it opens onto the hall floor, and a red fire door in Hall 1's north wall.
 
 **Rakesh Kapoor Innovation Centre:**
 
