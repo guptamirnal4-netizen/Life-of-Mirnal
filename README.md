@@ -96,20 +96,25 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 
 ## The film
 
-A 3 min 55 s cinematic of Mirnal's journey, from the first day of Class 1 to BITS Pilani, played in the game's own
-engine: **🎬 Watch the campus film** on the title screen or in the pause menu, or open the game with `?film` in the
-address (Esc skips).
+**Play with BITSians**, a 4-minute story played in the game's own engine on the real-scale BITS Pilani campus:
+**🎬 Watch the film** is the first action on the title screen (and in the pause menu); `?film` in the address plays it
+on load. Ten friends (Mirnal, Aanya, Kabir, Tara, Rohan, Ishaan, Neha, Arjun, Sana and Vikram) plan, prepare for and
+play a friendly paintball match.
 
-- **The story:**
-  - **School:** the title over Sunrise Public School; a small Class 1 Mirnal walks in through the gate on the first
-    day; morning assembly and Jana Gana Mana; an English lesson in Class 1; and, twelve years on, a grown-up Mirnal
-    walks out of the gate on the last day of school.
-  - **College:** a sunrise flight over Pilani and down the main road; Mirnal walks in through the BITS Main Gate; the
-    Clock Tower, the Rotunda, NAB and a lecture in progress, the computer lab, the Library and lunch at the VKB mess;
-    the Bhawans from the air, into Krishna Bhawan and courtyard cricket at dusk; a cycle ride at golden hour past the
-    Saraswati Temple and C'not; and a crane up from the Rotunda at sunset.
-- **How it is made:** every shot is a camera move (splines, or a follow rig around Mirnal) with its own world, time of
-  day, cast and title, in `js/cinematic/cinematic.js`. It runs on its own cast and never touches the saved game.
+- **The story (7 scenes):** A Day at BITS Pilani (aerials, the Clock Tower → Saraswati Mandir axis over the sunken
+  Rotunda and NAB, friends meeting, the hostels) · The Idea (Krishna Bhawan courtyard, the group chat, the plan) ·
+  Preparing (masks, team colours, the six blaster categories, supplies, strategy, the story's lobby) · Entering the
+  Arena (the Med-C Ground arena, team intros, countdown) · The Match (game-style HUD, tags, a precision paint hit, a
+  splash) · Final Moments (the last tag, the scoreboard, congratulations) · Ending (a group photo and the campus at
+  golden hour).
+- **Player:** play/pause (Space or click), scrub bar with scene markers, previous/next scene (PageUp/PageDown),
+  a Scenes list, captions (C), mute (M), optional spoken dialogue, replay, Esc back to the title. Hotspots on places
+  open an info panel: "Explore this place" pauses the film and opens Campus Free Roam there, with "Return to the film"
+  to carry on at the same moment. The title screen offers "Resume the film" where you left it.
+- **How it is made:** every frame is a function of the film time (shot list, blocking, paintballs, overlays), so seeking
+  is exact: `js/cinematic/paintball-film.js` (shots), `cast.js` (the cast and their poses), `film-ui.js` (overlays,
+  controls, hotspots, sound effects). It uses the shared paintball models (`js/paintball/models.js`) and the Med-C
+  arena (`js/paintball/arena.js`), runs on its own cast and never touches the saved game.
 - **Music:** an original score synthesised by `dev/film-score.mjs` from the film's own timeline (no samples or
   third-party audio), shipped as `audio/film-score.m4a`; in the game the picture follows the music's clock.
 - **The video:** a copy of the rendered film is kept in `film/` (not in git or on the site, because of its size).
@@ -132,7 +137,7 @@ that spot, and the time slider moves the sun from dawn to night. It never touche
 data/            mess.js (menu, Pitstop), curriculum-primary.js (1–5), curriculum-middle.js (6–10), senior-a/b.js (11–12),
                  curriculum.js (index), streams.js (streams + rules), people.js, events.js
 js/graphics/     GraphicsEngine (wraps the renderer), GraphicsConfig (presets), RendererManager, QualityManager, PostProcessing (grade, bloom, ambient occlusion, depth of field), SurfaceShading (contact shade and ground variation on every lit material), PerformanceMonitor
-js/cinematic/    the film (school, then college): shot list, camera rigs, cast, titles
+js/cinematic/    the film (Play with BITSians): shot list, cast and poses, overlays and player controls
 js/explorer/     the 3D map: map camera, place list, walking inside
 dev/             dev server, film renderer and score generator
 js/core/         state, academics (mastery, marks, promotion), streams (validation), timetable, save — pure logic, no DOM

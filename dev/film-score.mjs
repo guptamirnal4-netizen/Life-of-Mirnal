@@ -1,5 +1,5 @@
-// An original score for the film (school, then BITS Pilani), synthesised from scratch (no samples, no third-party audio):
-// a pad progression in D major, plucked arpeggios, bass, a soft pulse once Mirnal arrives, risers into each act,
+// An original score for the film ("Play with BITSians": a paintball story at BITS Pilani), synthesised from scratch (no samples, no third-party audio):
+// a pad progression in D major, plucked arpeggios, bass, a soft pulse from the second scene, risers into each act,
 // a swell under the closing title, and wind and birdsong.
 //
 //   node dev/film-score.mjs timeline.json out.wav
@@ -21,10 +21,10 @@ const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647
 const hz = (m) => 440 * 2 ** ((m - 69) / 12);
 const BPM = 84; const BEAT = 60 / BPM; const BAR = 4 * BEAT; const CHORD = 2 * BAR;
 
-// acts: school, BITS from the air, arrival, academics, hostels, landmarks, finale
+// acts (the film's seven scenes): a day at BITS, the idea, preparing, the arena, the match, final moments, ending
 const acts = [0, ...T.dips, T.duration];
 const actAt = (t) => { let a = 0; for (let i = 0; i < acts.length - 1; i++) if (t >= acts[i]) a = i; return a; };
-const INTENSITY = [0.5, 0.52, 0.62, 0.78, 0.72, 0.86, 1.0];
+const INTENSITY = [0.5, 0.56, 0.66, 0.8, 1.0, 0.95, 0.82];
 const finaleTitle = T.titles.at(-1).t0;
 
 // wavetables
