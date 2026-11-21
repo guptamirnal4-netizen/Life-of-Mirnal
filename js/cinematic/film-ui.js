@@ -136,7 +136,8 @@ const STYLE = `
 #film.paused .bigplay { opacity: 1; }
 #film .hidden { display: none !important; }
 @media (max-width: 640px) { #film .ch, #film .hide-s { display: none !important; } #film .ic { min-width: 36px; padding: 0 7px; } #film .equip { width: 56vw; } #film .eq { font-size: 10.5px; padding: 4px; } #film .chat { width: 52vw; } #film .card { width: 74px; padding: 6px; font-size: 10px; } #film .card b { font-size: 12px; } }
-@media (max-height: 460px) { #film .lobby, #film .plan, #film .score { transform: translate(-50%, -50%) scale(0.72); } #film .cards { transform: translateX(-50%) scale(0.8); bottom: 64px; } #film .line { bottom: 72px; } #film .chapters { bottom: 70px; max-height: 70vh; overflow: auto; } }
+@media (max-width: 640px) { #film .lobby .p .eqs { display: none; } #film .lobby .p { font-size: 12px; } #film .line { font-size: clamp(13px, 4vw, 20px); } }
+@media (max-height: 460px) { #film .lobby, #film .plan, #film .score { transform: translate(-50%, -50%) scale(0.6); top: 44%; } #film .plan svg { max-height: 46vh; } #film .cards { transform: translateX(-50%) scale(0.8); bottom: 64px; } #film .line { bottom: 100px; font-size: 14px; } #film .equip, #film .chat, #film .teamcard { transform: translateY(-50%) scale(0.75); } #film .chapters { bottom: 70px; max-height: 70vh; overflow: auto; } }
 `;
 
 // ---------- sound ----------

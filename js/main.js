@@ -1984,6 +1984,7 @@ function titleFrame(dt) {
   const clock = 17 * 60 + 20;
   campus.setClock?.(clock);
   graphics.update(dt, { clock, focus: new THREE.Vector3(-12, camera.position.y, -60), view: 'cinematic' });
+  for (const l of campus.labels || []) l.visible = false; // no name labels behind the title card
   graphics.render();
 }
 

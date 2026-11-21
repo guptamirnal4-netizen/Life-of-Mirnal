@@ -189,7 +189,10 @@ export class PaintballFilm {
     this.camera.position.copy(cam.pos);
     this.camera.lookAt(cam.look);
     if (cam.roll) this.camera.rotateZ(cam.roll);
-    const fov = cam.fov || 42;
+    let fov = cam.fov || 42;
+    // the shots are framed for 16:9; on a tall (portrait) screen open the lens up so the action stays in frame
+    const asp = this.camera.aspect;
+    if (asp < 1.6) fov = Math.min(80, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * Math.min(1.78 / asp, 2.1))));
     const near = THREE.MathUtils.clamp(cam.pos.y * 0.012, 0.08, 3);
     if (this.camera.fov !== fov || Math.abs(this.camera.near - near) > 0.02) { this.camera.fov = fov; this.camera.near = near; this.camera.updateProjectionMatrix(); }
     this.look = cam.look;
@@ -637,7 +640,7 @@ export class PaintballFilm {
         hud: true,
       },
       {
-        name: 'match-precision', scene: 4, dur: 7, clock: [hm(16, 4), hm(16, 4.5)], arena: true, dof: 'rohan',
+        name: 'match-precision', scene: 4, dur: 7, clock: [hm(16, 4), hm(16, 4.5)], arena: true, dof: 'kabir',
         actors: {
           rohan: coverSpec('rohan', { at: toW([23.4, -10.8]), face: A(-13.5, -12.2), act: 'aim', talk: [[4.2, 6]] }),
           kabir: coverSpec('kabir', { face: A(23.4, -8.6), act: (t) => (t < 2.6 ? 'crouch' : t < 3.7 ? 'aim' : 'handsup'), hitAt: 3.7 }),
@@ -717,7 +720,7 @@ export class PaintballFilm {
           sana: { at: A(-7.5, -8), face: A(-4, -4), act: 'point' },
           vikram: { at: A(1.8, -9.4), face: A(-2, -5), act: 'photo', gear: { phone: true } },
         },
-        cam: path([A3(-3, 2.0, -15.5), A3(-3.6, 3.2, -17)], [A3(-3, 1.3, -5), A3(-2.6, 1.5, -4)], [50, 54]),
+        cam: path([A3(-3, 3.6, -16), A3(-3.6, 4.6, -17.5)], [A3(-3, 1.0, -5), A3(-2.6, 1.2, -4)], [50, 54]),
         panel: { kind: 'score', from: 0.4, to: 8 },
         lines: [[0.6, 'sana', 'Final score: Pink 6, Cyan 5. Pink wins!', 3]],
         cues: [[0.4, 'cheer'], [3, 'cheer']],
@@ -741,7 +744,7 @@ export class PaintballFilm {
         name: 'end-photo', scene: 6, dur: 8, clock: [hm(17, 20), hm(17, 22)], arena: true, ease: 'inOut',
         actors: {
           ...Object.fromEntries(ALL.filter((id) => id !== 'vikram').map((id, k) => [id, { at: A(-4 + (k % 5) * 1.3 + (k >= 5 ? 0.65 : 0), -16 + (k >= 5 ? -1.1 : 0)), face: A(-1.5, -8), act: (t) => (t > 4.2 && t < 5.8 ? 'cheer' : k % 3 === 0 ? 'arms' : ''), gear: { masks: false, blaster: true, band: true, paint: 1 + (k % 3) }, talk: [[4.2, 5.4]] }])),
-          vikram: { path: [A(-1.5, -12.2), A(-2, -14.8)], speed: 1.5, delay: 1.6, face: A(-1.5, -8), act: (t) => (t < 1.6 ? 'photo' : t > 4.2 && t < 5.8 ? 'cheer' : ''), gear: { phone: true, paint: 1 } },
+          vikram: { path: [A(-1.5, -12.2), A(2.6, -15.4), A(1.9, -17.1)], speed: 2.2, delay: 1.4, face: A(-1.5, -8), act: (t) => (t < 1.6 ? 'photo' : t > 4.2 && t < 5.8 ? 'cheer' : ''), gear: { phone: true, paint: 1 } },
         },
         cam: path([A3(-1.5, 1.55, -11.1), A3(-1.5, 1.7, -11.6)], [A3(-1.5, 1.35, -16), A3(-1.5, 1.45, -16)], [58, 54]),
         cues: [[4.1, 'shutter'], [4.3, 'cheer']],
