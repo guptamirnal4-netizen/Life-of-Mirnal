@@ -414,9 +414,14 @@ export class PaintballFilm {
           kabir: { at: [95.6, 4.4], face: (t) => P('mirnal'), act: (t) => (t > 7.6 ? 'highfive' : '') },
           tara: { at: [97.9, 3.9], face: (t) => P('mirnal') },
           rohan: { path: [[110, 18], [99.2, 5.8]], speed: 1.4, delay: 0.6, face: [96, 3] },
-          neha: { path: [[82, 14], [94.6, 6.4]], speed: 1.3, face: [96, 3] },
+          neha: { path: [[104, 14], [97.4, 6.6]], speed: 1.3, face: [96, 3] },
+          // other friends crossing the lawn behind
+          ishaan: { path: [[84, -9], [112, -6]], speed: 1.35 },
+          arjun: { path: [[85.5, -10], [113, -7.4]], speed: 1.35 },
+          sana: { path: [[118, 0], [90, -14]], speed: 1.25 },
+          vikram: { path: [[119, 1.4], [91, -12.6]], speed: 1.25 },
         },
-        cam: (c) => ({ pos: V(85.5 + c.e * 1.5, 1.65, 12.5 - c.e * 1.2), look: V(93 + c.e * 1.5, 1.35, 2.5), fov: 44 }),
+        cam: (c) => ({ pos: V(88.5 + c.e * 1.2, 1.65, 10.5 - c.e * 1.0), look: V(93.5 + c.e * 1.5, 1.3, 2.5), fov: 46 }),
         lines: [[3.8, 'aanya', 'Mirnal! Over here!', 1.8], [6.4, 'mirnal', 'Morning, everyone!', 2]],
         caption: { kicker: 'Scene 1', title: 'A Day at BITS Pilani', at: 0.4, hold: 3.4 },
       },
@@ -504,7 +509,7 @@ export class PaintballFilm {
           return { pos: n.pos.clone().addScaledVector(f, 1.7).addScaledVector(r, 1.0 + d * 0.3).setY(1.45), look: n.pos.clone().addScaledVector(f, 0.3).setY(1.35), fov: 40 };
         },
         panel: { kind: 'equip', from: 0.1, to: 9.9 },
-        lines: [[1.2, 'mirnal', 'Standard Paintball Blaster. Classic.', 1.6], [3.0, 'kabir', 'Paint Splash Launcher. Big. And orange.', 2], [5.1, 'rohan', 'Precision Paint Marker. One paintball, one tag.', 2.2], [7.5, 'ishaan', 'Spread Blaster. Close range is my thing.', 2]],
+        lines: [[0.1, 'mirnal', 'Standard Paintball Blaster. Classic.', 1.5], [2.5, 'kabir', 'Paint Splash Launcher. Big. And orange.', 2.3], [5.0, 'rohan', 'Precision Paint Marker. One paintball, one tag.', 1.3], [6.3, 'ishaan', 'Spread Blaster. Close range is my thing.', 1.9]],
       },
       {
         name: 'prep-supplies', scene: 2, dur: 7, clock: [hm(15, 8), hm(15, 9)], dof: 'sana',
@@ -549,7 +554,7 @@ export class PaintballFilm {
         actors: Object.fromEntries(ALL.map((id, k) => {
           const c = CAST_BY_ID[id]; const lane = -1.6 + (k % 3) * 1.6;
           const end = c.team == null ? (id === 'sana' ? [-28, -14] : [-27, 14]) : c.team === 0 ? [-30, -8 + (k % 4) * 3] : [-18, -8 + (k % 4) * 3];
-          return [id, { path: [A(-52 - k * 1.3, lane), A(-36, lane * 0.5), A(...end)], speed: 1.55, gear: MASKED, act: c.team == null ? '' : 'carry', face: A(0, 0) }];
+          return [id, { path: [A(-45 - k * 1.1, lane), A(-36, lane * 0.5), A(...end)], speed: 1.55, gear: MASKED, act: c.team == null ? '' : 'carry', face: A(0, 0) }];
         })),
         cam: (c) => ({ pos: V(...A3(-25 - c.e * 2, 1.7, 5.5)), look: V(...A3(-38 + c.e * 8, 1.3, -1)), fov: 46 }),
         lines: [[1, 'vikram', 'And here they come, onto the Med-C Ground!', 2.4], [4.6, 'kabir', 'Those bunkers are huge!', 1.8]],
@@ -561,7 +566,7 @@ export class PaintballFilm {
           sana: { at: A(0, -15.5), face: A(0, 0), talk: [[0.2, 2.2]], act: (t) => (t < 2.2 ? 'point' : '') },
           vikram: { at: A(2.5, -16), face: A(0, 0), act: 'photo', gear: { phone: true } },
         },
-        cam: (c) => { const a = THREE.MathUtils.smoothstep(c.t, 2.2, 5.6); return { pos: V(...A3(0, 2.6, -12)), look: V(...A3(-32 + a * 64, 1.2, 0)), fov: 34 }; },
+        cam: (c) => { const a = THREE.MathUtils.smoothstep(c.t, 2.4, 5.4); const side = -1 + 2 * a; return { pos: V(...A3(side * (21 + c.t * 0.3), 5.2, -23)), look: V(...A3(side * 32, 1.0, 0)), fov: 36 }; },
         panel: { kind: 'teams', from: 2, to: 8.8 },
         lines: [[0.2, 'sana', 'Welcome to the Med-C Ground! 4v4, three minutes.', 2], [2.3, 'vikram', 'Pink team: Mirnal, Aanya, Kabir and Tara!', 2.6], [5.6, 'vikram', 'Cyan team: Rohan, Ishaan, Neha and Arjun!', 2.6]],
       },
@@ -592,9 +597,8 @@ export class PaintballFilm {
           mirnal: coverSpec('mirnal', { face: A(9.5, -3.4), act: (t) => (t > 1 && t < 5.4 ? 'aim' : 'crouch+aim'), talk: [[4.8, 6.4]] }),
           arjun: coverSpec('arjun', { path: [toW(COVER.arjun), toW([16, -10])], speed: 1.5, delay: 4.4, face: A(-17, 0), act: (t) => (t < 4.2 ? 'aim' : 'handsup'), hitAt: 4.1 }),
           neha: coverSpec('neha', { act: (t) => (t > 2 ? 'aim' : 'crouch+aim') }),
-          tara: coverSpec('tara', { act: 'crouch+aim' }),
         },
-        cam: () => { const m = P('mirnal'); const d = V(...A3(9.5, 0, -3.4)).sub(m).setY(0).normalize(); const r = V(-d.z, 0, d.x); return { pos: m.clone().addScaledVector(d, -2.1).addScaledVector(r, 0.75).setY(m.y + 1.85), look: V(...A3(9.5, 1.0, -3.4)), fov: 32 }; },
+        cam: () => { const m = P('mirnal'); const d = V(...A3(9.5, 0, -3.4)).sub(m).setY(0).normalize(); const r = V(-d.z, 0, d.x); return { pos: m.clone().addScaledVector(d, -2.7).addScaledVector(r, 0.95).setY(1.75), look: V(...A3(9.5, 1.0, -3.4)), fov: 34 }; },
         fire: [
           ...volley('arjun', 0.4, 5, 0.12, bunker('cube', 0, 9, -3, 1.1), { dur: 0.3 }),
           ...volley('mirnal', 1.4, 6, 0.42, bunker('can', 1, -17, 0, 1.0), { dur: 0.36, last: { actor: 'arjun' } }),
@@ -635,7 +639,7 @@ export class PaintballFilm {
       {
         name: 'match-precision', scene: 4, dur: 7, clock: [hm(16, 4), hm(16, 4.5)], arena: true, dof: 'rohan',
         actors: {
-          rohan: coverSpec('rohan', { face: A(-13.5, -12.2), act: 'aim', talk: [[4.2, 6]] }),
+          rohan: coverSpec('rohan', { at: toW([23.4, -10.8]), face: A(-13.5, -12.2), act: 'aim', talk: [[4.2, 6]] }),
           kabir: coverSpec('kabir', { face: A(23.4, -8.6), act: (t) => (t < 2.6 ? 'crouch' : t < 3.7 ? 'aim' : 'handsup'), hitAt: 3.7 }),
         },
         cam: (c) => {
@@ -654,7 +658,7 @@ export class PaintballFilm {
           neha: coverSpec('neha', { act: (t) => (t < 2.9 ? 'aim' : 'handsup'), hitAt: 2.8 }),
           rohan: coverSpec('rohan', { act: 'crouch' }),
         },
-        cam: (c) => { const k = P('kabir'); const tg = V(...A3(17.7, 1, -0.4)); const d = tg.clone().sub(k).setY(0).normalize(); const r = V(-d.z, 0, d.x); const pos = k.clone().addScaledVector(d, -3 + c.e * 10).addScaledVector(r, 1.3).setY(2.4 + c.e * 1.5); return { pos, look: tg.clone().lerp(k, 0.15 - c.e * 0.1), fov: 40 - c.e * 12 }; },
+        cam: (c) => { const k = P('kabir'); const tg = V(...A3(17.7, 0.9, -0.4)); const d = tg.clone().sub(k).setY(0).normalize(); const r = V(-d.z, 0, d.x); return { pos: k.clone().addScaledVector(d, -3.2).addScaledVector(r, 1.0).setY(2.0), look: tg.clone().setY(0.6), fov: 36 - c.e * 8 }; },
         fire: [{ by: 'kabir', t: 1.4, dur: 1.4, arc: 3.2, hit: { p: A3(16.4, 0.03, 0.9), n: [0, 1, 0], r: 0.6 }, colour: col('kabir'), big: true }, { by: 'kabir', t: 1.4, dur: 1.4, arc: 3.2, hit: { actor: 'neha' }, colour: col('kabir') }],
         tags: [[2.8, 'kabir', 'neha', 'splash']],
         lines: [[0.4, 'kabir', 'Splash incoming!', 1.4], [3.3, 'neha', 'Orange?! Everywhere!', 1.8]],
@@ -677,7 +681,7 @@ export class PaintballFilm {
       {
         name: 'final-tension', scene: 5, dur: 7, clock: [hm(16, 9), hm(16, 9.5)], arena: true, dof: 'mirnal',
         actors: {
-          mirnal: { path: [toW([-17.7, 1.6]), toW([-9.6, -2.6])], speed: 1.2, delay: 1.2, face: A(23.4, -8.6), act: 'crouch+aim' },
+          mirnal: { path: [toW([-17.7, 1.8]), toW([-14.5, 2.4]), toW([-9.6, 3.0])], speed: 1.2, delay: 1.2, face: A(23.4, -8.6), act: 'crouch+aim' },
           rohan: coverSpec('rohan', { face: () => P('mirnal'), act: 'aim' }),
         },
         cam: () => { const m = P('mirnal'); return { pos: V(m.x - 1.6, 1.45, m.z + 3.6), look: V(m.x + 2, 1.0, m.z - 0.6), fov: 46 }; },
@@ -689,12 +693,12 @@ export class PaintballFilm {
       {
         name: 'final-tag', scene: 5, dur: 7, clock: [hm(16, 10), hm(16, 10.3)], arena: true, ease: 'linear', dof: 'rohan',
         actors: {
-          mirnal: { path: [toW([-9.6, -2.6]), toW([-6, -6.6])], gait: 'run', speed: 3.6, delay: 0.4, face: A(23.4, -8.6), act: 'aim' },
+          mirnal: { path: [toW([-9.6, 3.0]), toW([-5.2, -6.8])], gait: 'run', speed: 3.6, delay: 0.4, face: A(23.4, -8.6), act: 'aim' },
           rohan: coverSpec('rohan', { face: () => P('mirnal'), act: (t) => (t < 3.6 ? 'aim' : 'handsup'), hitAt: 3.5 }),
         },
         cam: (c) => {
           if (c.t < 3) { const m = P('mirnal'); return { pos: V(m.x - 1.5, 1.5, m.z + 3.4), look: V(m.x + 2, 1.2, m.z - 1), fov: 44 }; }
-          const r = P('rohan'); return { pos: V(r.x + 2.6 - (c.t - 3) * 0.15, 1.55, r.z + 2.2), look: V(r.x, 1.3, r.z), fov: 36 };
+          const r = P('rohan'); return { pos: V(r.x + 3.4 - (c.t - 3) * 0.15, 1.6, r.z + 3.0), look: V(r.x - 0.4, 1.3, r.z), fov: 40 };
         },
         fire: [
           ...volley('rohan', 0.8, 2, 0.9, ground(-7, -5.4), { dur: 0.35 }),
@@ -737,9 +741,9 @@ export class PaintballFilm {
         name: 'end-photo', scene: 6, dur: 8, clock: [hm(17, 20), hm(17, 22)], arena: true, ease: 'inOut',
         actors: {
           ...Object.fromEntries(ALL.filter((id) => id !== 'vikram').map((id, k) => [id, { at: A(-4 + (k % 5) * 1.3 + (k >= 5 ? 0.65 : 0), -16 + (k >= 5 ? -1.1 : 0)), face: A(-1.5, -8), act: (t) => (t > 4.2 && t < 5.8 ? 'cheer' : k % 3 === 0 ? 'arms' : ''), gear: { masks: false, blaster: true, band: true, paint: 1 + (k % 3) }, talk: [[4.2, 5.4]] }])),
-          vikram: { path: [A(-1.5, -9.5), A(-2, -14.6)], speed: 1.8, delay: 1.6, face: A(-1.5, -8), act: (t) => (t < 1.6 ? 'photo' : t > 4.2 && t < 5.8 ? 'cheer' : ''), gear: { phone: true, paint: 1 } },
+          vikram: { path: [A(-1.5, -12.2), A(-2, -14.8)], speed: 1.5, delay: 1.6, face: A(-1.5, -8), act: (t) => (t < 1.6 ? 'photo' : t > 4.2 && t < 5.8 ? 'cheer' : ''), gear: { phone: true, paint: 1 } },
         },
-        cam: path([A3(-1.5, 1.6, -7.4), A3(-1.5, 1.8, -6.4)], [A3(-1.5, 1.4, -16), A3(-1.5, 1.5, -16)], [44, 40]),
+        cam: path([A3(-1.5, 1.55, -11.1), A3(-1.5, 1.7, -11.6)], [A3(-1.5, 1.35, -16), A3(-1.5, 1.45, -16)], [58, 54]),
         cues: [[4.1, 'shutter'], [4.3, 'cheer']],
         lines: [[0.4, 'vikram', 'Everyone in! Self-timer… say “paintball”!', 3], [4.2, 'all', 'PAINTBALL!', 1.4], [6, 'sana', 'Same time next week?', 1.8]],
         caption: { kicker: 'Scene 7', title: 'After the match', at: 0.3, hold: 2.4 },

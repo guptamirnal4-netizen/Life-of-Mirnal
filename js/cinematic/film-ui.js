@@ -91,7 +91,7 @@ const STYLE = `
 #film .teamcard.l { left: 3vw; } #film .teamcard.r { right: 3vw; }
 #film .teamcard h4 { margin: 0 0 6px; font-size: clamp(16px, 3vh, 26px); font-weight: 900; letter-spacing: 0.1em; }
 #film .teamcard .p { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; padding: 3px 0; }
-#film .count { left: 50%; top: 45%; transform: translate(-50%, -50%); font-size: clamp(60px, 22vh, 220px); font-weight: 900; text-shadow: 0 6px 0 rgba(0,0,0,0.3); -webkit-text-stroke: 3px rgba(0,0,0,0.25); }
+#film .count { left: 50%; top: 27%; transform: translate(-50%, -50%); font-size: clamp(60px, 22vh, 220px); font-weight: 900; text-shadow: 0 6px 0 rgba(0,0,0,0.3); -webkit-text-stroke: 3px rgba(0,0,0,0.25); }
 #film .score { left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(560px, 90vw); padding: 14px 18px; text-align: center; }
 #film .score .win { font-size: clamp(24px, 5vh, 48px); font-weight: 900; letter-spacing: 0.08em; }
 #film .score .big { display: flex; justify-content: center; align-items: center; gap: 16px; font-size: clamp(30px, 6vh, 58px); font-weight: 900; margin: 6px 0 10px; }
@@ -269,7 +269,7 @@ export class FilmUI {
       cc: () => this.setCC(!this.cc), mute: () => this.setMute(!this.muted), voices: () => this.setVoices(!this.voices),
       replay: () => { f.seek(0); f.play(); }, exit: () => f.finish(),
     };
-    for (const [k, b] of Object.entries(ui.btn)) b.addEventListener('click', (e) => { e.stopPropagation(); act[k](); this.poke(); });
+    for (const [k, b] of Object.entries(ui.btn)) b.addEventListener('click', (e) => { e.stopPropagation(); b.blur(); act[k](); this.poke(); });
     ui.stage.addEventListener('click', () => {
       if (!ui.chapters.classList.contains('hidden')) return this.toggleChapters(false);
       if (document.body.classList.contains('touch') && this.el.classList.contains('idle')) return this.poke();
@@ -503,7 +503,7 @@ export class FilmUI {
   panel_equip(lt, el) {
     el.className = 'pnl equip glass';
     const players = CAST.filter((c) => c.team != null);
-    const cur = players[Math.min(7, Math.floor(lt / 1.45))];
+    const cur = players[Math.min(7, Math.floor((lt + 0.1) / 1.25))];
     return `<h4 style="margin:2px 4px 4px;font-size:13px;letter-spacing:.12em">🎯 SIX BLASTER CATEGORIES</h4>${EQUIPMENT.map((e) => {
       const who = players.filter((c) => c.loadout[0] === e.id).map((c) => c.name).join(', ');
       return `<div class="eq${cur.loadout[0] === e.id ? ' on' : ''}"><span class="sw" style="background:${e.colour}"></span><span><b>${e.name}</b><small>range ${e.range} m · ${e.pellets > 1 ? `${e.pellets} paintballs a pull` : `${e.rate}/s`}${who ? ` · ${who}` : ''}</small></span></div>`;
