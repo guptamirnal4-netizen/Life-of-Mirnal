@@ -20,5 +20,6 @@
 import library from './library.js';
 import nab from './nab.js';
 import mainBuilding from './main-building.js';
+import fd2fd3 from './fd2-fd3.js';
 
-export const BUILDING_MODULES = [library, nab, mainBuilding];
+export const BUILDING_MODULES = [library, nab, mainBuilding, fd2fd3];
