@@ -331,8 +331,8 @@ function buildWorkshop(kit) {
     }
     toolBoard(kit, 69.5, 4, 0.03, [-1, 0]); toolBoard(kit, 69.5, 32, 0.03, [-1, 0]);
   });
+  kit.room('wsToolRoom', 'BITS Workshop · tool room', 30, 40, 13.5, 22.5, 0, 4); // first: roomAt takes the first match
   kit.room('wsHall', 'BITS Workshop · machine hall', T, U - T, T, V - T, 0, CREST);
-  kit.room('wsToolRoom', 'BITS Workshop · tool room', 30, 40, 13.5, 22.5, 0, 4);
   kit.floors.push({ y: 0, name: 'Machine hall' });
 }
 
@@ -350,7 +350,7 @@ function buildNewWorkshop(kit) {
   const hallSides = [
     { L: L('u', T / 2, -1), s0: 0, s1: AU, doors: [{ at: 22, width: 1.8, top: 2.7, fire: true }] },
     { L: L('u', V - T / 2, 1), s0: 0, s1: AU, doors: [] },
-    { L: L('v', T / 2, -1), s0: T, s1: V - T, doors: [{ at: 31, width: 4.4, top: 4.6, shutter: true }] },
+    { L: L('v', T / 2, -1), s0: T, s1: V - T, doors: [{ at: 24, width: 4.4, top: 4.6, shutter: true }] },
   ];
   for (const sd of hallSides) {
     const n = Math.round((sd.s1 - sd.s0) / 6);
@@ -415,7 +415,7 @@ function buildNewWorkshop(kit) {
     for (const v of [16.9, 24.5]) kit.box(U + 1.5, U + 13, v - 0.15, v + 0.15, 0, 0.6, K.ochre);
   }
   kit.entrance('Main entrance (east)', U + 2.5, 20.7, [1, 0]);
-  kit.entrance('Hall 2 loading door (west)', -1.6, 31, [-1, 0]);
+  kit.entrance('Hall 2 loading door (west)', -1.6, 24, [-1, 0]);
   kit.entrance('Hall 1 fire door (north)', 22, -1.6, [0, -1]);
   // ---- roofs: hall roofs (low-pitch sheets behind the parapet, red trusses), admin roof slab, PV
   const halls = [[T, 20.575], [20.825, V - T]];
@@ -520,10 +520,10 @@ function buildNewWorkshop(kit) {
     for (const v of [5, 10, 15]) { kit.desk(44, v, FH, [-1, 0], { w: 1.6, d: 0.9, top: 't:wood:#b08a5c' }); kit.chair(44.6, v, FH, [-1, 0]); }
     lockers(kit, AU - 0.4, 18.5, FH, [-1, 0], 4);
   });
+  kit.room('nwMezz', 'Central Workshop · mezzanine', MZ.u0, AU, T, 20.7, FH, HH, 1);
   kit.room('nwHall1', 'Central Workshop · Hall 1 (turning)', T, AU, T, 20.7, 0, HH);
   kit.room('nwHall2', 'Central Workshop · Hall 2 (milling)', T, AU, 20.7, V - T, 0, HH);
   kit.room('nwLobby', 'Central Workshop · entrance lobby', AU, EU, EV0, EV1, 0, FH);
-  kit.room('nwMezz', 'Central Workshop · mezzanine', MZ.u0, AU, T, 20.7, FH, HH, 1);
   kit.room('nwDrafting', 'Central Workshop · drafting room', AU, U, T, EV0, FH, RF, 1);
   kit.room('nwCad', 'Central Workshop · CAD lab', AU, U, EV1, V, FH, RF, 1);
   kit.floors.push({ y: 0, name: 'Halls and lobby' }, { y: FH, name: 'Mezzanine and first floor' });
