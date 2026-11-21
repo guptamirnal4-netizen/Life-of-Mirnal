@@ -296,3 +296,6 @@ body.touch #bhawan-guide { left: calc(12px + env(safe-area-inset-left)) !importa
   .ex-panel:not(.folded) ~ .ex-card { display: none; } /* the open list takes the top of a phone screen */
   .ex-time input { width: 110px; }
 }
+
+/* one game mode left (School hidden): let it span the row */
+.mode-grid > :only-child { grid-column: 1 / -1; }
