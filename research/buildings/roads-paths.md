@@ -309,3 +309,14 @@ The game today renders `steps` as **flat grey path strips** with no risers [veri
 - `gates-landmarks`: the Main Gate apron, the town-road median lamps, the Patel and Gandhi roundabout statues and kiosks, and the T-lawns railings.
 - `hostels-*`: forecourt pavers and gate pillars at each Bhawan entrance. Real lanes in front of the hostels have no kerbs.
 - Orchestrator: the lamp filter bug (`service` excluded) affects every area's night look.
+
+---
+
+## Build notes (phase 7 environment, js/world/bits-world.js; test tests/browser/environment.mjs)
+
+- **Road classes** (`buildRoads`, `roadCls`): every campus way is OSM `service`, so a per-way table keyed by name/index assigns a class without touching `BITS_CAMPUS`. 28 avenues (6.5 m asphalt, dashed centre line, 0.16 m raised black-and-white kerbs, 2.2 m grey paver footpaths), 27 lanes (4 m, no kerb), the Main Building drive (7 m arc, centre line, no kerbs), 57 footways, and 110 town roads at their OSM width outside the boundary.
+- **Kerbs and footpaths** are merged per material in 2 m pieces. They sit slightly above the asphalt and ground (small y offsets plus polygonOffset on the flat paint) so nothing z-fights. They are walk-over height, so the player crosses an avenue without stepping.
+- **Zebras and stop lines** (`buildZebras`): on every avenue arm of every junction with three or more arms (56 in total), plus the gate avenue.
+- **Lamps** (`buildLampPosts`, instanced; this fixes the old `service` filter bug): 298 galvanised LED poles every 35 m on avenues and the drive (alternating sides, at the back of the footpath), 33 white lantern posts on lanes and at junctions, and 181 single-arm poles on town roads. None stands in the Clock Tower to Mandir wedge (`onAxis`).
+- **Trunk paint**: red from 0 to 0.9 m and white from 0.9 to 1.3 m on trees near avenues.
+- **Not done**: speed-limit boards, blue junction name boards, bins, and the NCC Circle (its position is unknown).
