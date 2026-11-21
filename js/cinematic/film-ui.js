@@ -563,6 +563,7 @@ export class FilmUI {
   updateHots(t) {
     const f = this.film; const cam = f.camera; const w = innerWidth; const h = innerHeight;
     const v = new THREE.Vector3();
+    cam.updateMatrixWorld();
     for (const hs of f.hots) {
       let el = this.hotEls.get(hs);
       const on = t >= hs.t0 && t < hs.t1 && this.ui.info.classList.contains('hidden');

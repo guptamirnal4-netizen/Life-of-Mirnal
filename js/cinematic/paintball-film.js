@@ -401,8 +401,8 @@ export class PaintballFilm {
         cam: path([[-6.5, 9.5, -40], [-5, 13, -27]], [[100, 6, 655], [100, 5, 655]], [30, 26]),
         caption: { kicker: 'Clock Tower → Saraswati Mandir', title: 'Across the sunken Rotunda and NAB', at: 1, hold: 6.5 },
         hots: [
-          { id: 'rotunda', from: 1.2, at: [0, 1, 2], label: 'Rotunda', place: 'Rotunda', title: 'The Rotunda', text: 'The sunken circular court at the heart of the campus. It sits below ground level, so from the Clock Tower you see straight across it to the Saraswati Mandir.' },
-          { id: 'nab', from: 1.2, at: [4, 2, 90], label: 'NAB', place: 'New Academic Block', title: 'NAB · New Academic Block', text: 'Lecture theatres and tutorial rooms, also below grade so the view from the Clock Tower stays open.' },
+          { id: 'rotunda', from: 1.2, at: [2, 3, 26], label: 'Rotunda', place: 'Rotunda', title: 'The Rotunda', text: 'The sunken circular court at the heart of the campus. It sits below ground level, so from the Clock Tower you see straight across it to the Saraswati Mandir.' },
+          { id: 'nab', from: 1.2, at: [8, 3, 120], label: 'NAB', place: 'New Academic Block', title: 'NAB · New Academic Block', text: 'Lecture theatres and tutorial rooms, also below grade so the view from the Clock Tower stays open.' },
           { id: 'temple', from: 2.5, at: [102, 22, 662], label: 'Saraswati Mandir', place: 'Saraswati Temple', title: 'Saraswati Mandir', text: 'The white marble temple at the south end of the axis, with gardens around it.' },
         ],
       },

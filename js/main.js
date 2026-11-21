@@ -2016,7 +2016,7 @@ function openExplorer(kind = 'college', { place = null, fromFilm = false } = {})
   explorer.switchTo(kind);
   if (place) { const p = explorer.places?.find((q) => q.name === place); if (p) explorer.select(p); }
   if (fromFilm && filmReturn) {
-    explorer.ui.bar.prepend(h('button', { class: 'primary ex-film', 'data-voice': 'return to the film', onclick: () => returnToFilm() }, '🎬 Return to the film'));
+    explorer.ui.back.parentElement.prepend(h('button', { class: 'primary ex-film', 'data-voice': 'return to the film', onclick: () => returnToFilm() }, '🎬 Return to the film'));
     toast(place ? `📍 ${place} · the film is paused. “Return to the film” picks it up again.` : '🗺️ Campus Free Roam · the film is paused.', 3500);
   }
   return explorer;
