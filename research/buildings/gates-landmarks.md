@@ -239,3 +239,14 @@ All local captures are in `/private/tmp/claude-501/-Users-mirnal-Documents-Whisp
 - Balaji Temple (320, 753) is a separate POI outside my list and goes to whoever owns C'not or the town edge.
 - Birla Shishu Vihar and Birla Balika Vidyapeeth (schools) are not in my area.
 - The Clock Tower alignment check (statue to Clock Tower) goes to the Main Building and Clock Tower owner.
+
+---
+
+## Build notes (phase 7 environment, js/world/bits-world.js; test tests/browser/environment.mjs)
+
+- **Main Gate** (`buildMainGate`, about (582, 268)): pier-and-banner design, not an arch. Two tall stepped pinkish-sandstone piers carry lanterns, with a white "WELCOME" banner board between them, shorter outer piers, and shut brown leaves in the side bays that block the player. Traffic passes through the centre opening. Outside are a picket fence and a planting strip.
+- **Boundary wall** (`buildBoundaryWall`): white plaster, 2.1 m high, with a maroon coping, along the OSM boundary (2228 pieces). It opens where roads cross it, and each opening gets cream piers with maroon caps and urn finials (9 side gates).
+- **Saraswati Mandir** (`buildTemple`): reoriented to face NORTH down the axis to the G.D. Birla statue and the Clock Tower, and it keeps its fog=false materials so it reads from the porch. It has a walkable 13-riser front flight with elephant pedestals, a terrace with a balustrade, base steps into the porch (ardha-mandapa), a mandapa with pillars, window bays and a coffered lotus ceiling, and a red sanctum niche with the idol behind a rail. The rooms are `temple-terrace` and `temple-mandapa`.
+- **Sight line**: from the Clock Tower porch (-9.3, -40), 20/20 test rays reach the temple shikhara with nothing in the way. The zoomed screenshot shows the temple framed over the sunken Rotunda and NAB. Lamps, trees, walls and gates skip the `onAxis` wedge (a 5 m core that widens by 3 cm per metre).
+- **Statues** (`buildStatues`): Gandhi (walking) and Patel (standing) in dark bronze on white stepped pedestals in kerbed roundabout islands. G.D. Birla stands under a white four-column chhatri with a ribbed dome, in a railed lawn opposite the temple walk.
+- **Birla Museum and the Dakota** (`buildMuseum`, `buildDakota`): the museum is a low two-storey terracotta hall with a white drum porch on the east end. To its south is a natural-metal DC-3 (19.6 m long, 29 m span, tail-dragger, two radials with three-blade propellers) on low pads. It is solid.

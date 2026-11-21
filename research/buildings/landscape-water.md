@@ -234,3 +234,12 @@ The cottage interior was not seen [unknown]. It is a guest house, so it should s
 - `roads-paths`: the SE axial walk to Shiv Ganga, the red-earth ring walk, and the bridge and steps ways (three `steps` ways in OSM near Shiv Ganga).
 - `workshops-halls`: the buildings enclosing VFAST Lawns.
 - `sports`: none.
+
+---
+
+## Build notes (phase 7 environment, js/world/bits-world.js; test tests/browser/environment.mjs)
+
+- **Shiv Ganga** (`buildShivGanga`): the water ring now spans r 54 to 66 m around (128, 823). This is the only change to `data/bits-campus.js`. The OSM polygon is the island bank. The outer bank is a white kerb with a red-earth ring walk and dense trees. The inner bank is a 0.5 m parapet with a balustrade. There are four white balustraded footbridges (E, NE, SE, W), with walkable decks at 0.5 m. The SE bridge continues as the axial walk with globe lamps. On the island are the cottage, small chhatris, and the white octagonal stepped platform with the seated Shiva and trident; its tiers are walkable to y 1.8. The canal blocks the player wherever there is no bridge.
+- **Lawns** (`buildLawns`): M Lawns, S Lawns and South Park have no OSM polygons, so their outlines were traced from the aerial. M Lawns starts east of the turning loop. South Park is bare compacted earth in the north and a furrowed nursery plot in the south (`plotTexture`). Each lawn has its own tree-density rule.
+- **Trees** (`buildTrees`, `buildAshoka`, `buildPalms`): about 15.5k instanced trees of mixed broadleaf species and flame-red gulmohar. Ashoka (Polyalthia) rows and palms line the temple approach. Trees are kept off roads, buildings, the canal ring and the Clock Tower to Mandir wedge (`campus.statuePts` and `onAxis`; the test counts 0 trees on the axis).
+- **Perf**: the frame time from `tests/browser/perf.mjs` matches the 032ec0e baseline within run-to-run noise (two runs each, headless M4). Draw calls rose by 0 to 5%.
