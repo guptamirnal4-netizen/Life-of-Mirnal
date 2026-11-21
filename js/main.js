@@ -1494,7 +1494,7 @@ function showTitle() {
       saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
       h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
       h('button', { onclick: () => openPanel(h('div', {},
-        h('p', {}, 'LIFE OF MIRNAL: a first-person Indian school and college life game. School runs from Class 1 to Class 12; college starts at BITS Pilani.'),
+        h('p', {}, 'PLAY WITH BITSIANS: explore the BITS Pilani campus in 3D, watch the story of a campus paintball competition, and play private multiplayer paintball matches with your friends, talking to your teammates by voice. Mirnal’s College Life follows a first-year student through Year 1 at BITS Pilani.'),
         h('p', {}, 'Built with Three.js (MIT licence). Every 3D object is generated from simple shapes in code, so there are no third-party art assets. National Anthem recording: U.S. Navy Band (public domain).'),
         h('p', {}, 'Sunrise Public School, its staff and students, and the professors and batchmates at college are fictional. BITS Pilani first-year courses follow the official course list. Lesson content is simplified for gameplay.'), h('p', {}, 'Campus map data © OpenStreetMap contributors (ODbL).')), { title: 'Credits', closable: true }) }, 'Credits')),
   ].filter(Boolean));
