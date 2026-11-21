@@ -117,7 +117,7 @@ test('every courtyard Bhawan can be laid out: entrance on a long side facing a r
     const mine = name === 'Krishna Bhawan';
     const H = new Hostel({ colliders: [], interactables: [] }, b, { mine, outer: mine ? b.outer : entranceOrder(b.outer, D.roads) });
     assert.ok(H.W > 40 && H.L >= H.W - 1e-6, `${name}: ${H.W.toFixed(1)} × ${H.L.toFixed(1)}`);
-    assert.equal(H.court.length, b0.holes.length >= 2 ? 2 : 1, name);
+    assert.equal(H.court.length, b0.holes.length >= 2 || ['Vyas Bhawan', 'Vishwakarma Bhawan'].includes(name) ? 2 : 1, name); // Vyas and VK: two courts per imagery, one OSM hole
     for (const r of H.court) assert.ok(r.u1 - r.u0 > 20 && r.v1 - r.v0 > 20, `${name}: courtyard big enough`);
     assert.equal(!!H.spaces.find((s) => s.id === 'hostelroom'), mine, `${name}: your room only in your Bhawan`);
     for (const [key, segs] of Object.entries(H.segs)) {
@@ -127,7 +127,8 @@ test('every courtyard Bhawan can be laid out: entrance on a long side facing a r
       for (const x of segs) if (x.type === 'locked') assert.ok(x.t1 - x.t0 > 3, `${name} ${key}: room too narrow`);
     }
     // the squared-up outline stays within 4 m of every OSM corner
-    for (const p of b0.outer) assert.ok(b.outer.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 4), `${name}: corner moved`);
+    // (Vyas is extended about 35 m north on purpose: OSM leaves out its north court)
+    if (name !== 'Vyas Bhawan') for (const p of b0.outer) assert.ok(b.outer.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 4), `${name}: corner moved`);
   }
 });
 
