@@ -151,7 +151,9 @@ export class PaintballRoom extends Room {
     p.connected = false; p.ready = false; p.talking = false;
     const q = this.sim.get(client.sessionId); if (q) { q.queue.length = 0; q.trigger = false; }
     if (p.host) this.passHost(client.sessionId);
-    this.allowReconnection(client, this.timing.reconnect);
+    if (this.closing) return; // the room is closing: no seat to hold
+    const hold = this.allowReconnection(client, this.timing.reconnect);
+    hold?.catch?.(() => {}); // a hold that runs out (or a room that closes meanwhile) is not an error
   }
 
   onReconnect(client) {
@@ -191,6 +193,7 @@ export class PaintballRoom extends Room {
   }
 
   closeRoom() {
+    this.closing = true;
     this.broadcast('closed', { reason: 'The host closed the room.' });
     this.disconnect(CLOSE_BY_HOST);
   }
@@ -288,6 +291,7 @@ export class PaintballRoom extends Room {
     const s = this.state;
     s.now += dt;
     if (s.now - this.lastActivity > this.timing.idle) {
+      this.closing = true;
       this.broadcast('closed', { reason: 'The room was idle and has closed.' });
       this.disconnect(CLOSE_IDLE);
       return;
@@ -301,6 +305,7 @@ export class PaintballRoom extends Room {
       sim.budget = Math.min(sim.budget + dt, 0.3);
       const frozen = !live || !p.alive;
       let n = 0;
+      sim.pulled = false;
       while (sim.queue.length && sim.budget >= INPUT_DT * 0.5 && n < 12) {
         const i = sim.queue.shift(); n++;
         sim.budget -= INPUT_DT;
@@ -310,6 +315,7 @@ export class PaintballRoom extends Room {
           p.x = pos.x; p.y = pos.y; p.z = pos.z; p.vy = pos.vy;
           p.yaw = i.yaw; p.pitch = i.pitch;
           sim.trigger = i.fire;
+          if (i.fire) sim.pulled = true;
           if (i.reload) sim.reloadWanted = true;
           if (i.slot !== p.slot && live && p.alive) this.switchTo(p, sim, i.slot);
         }
@@ -321,7 +327,7 @@ export class PaintballRoom extends Room {
         stepMove(pos, { f: 0, s: 0, yaw: p.yaw }, dt, this.arena, true);
         p.y = pos.y; p.vy = pos.vy; sim.budget = 0.2; sim.trigger = false;
       }
-      if (!p.connected) sim.trigger = false;
+      if (!p.connected) { sim.trigger = false; sim.pulled = false; }
       if (live) this.blasterTick(id, p, sim);
       if (live && !p.alive && s.now >= p.respawnAt) this.spawn(id, p);
     }
@@ -360,8 +366,9 @@ export class PaintballRoom extends Room {
     while (sim.burstLeft > 0 && now >= sim.nextBurst && canFire) {
       if (p[H] <= 0) { sim.burstLeft = 0; startReload(); break; }
       this.fire(id, p, e); p[H]--; sim.burstLeft--; sim.nextBurst += e.burstGap;
+      if (p[H] === 0 && sim.burstLeft === 0) startReload();
     }
-    if (!sim.trigger || !canFire || sim.burstLeft > 0) return;
+    if (!(sim.trigger || sim.pulled) || !canFire || sim.burstLeft > 0) return;
     let shots = 0;
     while (now >= sim.nextFire && shots < 2) {
       if (p[H] <= 0) { startReload(); break; }
@@ -370,6 +377,7 @@ export class PaintballRoom extends Room {
       this.fire(id, p, e); p[H]--; shots++;
       if (e.burst > 1) { sim.burstLeft = e.burst - 1; sim.nextBurst = now + e.burstGap; break; }
     }
+    if (p[H] === 0 && sim.burstLeft === 0) startReload(); // an empty hopper reloads by itself
   }
 
   fire(id, p, e) {
