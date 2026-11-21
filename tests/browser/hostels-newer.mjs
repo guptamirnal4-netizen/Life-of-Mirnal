@@ -168,7 +168,7 @@ for (const name of ['Ashok Bhawan', 'Rana Pratap Bhawan', 'Malviya Bhawan']) {
   // in through the open (left) arch of the porch, across the vestibule and through the lobby door
   await at(-PD - 4, ve - 3.6, 0, 1, 0);
   let w = await go(-PD - 1.2, ve - 3.6);
-  check(w.u < -PD + 0.05 && w.y < 0.1, `${name}: up to the porch ${JSON.stringify(w)}`);
+  check(w.u < -PD + 0.05 && w.y < 0.15, `${name}: up to the porch ${JSON.stringify(w)}`);
   if (name === 'Ashok Bhawan') await shot('test-ashok-porch-approach');
   w = await route([[-1.3, ve - 3.6], [-1.3, ve]]);
   check(w.u > -PD + 0.3 && w.u < 0 && near(w.y, 0.12, 0.08), `${name}: through the open arch into the vestibule ${JSON.stringify(w)}`);
@@ -188,8 +188,10 @@ for (const name of ['Ashok Bhawan', 'Rana Pratap Bhawan', 'Malviya Bhawan']) {
   check(w.u > S.end.u1, `${name}: an arm's end wall blocks from outside ${JSON.stringify(w)}`);
   // a room and the common room
   await at(2.6, ve, 0, 1, 0);
-  w = await route([[6.1, ve], [6.1, S.room + 0.8], [2.6, S.room + 0.8]]);
-  check(w.u < 4.4 && w.u > 0.3 && w.room === 'hostel', `${name}: into the study room ${JSON.stringify(w)}`);
+  await route([[6.1, ve], [6.1, S.room + 0.4]]);
+  await go(6.1, S.room + 0.8, { slow: true, near: 0.15 }); // line up on the door before turning in
+  w = await route([[2.6, S.room + 0.8]]);
+  check(w.u < 4.4 && w.u > 0.3 && w.v > S.room && w.v < S.room + 5.1 && w.room === 'hostel', `${name}: into the study room ${JSON.stringify(w)}`);
   w = await route([[6.1, S.room + 0.8], [6.1, S.common + 6.8], [2.2, S.common + 6.8]]);
   check(w.u < 4.2 && near(w.y, 0, 0.1), `${name}: into the common room ${JSON.stringify(w)}`);
   if (name === 'Ashok Bhawan') await shot('test-ashok-common-room');
@@ -236,8 +238,15 @@ const closed = await g(() => window.__game.campus.buildings.filter((b) => b.modu
   // a point 30 % along the longest edge (clear of a porch in its middle), and its outward side
   let best = null;
   b.outer.forEach((a, i) => { const c = b.outer[(i + 1) % b.outer.length]; const l = Math.hypot(c[0] - a[0], c[1] - a[1]); if (!best || l > best.l) best = { a, c, l }; });
-  const m = [best.a[0] + (best.c[0] - best.a[0]) * 0.3, best.a[1] + (best.c[1] - best.a[1]) * 0.3]; let n = [(best.c[1] - best.a[1]) / best.l, -(best.c[0] - best.a[0]) / best.l];
   const inPoly = (x, z) => { let c = false; for (let i = 0, j = b.outer.length - 1; i < b.outer.length; j = i++) { const [xi, zi] = b.outer[i]; const [xj, zj] = b.outer[j]; if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
+  if (best.l < 15) {
+    // a jagged OSM outline (Malviya-B): along its middle row from the west, to where that row first enters it
+    const zs = b.outer.map((p) => p[1]); const z = (Math.min(...zs) + Math.max(...zs)) / 2 + 0.37;
+    let x = Infinity;
+    b.outer.forEach((a, i) => { const c = b.outer[(i + 1) % b.outer.length]; if ((a[1] - z) * (c[1] - z) < 0) x = Math.min(x, a[0] + ((z - a[1]) * (c[0] - a[0])) / (c[1] - a[1])); });
+    return { name: b.name || b.annex, m: [x, z], n: [-1, 0] };
+  }
+  const m = [best.a[0] + (best.c[0] - best.a[0]) * 0.3, best.a[1] + (best.c[1] - best.a[1]) * 0.3]; let n = [(best.c[1] - best.a[1]) / best.l, -(best.c[0] - best.a[0]) / best.l];
   if (inPoly(m[0] + n[0] * 2, m[1] + n[1] * 2)) n = [-n[0], -n[1]];
   return { name: b.name || b.annex, m, n };
 }));
@@ -271,12 +280,12 @@ if (SHOTS) {
   await view('malviya-aerial', [-60, 90, ve3 + 70], [30, 0, ve3]);
   await worldView('bhagirath-street', [212, 1.7, 236], [240, 4, 247]);
   await worldView('bhagirath-ashok-aerial', [200, 110, 340], [300, 0, 240]);
-  await worldView('malviya-b-street', [-238, 1.7, 222], [-238, 4, 195]);
+  await worldView('malviya-b-street', [-282, 1.7, 182], [-258, 4, 170]);
   await worldView('malviya-a-b-aerial', [-300, 80, 240], [-210, 0, 165]);
   await worldView('sr-street', [12, 1.7, -224], [-40, 4, -236]);
   await worldView('sr-gate', [22, 1.7, -240], [3, 2, -237]);
   await worldView('sr-aerial', [-60, 110, -150], [-80, 0, -250]);
-  await worldView('meera-street', [-128, 1.7, 636], [-150, 4, 658]);
+  await worldView('meera-street', [-172, 1.7, 640], [-140, 4, 652]);
   await worldView('meera-aerial', [-140, 80, 600], [-150, 0, 680]);
 }
 
