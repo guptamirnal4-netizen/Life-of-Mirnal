@@ -2259,8 +2259,12 @@ export class BitsCampus extends Campus {
     let s = 11;
     const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
     const [sgx, sgz] = SG_WATER.c;
+    // module entrances (steps, porches, forecourts) stay clear: no trunk in a doorway or on a stair
+    const doors = (this.modules || []).flatMap((m) => (m.kit?.entrances || []).map((e) => e.world));
+    const raised = (x, z) => [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]].some(([dx, dz]) => this.floorAt(x + dx, z + dz, 50) > this.groundAt(x + dx, z + dz) + 0.02);
     const add = (x, z, k, painted = false) => {
       if (this.isBuilt(x, z, 1.5) || this.nearRoad(x, z, 0.8)) return;
+      if (doors.some((d) => Math.hypot(x - d.x, z - d.z) < 6) || raised(x, z)) return;
       if (this.hostels.some((H) => !H.treeOk(x, z))) return;
       if (fb && x > fb.minX - 3 && x < fb.maxX + 3 && z > fb.minZ - 3 && z < fb.maxZ + 3) return;
       if (this.keepClear(x, z)) return;
