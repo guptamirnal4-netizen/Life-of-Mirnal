@@ -474,7 +474,7 @@ function buildNewWorkshop(kit) {
     for (let u = 4; u < 30; u += 5) workbench(kit, u, 19.6, 0.03, [0, -1], { w: 2.4 });
     for (const v of [4, 9, 14]) toolBoard(kit, 1.0, v, 0.03, [1, 0]);
     // under the mezzanine: tool crib with shelves
-    for (const v of [3, 5.2, 7.4, 13.5, 15.7, 17.9]) kit.shelf(AU - 0.55, v, 0.03, [-1, 0], { w: 2.0, books: ['c:#8a8f94', 'c:#6f6253', 'c:#2f5d8a', 'c:#a8a08f'] });
+    for (const v of [3, 5.2, 7.4, 9.6, 13.5]) kit.shelf(AU - 0.55, v, 0.03, [-1, 0], { w: 2.0, books: ['c:#8a8f94', 'c:#6f6253', 'c:#2f5d8a', 'c:#a8a08f'] });
     rodLight(kit, 44, 6, FH - 0.3, 0.05); rodLight(kit, 44, 15, FH - 0.3, 0.05);
     // hall 2: mills, drills, perforated tool benches, the glazed CNC room in the SW corner
     for (let u = 16; u < 40; u += 3.2) { mill(kit, u, 25.6, 0.03, [0, 1]); drill(kit, u + 1.6, 28.8, 0.03, [0, 1]); }
@@ -591,7 +591,7 @@ function furnishRoom(kit, r, y, type, ceil) {
     return;
   }
   // cowork / office: clusters of four desks, a sofa
-  for (let a = 1.6; a < W - 1.4; a += 3.4) for (let b = 1.6; b < D - 1.4; b += 3.0) {
+  for (let a = 2.4; a < W - 1.6; a += 3.4) for (let b = 2.0; b < D - 1.6; b += 3.0) {
     for (const [du, dv, f] of [[-0.75, -0.4, [0, 1]], [0.75, -0.4, [0, 1]], [-0.75, 0.4, [0, -1]], [0.75, 0.4, [0, -1]]]) { kit.desk(u0 + a + du, v0 + b + dv, y, f, { w: 1.4, d: 0.7, top: 'c:#e2ddd2' }); kit.chair(u0 + a + du, v0 + b + dv - f[1] * 0.65, y, f, { seat: 'c:#c25a2a' }); }
   }
 }
@@ -1200,8 +1200,8 @@ function buildVFAST(kit, campus) {
     counter(kit, 7.6, 3.4, G, [0, 1], 2.8);
     kit.box(9.55, 9.7, 1.0, 5.6, G + 1.0, G + 2.3, 't:wood:#6d4b30', { collide: false });
     kit.chair(7.6, 2.6, G, [0, 1]);
-    sofa(kit, 7.2, 8.6, G, [0, -1], { w: 2.2, c: 't:wood:#7a5232' }); sofa(kit, 9.2, 6.6, G, [-1, 0], { w: 1.6, c: 't:wood:#7a5232' });
-    kit.box(6.6, 7.8, 6.8, 7.6, G, G + 0.42, 't:wood:#6d4b30');
+    sofa(kit, 6.0, 8.8, G, [0, -1], { w: 1.8, c: 't:wood:#7a5232' }); sofa(kit, 9.2, 6.6, G, [-1, 0], { w: 1.6, c: 't:wood:#7a5232' });
+    kit.box(5.4, 6.6, 7.0, 7.8, G, G + 0.42, 't:wood:#6d4b30');
     rodLight(kit, 7.2, 3, F1 - 0.225, 0.05); rodLight(kit, 7.2, 7, F1 - 0.225, 0.05); rodLight(kit, 2.5, 2.5, F1 - 0.225, 0.05);
   });
   kit.layer('vSuite', () => {
