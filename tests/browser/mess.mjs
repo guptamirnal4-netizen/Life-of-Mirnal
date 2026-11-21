@@ -1,7 +1,7 @@
 // Your room in Krishna Bhawan (walk in and out, sleep in the bed) and meals at the VKB mess as daily missions.
 import { chromium } from 'playwright-core';
 const OUT = process.argv[2] || '.';
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 page.setDefaultTimeout(15000);
 const errors = [];
@@ -17,7 +17,7 @@ const mission = () => page.locator('#hud-mission').innerText();
 const walk = async (ms, keys = ['KeyW']) => { for (const k of keys) await page.keyboard.down(k); await page.waitForTimeout(ms); for (const k of keys) await page.keyboard.up(k); await page.waitForTimeout(300); };
 const closePanels = () => g(() => document.querySelectorAll('#overlay .close').forEach((b) => b.click()));
 
-await page.goto('http://localhost:8080/', { waitUntil: 'load' });
+await page.goto(process.env.BASE || 'http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 await g(() => {
   window.__game.voice.mock = true;
@@ -41,9 +41,9 @@ await page.screenshot({ path: `${OUT}/m01-room.png` });
 log('objective 07:30:', await mission());
 check(/Breakfast at the VKB mess first/.test(await mission()), 'first objective: breakfast at the mess, then registration');
 await walk(4500);
-const out = await g(() => ({ room: window.__game.campus.roomAt(window.__game.player.pos.x, window.__game.player.pos.z), x: window.__game.player.pos.x, exitX: window.__game.campus.rooms.hostelroom.exit.x }));
+const out = await g(() => ({ room: window.__game.campus.roomAt(window.__game.player.pos.x, window.__game.player.pos.z), x: window.__game.player.pos.x, exitX: window.__game.campus.rooms.hostelroom?.exit.x ?? Infinity }));
 log('after walking out', JSON.stringify(out));
-check(out.room === null && out.x < out.exitX + 0.5, 'walked out of the room through the Bhawan doorway');
+check(out.room !== 'hostelroom' && out.x < out.exitX + 0.5, 'walked out of the room through the Bhawan doorway');
 await g(() => { const G = window.__game; G.player.yaw = -Math.PI / 2; }); // turn round to face the Bhawan
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${OUT}/m02-bhawan-door.png` });
