@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { h, toast } from '../ui/dom.js';
 import { BITS_CAMPUS as D } from '../../data/bits-campus.js';
+import { FEATURES } from '../features.js';
 
 // The 3D map: look round the school or BITS Pilani without playing. From above it works like a map (drag to move,
 // right-drag to turn, scroll to zoom); pick a place from the list to fly to it, and "Walk inside" drops you in at
@@ -119,6 +120,7 @@ export class Explorer {
   buildUI() {
     const tab = (kind, label) => h('button', { class: 'ex-tab', onclick: () => { if (this.kind !== kind) this.switchTo(kind); } }, label);
     const tabs = { school: tab('school', '🎒 School'), college: tab('college', '🎓 BITS Pilani') };
+    if (!FEATURES.school) tabs.school.classList.add('hidden'); // the School section is hidden for now (js/features.js)
     const title = h('div', { class: 'ex-title' });
     const search = h('input', { class: 'ex-search', type: 'search', placeholder: 'Search places…', oninput: () => this.renderList() });
     const list = h('div', { class: 'ex-list' });

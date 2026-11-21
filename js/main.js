@@ -30,6 +30,7 @@ import { openStreamSelection } from './ui/streams.js';
 import { openJourney, openFinalPortfolio } from './ui/journey.js';
 import { Voice, tokens } from './voice.js';
 import { Explorer } from './explorer/explorer.js';
+import { FEATURES } from './features.js';
 
 // ---------- Renderer & scene ----------
 const canvas = document.getElementById('game');
@@ -1485,11 +1486,10 @@ function showTitle() {
   menu.replaceChildren(...[
     h('div', { class: 'title-label' }, 'Start a new game'),
     h('div', { class: 'mode-grid' },
-      choice('🎒', 'Mirnal’s School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
+      FEATURES.school && choice('🎒', 'Mirnal’s School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
       choice('🎓', 'Mirnal’s College Life', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
     saveInfo && h('button', { class: 'primary', onclick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } }, `Continue · ${saveInfo}`),
-    h('button', { 'data-voice': 'film campus tour watch', onclick: () => playFilm() }, '🎬 Watch the campus film'),
-    h('button', { 'data-voice': 'map explore 3d', onclick: () => openExplorer() }, '🗺️ Explore the 3D map · school and college'),
+    h('button', { 'data-voice': 'map explore 3d free roam campus', onclick: () => openExplorer() }, FEATURES.school ? '🗺️ Explore the 3D map · school and college' : '🗺️ Campus Free Roam · BITS Pilani'),
     h('div', { class: 'title-row' },
       saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
       h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
