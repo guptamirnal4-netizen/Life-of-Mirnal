@@ -548,6 +548,7 @@ export class BitsCampus extends Campus {
     const wuv = (p, tile) => [p[0] / tile, p[2] / tile];
     for (const r of D.roads) {
       const c = this.roadCls.get(r) || (FOOT_KINDS.has(r.kind) ? 'foot' : 'town');
+      if (r.name === 'T-lawns') continue; // the Saraswati Mandir walk is built with the temple
       const key = c === 'foot' ? 'path' : 'road';
       const y = c === 'foot' ? 0.058 : 0.053;
       const hw = c === 'foot' ? r.w / 2 : this.roadHalf(r);
@@ -1418,12 +1419,12 @@ export class BitsCampus extends Campus {
       K.box(pu - 0.85, pu + 0.85, pv - 1.0, pv + 1.0, 1.3, 1.42, SHADE, { collide: false });
       this.templeElephant(K, pu, pv, 1.42);
     }
-    flatT(C, -RUN - 4.2, 0.05, 10, 8.4, 't:paving:#b8b3ab', TEX_SIZE.paving);
+    flatT(C, -RUN - 4.2, 0.085, 10, 8.4, 't:paving:#b8b3ab', TEX_SIZE.paving);
     K.entrance('Saraswati Mandir front stair', C, -RUN - 0.8, [0, -1]);
 
     // ---- the walk north to the road: red sandstone with cream inlays, white railings with yellow rings ----
     const W0 = -52; const W1 = -RUN - 8.4;
-    tiled('temple-walk', C, (W0 + W1) / 2, 0.06, 4, W1 - W0, 2);
+    tiled('temple-walk', C, (W0 + W1) / 2, 0.085, 4, W1 - W0, 2);
     for (const s of [-1, 1]) {
       const ru = C + s * 2.45;
       for (let v = W0 + 1; v <= W1; v += 2.2) {
@@ -1528,7 +1529,6 @@ export class BitsCampus extends Campus {
     K.col(C - 2.4, C + 2.4, MV1 + 0.1, MV1 + 0.5, TF, TF + 4.2);
     K.room('temple-mandapa', 'Saraswati Mandir · Mandapa', C - 8, C + 8, PV0, MV1, TF - 0.1, CEIL);
     K.room('temple-terrace', 'Saraswati Mandir · Terrace', 0, 48.6, 0, 66, PL - 0.1, PL + 3);
-    K.label('Saraswati Mandir', C, -RUN - 2, 4.2, { height: 0.6, bg: 'rgba(122,38,34,0.92)' });
     K.finish();
     // The temple closes the axis from the Clock Tower over the sunken Rotunda and NAB, about 700 m away: keep its
     // white marble out of the distance haze so it reads from the Clock Tower as it does on campus.
@@ -2113,6 +2113,18 @@ export class BitsCampus extends Campus {
           }
         }
         acc = (acc + len) % step;
+      }
+    }
+    // white lantern posts on the corners of the statue roundabouts and the ANC junction
+    for (const [jx, jz] of [[-12.5, 359.2], [125.6, 338.7], [214.7, 323.1]]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+        for (const rr of [10.5, 13, 15.5]) {
+          const x = jx + Math.sin(a) * rr; const z = jz + Math.cos(a) * rr;
+          if (this.isBuilt(x, z, 0.8) || this.carriageAt(x, z, null, 0.3) || this.onAxis(x, z, 1.5)) continue;
+          sets.lantern.push([x, z, 0]);
+          break;
+        }
       }
     }
     const steel = mat('#a3a9ad', { roughness: 0.45, metalness: 0.55 });
