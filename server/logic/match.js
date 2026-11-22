@@ -143,3 +143,37 @@ export function finalise(modeId, players, { winner = null, draw = false } = {}) 
   const teams = mode.teams ? standings(modeId, players).map((s, i) => ({ team: s.team, name: s.name, colour: s.colour, score: s.score, tags: s.tags, place: i + 1 })) : [];
   return { draw, winnerKey: draw ? null : winner, winner: win, runnerUp: runner, mvp: mvp?.id ?? null, mvpName: mvp?.nickname ?? null, rankings, teams };
 }
+
+// Campus Royale results: completion bonus (still connected), placement bonus (SCORE.place per player or squad
+// outlasted), win bonus to the last standing. Ranked by placement, then score. players: [{ id, nickname, team,
+// score, tags, assists, timesTagged, connected, placement, survived }]; winner: a player id, or 't<team>' in
+// squads, or null (a draw). Mutates the scores.
+export function finaliseRoyale(modeId, players, { winner = null } = {}) {
+  const mode = MODES_BY_ID[modeId];
+  const key = (p) => (mode.teams ? `t${p.team}` : p.id);
+  const groups = new Set(players.map(key)).size;
+  for (const p of players) {
+    if (p.connected === false) continue;
+    p.score += SCORE.completion + SCORE.place * Math.max(0, groups - (p.placement || groups));
+    if (winner !== null && key(p) === winner) p.score += SCORE.win;
+  }
+  const pl = (p) => p.placement || 255;
+  const rank = [...players].sort((a, b) => pl(a) - pl(b) || b.score - a.score || b.tags - a.tags || a.nickname.localeCompare(b.nickname));
+  const rankings = rank.map((p, i) => ({ id: p.id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags, assists: p.assists, timesTagged: p.timesTagged, place: i + 1, placement: p.placement || 0, survived: p.survived || 0 }));
+  const mvp = [...rankings].sort((a, b) => b.score - a.score || b.tags - a.tags)[0] || null;
+  let teams = []; let win = null; let runner = null;
+  if (mode.teams) {
+    const T = new Map();
+    for (const p of players) {
+      if (!T.has(p.team)) T.set(p.team, { team: p.team, name: `Team ${TEAMS[p.team].name}`, colour: TEAMS[p.team].colour, score: 0, tags: 0, placement: p.placement || 255 });
+      const t = T.get(p.team); t.score += p.score; t.tags += p.tags; t.placement = Math.min(t.placement, p.placement || 255);
+    }
+    teams = [...T.values()].sort((a, b) => a.placement - b.placement || b.score - a.score).map((t, i) => ({ team: t.team, name: t.name, colour: t.colour, score: t.score, tags: t.tags, place: i + 1 }));
+    win = winner === null ? null : teams.find((t) => `t${t.team}` === winner)?.name ?? null;
+    runner = winner === null ? null : teams.find((t) => `t${t.team}` !== winner)?.name ?? null;
+  } else {
+    win = winner === null ? null : players.find((p) => p.id === winner)?.nickname ?? null;
+    runner = winner === null ? null : rankings.find((r) => r.id !== winner)?.nickname ?? null;
+  }
+  return { draw: winner === null, winner: win, runnerUp: runner, mvp: mvp?.id ?? null, mvpName: mvp?.nickname ?? null, rankings, teams };
+}

@@ -46,11 +46,43 @@ export const PbPlayer = schema({
   // voice chat: switched on, talking now
   voice: t.boolean().default(false),
   talking: t.boolean().default(false),
+  // Campus Royale (js/paintball/royale.js, items.js): inventory, gear, channelled actions, elimination
+  ammo: t.map('uint16'), // paintballs carried per blaster type
+  paintbomb: t.uint8().default(0),
+  smoke: t.uint8().default(0),
+  wipes: t.uint8().default(0),
+  kit: t.uint8().default(0),
+  gearMask: t.uint8().default(0), // protective gear tiers 0–3
+  gearVest: t.uint8().default(0),
+  channel: t.string().default(''), // '' | 'wipes' | 'kit' | 'revive' (cleaning a teammate)
+  channelUntil: t.float32().default(0),
+  down: t.boolean().default(false), // squads: fully painted, waiting to be cleaned off by a teammate
+  downUntil: t.float32().default(0),
+  out: t.boolean().default(false), // round elimination for the rest of the match (spectating)
+  placement: t.uint8().default(0),
+  survived: t.float32().default(0), // s from the start of play to elimination (or the end)
+  drop: t.int16().default(-1), // chosen landing spot (drop registry id)
+  watching: t.string().default(''), // spectating this player
 }, 'PbPlayer');
+
+// Something lying on the ground in Campus Royale: an item id (js/paintball/items.js), how many, where.
+export const PbLoot = schema({
+  item: t.string(), n: t.uint16().default(1), x: t.float32(), y: t.float32(), z: t.float32(),
+}, 'PbLoot');
+
+// The play zone: the current circle (shrinking towards next), the phase, when this stage ends, paint per second
+// outside.
+export const PbZone = schema({
+  x: t.float32().default(0), z: t.float32().default(0), r: t.float32().default(0),
+  nx: t.float32().default(0), nz: t.float32().default(0), nr: t.float32().default(0),
+  phase: t.uint8().default(0), phases: t.uint8().default(0), shrinking: t.boolean().default(false),
+  ends: t.float32().default(0), dps: t.float32().default(0),
+}, 'PbZone');
 
 export const PbRank = schema({
   id: t.string(), nickname: t.string(), team: t.int8().default(-1), place: t.uint8(),
   score: t.int32(), tags: t.uint16(), assists: t.uint16(), timesTagged: t.uint16(),
+  placement: t.uint8().default(0), survived: t.float32().default(0), // Campus Royale
 }, 'PbRank');
 
 export const PbTeamResult = schema({
@@ -73,7 +105,7 @@ export const PbState = schema({
   mode: t.string().default('ffa'),
   arena: t.string().default('medc'),
   duration: t.uint16().default(480),
-  phase: t.string().default('lobby'), // lobby | countdown | playing | overtime | results
+  phase: t.string().default('lobby'), // lobby | landing (Campus Royale) | countdown | playing | overtime | results
   now: t.float32().default(0), // room clock, s since the room opened
   phaseEnds: t.float32().default(0), // room clock when the countdown / match / overtime ends
   teamsLocked: t.boolean().default(false),
@@ -82,4 +114,11 @@ export const PbState = schema({
   testMode: t.boolean().default(false),
   players: t.map(PbPlayer),
   results: t.ref(PbResults).default(() => new PbResults()),
+  // Campus Royale
+  geo: t.string().default(''), // hash of the campus collision export the server runs (the client checks it loaded the same)
+  loot: t.map(PbLoot),
+  zone: t.ref(PbZone).default(() => new PbZone()),
+  standing: t.uint8().default(0), // players not yet eliminated
+  groups: t.uint8().default(0), // players (free-for-all) or squads still standing
+  playStart: t.float32().default(0),
 }, 'PbState');

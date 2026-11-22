@@ -22,7 +22,8 @@ export const TEAMS = [
   { name: 'Violet', colour: '#b26bff' },
 ];
 
-export const SCORE = { tag: 100, assist: 40, completion: 20, win: 50 };
+// place: Campus Royale, per player or squad you outlast
+export const SCORE = { tag: 100, assist: 40, completion: 20, win: 50, place: 15 };
 // A player who painted the target within ASSIST_WINDOW seconds before someone else tagged them gets an assist.
 export const ASSIST_WINDOW = 6;
 

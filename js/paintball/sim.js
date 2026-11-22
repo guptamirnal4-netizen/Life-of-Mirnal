@@ -2,6 +2,7 @@
 // player movement against the arena's solids and net fence, and paintball sweeps. Plain math, no three.js or DOM,
 // so the server and the client step exactly the same code.
 import { MOVE } from './rules.js';
+import { BOMB } from './items.js';
 
 // The client sends one input per INPUT_DT step; the server replays them at the same step.
 export const INPUT_DT = 1 / 30;
@@ -188,4 +189,37 @@ export function segPlayer(a, b, p) {
   if (t < 0) return null;
   const y = a.y + (b.y - a.y) * t;
   return { t, precision: y - p.y >= MOVE.head };
+}
+
+// ---------- thrown paint bombs (Campus Royale) ----------
+// A bomb in flight: { x, y, z, vx, vy, vz, rest, bounces }. Swept against the campus (never through a wall),
+// bounces off what it hits (losing speed) and comes to rest on a floor. The server and the browser step the same
+// code from the same throw, so both see the same arc.
+export function stepBomb(b, dt, arena) {
+  if (b.rest) return b;
+  const n = Math.max(1, Math.ceil((Math.hypot(b.vx, b.vy, b.vz) * dt) / 1.2));
+  const h = dt / n;
+  for (let k = 0; k < n && !b.rest; k++) {
+    b.vy -= BOMB.gravity * h;
+    const a = { x: b.x, y: b.y, z: b.z };
+    const e = { x: a.x + b.vx * h, y: a.y + b.vy * h, z: a.z + b.vz * h };
+    const hit = sweepArena(a, e, arena);
+    if (!hit) { b.x = e.x; b.y = e.y; b.z = e.z; continue; }
+    const t = Math.max(0, hit.t - 1e-3); const nn = hit.n;
+    b.x = a.x + (e.x - a.x) * t + nn.x * 0.02; b.y = a.y + (e.y - a.y) * t + nn.y * 0.02; b.z = a.z + (e.z - a.z) * t + nn.z * 0.02;
+    const vn = b.vx * nn.x + b.vy * nn.y + b.vz * nn.z;
+    if (vn < 0) {
+      // reflect the normal part (losing energy), slow the sliding part
+      const tx = b.vx - vn * nn.x; const ty = b.vy - vn * nn.y; const tz = b.vz - vn * nn.z;
+      b.vx = tx * BOMB.friction - vn * nn.x * BOMB.bounce; b.vy = ty * BOMB.friction - vn * nn.y * BOMB.bounce; b.vz = tz * BOMB.friction - vn * nn.z * BOMB.bounce;
+    }
+    b.bounces = (b.bounces || 0) + 1;
+    if (nn.y > 0.5 && (Math.hypot(b.vx, b.vy, b.vz) < 1.5 || b.bounces >= BOMB.maxBounces)) { b.vx = 0; b.vy = 0; b.vz = 0; b.rest = true; }
+  }
+  return b;
+}
+// Throw velocity for an aim (yaw, pitch): BOMB.speed along the aim, lofted a little.
+export function throwVelocity(yaw, pitch) {
+  const d = aimDir(yaw, Math.min(1.4, pitch + BOMB.loft));
+  return { vx: d.x * BOMB.speed, vy: d.y * BOMB.speed, vz: d.z * BOMB.speed };
 }
