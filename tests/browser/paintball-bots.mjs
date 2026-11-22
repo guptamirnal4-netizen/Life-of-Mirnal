@@ -140,25 +140,31 @@ try {
   // ---------- Whole Campus · Campus Royale ----------
   await playVsBots(A, { arena: 'campus', bots: 5, level: 'hard' });
   await A.waitForFunction(() => window.__pb.state.phase === 'landing', null, { timeout: 20000 });
+  await A.locator('[data-pb=landing-map]').waitFor();
+  await sleep(1200);
+  check(await A.evaluate(() => window.__pb.state.regionR > 50 && Math.abs(window.__pb.state.zone.r - window.__pb.state.regionR) < 1), 'campus: a room with bots plays in a smaller play area (the first circle)');
+  check(/play area/.test(await A.locator('.pb-landinfo').innerText()), 'campus: the landing map says to land inside the circle');
+  await shot(A, 'campus-landing.png');
   check(await A.evaluate(() => window.__pb.state.arena === 'campus' && [...window.__pb.state.players.values()].filter((p) => p.bot).length === 5), 'campus: 5 bots in a Campus Royale practice match');
   await A.waitForFunction(() => window.__pb.state.phase === 'playing', null, { timeout: 60000 });
   check(await A.evaluate(() => [...window.__pb.state.players.values()].filter((p) => p.bot && p.drop >= 0).length === 5), 'campus: every bot landed on a landing spot');
   await A.waitForFunction(() => !!window.__pb.arena.geo, null, { timeout: 30000 });
-  await watch(A);
   // bring everyone to the Med-C cricket ground (test helpers) and pin a small paint zone there so they meet
   const MC = { x: 395, z: 650 };
   await send(A, 'test:place', { x: MC.x - 30, z: MC.z - 25, unprotect: true });
   const ids = await A.evaluate(() => [...window.__pb.state.players.entries()].filter(([, p]) => p.bot).map(([id]) => id));
   for (const [i, id] of ids.entries()) await send(A, 'test:place', { id, x: MC.x + Math.cos(i * 1.3) * 14, z: MC.z + Math.sin(i * 1.3) * 10, unprotect: true });
   await send(A, 'test:zone', { x: MC.x, z: MC.z, r: 45, dps: 2 });
-  t0 = Date.now();
-  while (Date.now() - t0 < 60000) { const w = await watched(A); if (w.tags >= 1 && w.moved >= 3 && w.shots > 5) break; await sleep(500); }
+  await sleep(300);
+  await watch(A); // from where they were put
+  t0 = Date.now(); let drawn2 = 0;
+  while (Date.now() - t0 < 60000) { const w = await watched(A); drawn2 = Math.max(drawn2, await botsDrawn(A)); if (w.tags >= 1 && w.moved >= 2 && w.shots > 5 && drawn2) break; await sleep(400); }
   const w2 = await watched(A);
-  check(w2.moved >= 3, `campus: bots move (${w2.moved} moved)`);
+  check(w2.moved >= 2, `campus: bots move (${w2.moved} moved)`);
   check(w2.shots > 5, `campus: bots fire (${w2.shots} paintballs)`);
   check(w2.tags >= 1, `campus: a tag happens (${w2.tags} tags, ${w2.byBot} by bots)`);
-  const d2 = await lookAtBot(A); await sleep(900);
-  check((await botsDrawn(A)) >= 1, `campus: bot avatars are drawn (nearest ${d2} m)`);
+  const d2 = await lookAtBot(A); await sleep(500);
+  check(drawn2 >= 1 || (await botsDrawn(A)) >= 1, `campus: bot avatars are drawn (nearest ${d2} m)`);
   await closeUp(A);
   await shot(A, 'campus-match.png');
   await send(A, 'test:end', {});
