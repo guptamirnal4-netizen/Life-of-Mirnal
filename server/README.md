@@ -26,7 +26,7 @@ On a `localhost` page, the browser connects to `ws://localhost:2567`. Tests poin
 | --- | --- | --- |
 | `PORT` | `2567` | Listening port (Render sets it) |
 | `HOST` | `0.0.0.0` | Listening address |
-| `ALLOWED_ORIGINS` | (none) | Extra browser origins, comma-separated. `https://play-with-bitsian.vercel.app`, `https://life-of-mirnal.vercel.app` and any `localhost` origin are always allowed. Other origins get a 403 on the WebSocket upgrade, and CORS does not reflect them. |
+| `ALLOWED_ORIGINS` | (none) | Extra browser origins, comma-separated. `https://play-with-bitsians.vercel.app`, `https://play-with-bitsian.vercel.app`, `https://life-of-mirnal.vercel.app` and any `localhost` origin are always allowed. Other origins get a 403 on the WebSocket upgrade, and CORS does not reflect them. |
 | `PB_TEST` | unset | `1` turns on the test flag: short match durations and test helpers. Never set it in production. |
 
 Health check: `GET /health` returns `{"ok":true,"rooms":N,"test":false}`.
