@@ -694,7 +694,7 @@ export class PaintballFilm {
         cam: path([[-120, 260, -260], [-60, 200, -200]], [[60, 0, 10], [70, 0, 20]], 46),
         zone: { mt: 0 },
         panels: [{ kind: 'intro', from: 0.2, to: 5.9 }],
-        hots: [{ id: 'create-a', from: 1.5, to: 5.8, screen: [0.5, 0.9], label: 'Create a room', game: 'create' }],
+        hots: [{ id: 'create-a', from: 1.5, to: 5.8, screen: [0.5, 0.8], label: 'Create a room', game: 'create' }],
         cues: [[0.2, 'braam']],
       },
       {
@@ -813,7 +813,7 @@ export class PaintballFilm {
           aanya: { at: [103.2, -14.8], face: [AD.x, AD.z], act: 'look+ready' },
         },
         airdrop: { fall: 0 },
-        cam: (c) => { const m = P('advait'); return { pos: V(m.x - 1.4, m.y + 1.5, m.z - 2.8), look: V(AD.x, 18 + c.e * 14, AD.z), fov: 50 }; },
+        cam: (c) => { const m = P('advait'); return { pos: V(m.x - 1.4, m.y + 1.5, m.z - 2.8), look: V(AD.x, 6 + c.e * 10, AD.z), fov: 54 }; },
         ev: [{ t: 0.3, type: 'note', who: 'advait', text: `📦 Special supply drop incoming: ${AD.name}` }],
         hud: { pov: 'advait', mode: 'full', mt: [155.4, 159.6] },
         cues: [[0.3, 'alarm']],
@@ -984,7 +984,7 @@ export class PaintballFilm {
         },
         cam: orbit([107, 0.5], 12, 0.2, 0.7, 6, 7.5, 1.2, 46),
         panels: [{ kind: 'results', from: 0.2, to: 8.9 }],
-        hots: [{ id: 'join', from: 2, to: 8.8, screen: [0.5, 0.94], label: 'Join a room', game: 'join' }],
+        hots: [{ id: 'join', from: 2, to: 8.8, screen: [0.88, 0.07], label: 'Join a room', game: 'join' }],
       },
       {
         name: 'celebrate', scene: 7, dur: 5, clock: [hm(17, 36), hm(17, 36.5)], dof: 'advait', lb: 1,
@@ -1005,7 +1005,7 @@ export class PaintballFilm {
         },
         boundary: (lt) => ({ draw: 1, glow: smooth(2, 5, lt) * 0.8 }),
         cam: path([[100, 3, 12], [60, 90, 120], [-60, 420, 420]], [[107, 1.6, 0], [100, 0, -10], [120, 0, 120]], [46, 42]),
-        hots: [{ id: 'create', from: 1.5, to: 6.8, screen: [0.36, 0.84], label: 'Create a room', game: 'create' }, { id: 'join2', from: 1.5, to: 6.8, screen: [0.64, 0.84], label: 'Join a room', game: 'join' }],
+        hots: [{ id: 'create', from: 1.5, to: 6.8, screen: [0.36, 0.8], label: 'Create a room', game: 'create' }, { id: 'join2', from: 1.5, to: 6.8, screen: [0.64, 0.8], label: 'Join a room', game: 'join' }],
       },
     ];
     // match clock and letterbox: HUD shots run the match clock and drop the letterbox

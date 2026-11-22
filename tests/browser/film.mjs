@@ -159,12 +159,12 @@ await crates.click();
 check(await page.locator('#film .info').isVisible() && /crate panel/.test(await page.locator('#film .info').innerText()), '“How crates work” opens its panel');
 check((await film()).paused, 'the film pauses under the panel');
 await shot('02-hotspot-crates');
-await page.getByRole('button', { name: /Back to the film/ }).click();
+await page.locator('#film .info button', { hasText: 'Back to the film' }).click();
 await at('blasters', 3); await waitFrames(3);
 await page.locator('#film .hot[data-id="blasters"]').click();
 check(/Precision Paint Marker/.test(await page.locator('#film .info').innerText()), '“The six blasters” lists the six blasters with their stats');
 await page.keyboard.press('Escape');
-check(!!(await g(() => window.__game.film)) && await page.locator('#film .info.hidden').count() === 1, 'Esc closes the panel (the film stays)');
+check((await g(() => !!window.__game.film)) && await page.locator('#film .info.hidden').count() === 1, 'Esc closes the panel (the film stays)');
 
 // ---- Create a room → the portal flow ----
 await at('outro', 3); await waitFrames(3);
@@ -175,8 +175,9 @@ await page.waitForTimeout(800);
 const cr = await g(() => ({ film: !!window.__game.film, opts: window.__pbOpts, mode: window.__game.mode }));
 check(!cr.film && cr.opts?.action === 'create' && cr.opts?.portal === true, `“Create a room” ends the film and opens openPaintball({ action: 'create', portal: true }) (${JSON.stringify(cr)})`);
 await shot('03-create-room');
-// back to the portal (no game server here: the client goes back with a status, or via its back button)
-await page.waitForFunction(() => window.__game.mode === 'title', null, { timeout: 15000 }).catch(async () => { await page.locator('[data-pb="back"], [data-pb="retry-back"]').first().click().catch(() => {}); });
+// back to the portal: with no game server the client returns there by itself; with one, leave the new room
+await page.waitForFunction(() => window.__game.mode === 'title' || !!window.__game.paintball?.room, null, { timeout: 20000 }).catch(() => {});
+if (await g(() => !!window.__game.paintball?.room)) { await g(() => { window.__game.paintball.leave(); }); log('(a local game server answered: left the room it created)'); }
 await portalUp(page).catch(() => {});
 check(await g(() => window.__game.mode === 'title' && window.__game.portal?.visible), 'and from there back to the portal');
 
