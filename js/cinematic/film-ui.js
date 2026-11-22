@@ -110,7 +110,8 @@ const STYLE = `
 #film .kit .row span.none { opacity: 0.45; }
 /* results */
 #film .results { inset: 0; display: grid; place-items: center; padding: 12px; background: linear-gradient(180deg, rgba(10,12,28,0.25), rgba(10,12,28,0.6)); }
-#film .results .pb-card { width: min(980px, 100%); transform-origin: center; }
+#film .results .pb-card { position: absolute; left: 50%; top: 50%; width: min(980px, calc(100vw - 24px)); transform-origin: center; }
+@media (max-width: 700px) { #film .results .pb-card { width: 600px; } }
 #film .results .pb-table tr { transition: opacity 0.3s; }
 #film .results .pb-podium div, #film .results .pb-team { transition: opacity 0.3s, transform 0.3s; }
 #film .win { left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
@@ -176,7 +177,7 @@ const STYLE = `
   #film .bl-grid { grid-template-columns: repeat(2, 1fr); }
   #film .bl-grid .pb-eq span.bl { display: none; }
   #film .intel { left: 3vw; right: 3vw; top: 12vh; transform: none; flex-direction: column; align-items: center; }
-  #film .intel .side { width: 100%; flex-direction: row; flex-wrap: wrap; } #film .intel .side .stat { flex: 1 1 45%; }
+  #film .intel .side { width: 100%; flex-direction: row; flex-wrap: wrap; } #film .intel .side .stat { flex: 1 1 45%; } #film .intel .side .stat:nth-of-type(n+4), #film .intel .side .big { display: none; }
   #film .intro .pb-teams { grid-template-columns: repeat(2, 1fr); } #film .intro .pb-team:last-child { grid-column: span 2; }
   #film .line { bottom: 26vh; }
 }
@@ -846,8 +847,8 @@ export class FilmUI {
   draw_results(lt, el) {
     const card = el.querySelector('.pb-card'); if (!card) return;
     if (!el.querySelector('.pb-confetti') && !this.capture) el.prepend(confettiEl());
-    const k = Math.min(1, (innerHeight - 24) / Math.max(1, card.scrollHeight), (innerWidth - 24) / Math.max(1, card.scrollWidth));
-    card.style.transform = `scale(${(k * (0.96 + 0.04 * smooth(0, 0.4, lt))).toFixed(3)})`;
+    const k = Math.min(1, (innerHeight - 24) / Math.max(1, card.offsetHeight), (innerWidth - 16) / Math.max(1, card.offsetWidth, card.scrollWidth));
+    card.style.transform = `translate(-50%, -50%) scale(${(k * (0.96 + 0.04 * smooth(0, 0.4, lt))).toFixed(3)})`;
   }
 
   // ---------- hotspots ----------
@@ -864,7 +865,7 @@ export class FilmUI {
         this.ui.hots.append(el); this.hotEls.set(hs, el);
       }
       el.style.display = '';
-      el.style.left = `${(hs.screen[0] * w).toFixed(0)}px`; el.style.top = `${(hs.screen[1] * h).toFixed(0)}px`;
+      const half = el.offsetWidth / 2 + 8; el.style.left = `${Math.min(w - half, Math.max(half, hs.screen[0] * w)).toFixed(0)}px`; el.style.top = `${(hs.screen[1] * h).toFixed(0)}px`;
     }
   }
 
