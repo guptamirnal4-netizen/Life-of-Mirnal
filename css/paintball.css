@@ -99,6 +99,7 @@
 #pb-board { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); max-height: 80vh; overflow: auto; background: rgba(10,12,28,0.88); border-radius: 16px; padding: 12px 16px; pointer-events: none; }
 .pb-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pb-table th { text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; padding: 4px 6px; }
+.pb-table th.n { text-align: right; } /* the number columns: headers line up with their right-aligned values */
 .pb-table td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,0.1); }
 .pb-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .pb-table tr.me td { background: rgba(48,213,255,0.15); }

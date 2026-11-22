@@ -163,9 +163,17 @@ if (hasOpen) check(!(await g(() => !!window.__game.film)), '“Open the lobby”
 else check(/not available/.test(await page.locator('#film .info .msg').innerText()), '“Open the lobby” says honestly that the live lobby is not available yet');
 await shot('05-lobby-panel');
 if (!hasOpen) await page.getByRole('button', { name: /Back to the film/ }).click();
+else {
+  // the real lobby opened: its own "Back to the title screen" returns to the title, then play the film again
+  await page.locator('[data-pb="back"]').click();
+  await page.waitForFunction(() => !window.__game.paintball && !document.getElementById('title').classList.contains('hidden'), null, { timeout: 15000 }).catch(() => {});
+  check(await page.locator('#title').isVisible(), 'the lobby’s “Back to the title screen” returns to the title');
+  await page.getByRole('button', { name: /Watch the film/ }).click();
+  await page.waitForFunction(() => !!window.__game.film, null, { timeout: 15000 });
+}
 
 // ---- the ending returns to the title menu ----
-if (!hasOpen) {
+{
   await g(() => { const f = window.__game.film; f.seek(f.duration - 2.5); f.play(); });
   await page.waitForFunction(() => !window.__game.film, null, { timeout: 15000 }).catch(() => {});
   check(!(await g(() => !!window.__game.film)) && await page.locator('#title').isVisible(), 'the end of the film returns to the title menu');

@@ -370,7 +370,7 @@ export class PaintballMode {
     const s = this.state; const mode = MODES_BY_ID[s.mode]; const myId = this.room.sessionId;
     const rows = results ? [...s.results.rankings].map((r) => [r.id, r]) : [...s.players.entries()].sort((a, b) => b[1].score - a[1].score);
     return h('table', { class: 'pb-table', 'data-pb': 'scoreboard' },
-      h('tr', {}, h('th', {}, '#'), h('th', {}, 'Player'), mode.teams > 0 && h('th', {}, 'Team'), h('th', {}, 'Score'), h('th', {}, 'Tags'), h('th', {}, 'Assists'), h('th', {}, 'Times tagged'), h('th', {}, '')),
+      h('tr', {}, h('th', {}, '#'), h('th', {}, 'Player'), mode.teams > 0 && h('th', {}, 'Team'), h('th', { class: 'n' }, 'Score'), h('th', { class: 'n' }, 'Tags'), h('th', { class: 'n' }, 'Assists'), h('th', { class: 'n' }, 'Times tagged'), h('th', {}, '')),
       ...rows.map(([id, r], i) => {
         const p = s.players.get(id);
         return h('tr', { class: id === myId ? 'me' : '' }, h('td', {}, String(r.place || i + 1)),
