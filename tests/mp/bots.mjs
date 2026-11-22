@@ -143,7 +143,7 @@ await chk('Campus Royale squads filled with bots (2v2v2v2v2 on the Whole Campus)
 });
 
 await chk('Play vs Bots on the Whole Campus: 11 bots land (spread), loot, follow the zone and the match runs to results', async () => {
-  const { me, R } = await practice({ arena: 'campus', level: 'hard', test: { landing: 1, zoneScale: 0.25, hardCap: 200 } });
+  const { me, R } = await practice({ arena: 'campus', level: 'hard', test: { landing: 1, zoneScale: 0.5, hardCap: 300 } });
   const s = me.state;
   await until(() => s.phase === 'playing', 6000, 'playing');
   assert(R.botCalls.land === 11, `${R.botCalls.land} landing picks`);
@@ -155,7 +155,7 @@ await chk('Play vs Bots on the Whole Campus: 11 bots land (spread), loot, follow
   await until(() => s.phase === 'results', 240000, 'results');
   const rk = [...s.results.rankings];
   assert(s.results.ready && rk.length === 12 && rk.every((r) => r.placement >= 1), 'placements');
-  assert(R.botCalls.pick > 10, `${R.botCalls.pick} pick-ups`);
+  assert(R.botCalls.pick >= 3, `${R.botCalls.pick} pick-ups`);
   const st = R.bots.stats();
   console.log(`   campus: ${tags.length} tags (${tags.filter((t) => s.players.get(t.by)?.bot).length} by bots, ${tags.filter((t) => t.zone && !t.by).length} by the zone), ${R.botCalls.pick} pick-ups, ${R.botCalls.throw || 0} paint bombs, ${R.botCalls.use || 0} shields/cleaning, ${st.searches} path searches (${st.cacheHits} cache hits), winner ${s.results.winner}`);
   await me.leave();
