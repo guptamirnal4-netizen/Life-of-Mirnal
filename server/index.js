@@ -11,7 +11,7 @@ import { Server, matchMaker, createRouter, createEndpoint } from '@colyseus/core
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { PaintballRoom, TestPaintballRoom, liveRooms } from './PaintballRoom.js';
 
-const DEFAULT_ORIGINS = ['https://life-of-mirnal.vercel.app'];
+const DEFAULT_ORIGINS = ['https://play-with-bitsian.vercel.app', 'https://life-of-mirnal.vercel.app'];
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 export function originAllowed(origin, extra = []) {

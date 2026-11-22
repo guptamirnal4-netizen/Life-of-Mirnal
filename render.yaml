@@ -23,6 +23,6 @@ services:
       - key: NODE_ENV
         value: production
       # Render provides PORT; the server binds 0.0.0.0:$PORT. Extra browser origins (comma-separated) besides
-      # https://life-of-mirnal.vercel.app and localhost:
+      # https://play-with-bitsian.vercel.app, https://life-of-mirnal.vercel.app and localhost:
       - key: ALLOWED_ORIGINS
         value: ""
