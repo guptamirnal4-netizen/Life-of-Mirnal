@@ -343,7 +343,7 @@ function handlePendingInner(a, ctx, out) {
       out.effects.fact = { bitsat: n };
       out.effects.memory = `you told me your BITSAT score was ${n}`;
       out.effects.friend = 2;
-      out.text = n > npc.bitsat + 10 ? `${n}?! That’s amazing, Mirnal. Respect.` : n < npc.bitsat - 10 ? `${n}, nice! Doesn’t matter now anyway, we’re both here.` : `${n}! We’re basically the same. BITSAT twins.`;
+      out.text = n > npc.bitsat + 10 ? `${n}?! That’s amazing. Respect.` : n < npc.bitsat - 10 ? `${n}, nice! Doesn’t matter now anyway, we’re both here.` : `${n}! We’re basically the same. BITSAT twins.`;
       return true;
     }
     if (/\b(no|nahi|secret|dont|won|rather not|not telling)\b/.test(a.norm)) {
@@ -380,7 +380,7 @@ function handlePendingInner(a, ctx, out) {
     return true;
   }
   if (p === 'wants_help' && (a.intent === 'yes' || a.intent === 'offer_help' || a.intents.includes('yes'))) {
-    out.text = `Really? Thank you, Mirnal! Now I get it: “${ctx.helpTopicLine}”`;
+    out.text = `Really? Thank you! Now I get it: “${ctx.helpTopicLine}”`;
     out.effects.friend = 8;
     out.effects.rep = 2;
     out.effects.memory = `you helped me understand ${ctx.helpTopicName}`;
@@ -402,25 +402,25 @@ function classmateReply(a, ctx, out, seed) {
       if (ctx.turn === 0 && !cold) {
         const last = (ctx.lessons || []).at(-1);
         if (ctx.slot?.type === 'fest' || (ctx.festName && ctx.slot?.type === 'break' && seed % 2)) {
-          out.text = `Mirnal! Are you coming for ${ctx.festName} tonight?`;
+          out.text = `Hey! Are you coming for ${ctx.festName} tonight?`;
           out.pending = 'invite_fest';
           return;
         }
         if (last && seed % 3 !== 0) {
-          out.text = `Hey Mirnal! How did you find the ${last.name} ${ctx.college ? 'lecture' : 'class'}?`;
+          out.text = `Hey! How did you find the ${last.name} ${ctx.college ? 'lecture' : 'class'}?`;
           out.pending = 'ask_lesson';
           out.openerLesson = last;
           return;
         }
         if (ctx.slot?.type === 'lunch') {
-          out.text = ctx.college ? 'Mirnal! Mess or ANC? I’m starving.' : 'Hey! Lunch time, finally. What did you bring?';
+          out.text = ctx.college ? 'Hey! Mess or ANC? I’m starving.' : 'Hey! Lunch time, finally. What did you bring?';
           return;
         }
       }
       const recall = (ctx.memories || []).filter((m) => !m.text.startsWith('you were rude') && !m.text.startsWith('you made fun')).at(-1);
       out.text = cold
         ? `Oh. Hi.`
-        : `${/^\W*(?:oh,?\s*)?(hi|hey|hello|psst|mirnal)/i.test(npc.style.greet) ? '' : `Good ${partOfDay(ctx)}, Mirnal! `}${recall && ctx.turn === 0 && seed % 2 ? `Remember when ${recall.text}? ` : ''}${npc.style.greet}`;
+        : `${/^\W*(?:oh,?\s*)?(hi|hey|hello|psst)/i.test(npc.style.greet) ? '' : `Good ${partOfDay(ctx)}! `}${recall && ctx.turn === 0 && seed % 2 ? `Remember when ${recall.text}? ` : ''}${npc.style.greet}`;
       out.effects.friend = 1;
       return;
     }
@@ -548,11 +548,11 @@ function classmateReply(a, ctx, out, seed) {
       out.text = pick(['That’s great!', 'Nice, love the energy!', 'Same here! Today’s a good day.'], seed);
       return;
     case 'compliment':
-      out.text = npc.personality === 'Introverted' ? '…thank you. That’s really nice of you to say.' : npc.personality === 'Competitive' ? 'I know. 😎 Just kidding, thanks! You’re not bad yourself.' : 'Aww, thanks Mirnal! You’re a good friend.';
+      out.text = npc.personality === 'Introverted' ? '…thank you. That’s really nice of you to say.' : npc.personality === 'Competitive' ? 'I know. 😎 Just kidding, thanks! You’re not bad yourself.' : 'Aww, thanks! You’re a good friend.';
       out.effects.friend = 3;
       return;
     case 'insult':
-      out.text = young(ctx) ? 'That’s mean! I’m telling Ma’am.' : npc.personality === 'Competitive' ? 'Wow. Real mature, Mirnal.' : 'That… really hurt. Why would you say that?';
+      out.text = young(ctx) ? 'That’s mean! I’m telling Ma’am.' : npc.personality === 'Competitive' ? 'Wow. Real mature.' : 'That… really hurt. Why would you say that?';
       out.effects.friend = -10;
       out.effects.rep = -3;
       out.effects.memory = 'you were rude to me';
@@ -567,14 +567,14 @@ function classmateReply(a, ctx, out, seed) {
       out.text = pick(['Anytime!', 'No problem!', 'That’s what friends are for.'], seed);
       return;
     case 'future': {
-      if (ctx.college) { out.text = `${npc.futureGroup === 'commerce' ? 'Probably finance. I want to do a minor in it.' : 'Get a good PS, learn a lot, then see where it goes.'} What about you, Mirnal?`; return; }
+      if (ctx.college) { out.text = `${npc.futureGroup === 'commerce' ? 'Probably finance. I want to do a minor in it.' : 'Get a good PS, learn a lot, then see where it goes.'} What about you?`; return; }
       const opts = FUTURE[npc.futureGroup] || FUTURE.null;
       out.text = young(ctx) ? `When I grow up I want to be ${pick(['an astronaut', 'a cricket star', 'a teacher', 'a scientist'], seed)}! What about you?` : `I think I want to be ${pick(opts, seed)}. What about you?`;
       return;
     }
     case 'stream':
       if (ctx.college) {
-        if (/\b(my|mera|meri)\b/.test(a.norm)) { out.text = 'You’re Chemical Engineering, Mirnal! Forgot already? 😄 Branch courses start in second year.'; return; }
+        if (/\b(my|mera|meri)\b/.test(a.norm)) { out.text = 'You’re Chemical Engineering! Forgot already? 😄 Branch courses start in second year.'; return; }
         out.text = `${npc.discipline}! ${npc.discipline === 'Chemical Engineering' ? 'Same as you, Chemical gang!' : 'And you’re Chemical, right?'} First year is the same for everyone though, branch courses start in second year.`;
         return;
       }
@@ -649,7 +649,7 @@ function classmateReply(a, ctx, out, seed) {
         hobby: `It helps me switch off. After a long day, ${npc.interest} is the best reset.`,
         play: 'Because sitting in class all day makes me restless!',
         future: 'I like the idea of building something real, not just studying it.',
-        insult: 'Because what you said was hurtful, Mirnal.',
+        insult: 'Because what you said was hurtful.',
         exam: 'Because it’s a lot of material in very little time!',
         food: 'Because I skipped breakfast. Classic mistake.',
         share_like: 'No reason! Just curious. You never told me that before.',
@@ -660,7 +660,7 @@ function classmateReply(a, ctx, out, seed) {
       return;
     }
     case 'bye':
-      out.text = pick([`Bye, Mirnal! See you ${ctx.slot?.type === 'departure' ? 'tomorrow' : 'in class'}.`, 'Okay, see you later!', 'Bye! Don’t be late for the next period.'], seed);
+      out.text = pick([`Bye! See you ${ctx.slot?.type === 'departure' ? 'tomorrow' : 'in class'}.`, 'Okay, see you later!', 'Bye! Don’t be late for the next period.'], seed);
       out.end = true;
       return;
     default:
@@ -685,11 +685,11 @@ function teacherReply(a, ctx, out, seed) {
   };
   switch (a.intent) {
     case 'greet':
-      out.text = `Good ${partOfDay(ctx)}, Mirnal. ${young(ctx) ? 'Did you have your breakfast?' : 'Ready for today’s class?'}`;
+      out.text = `Good ${partOfDay(ctx)}! ${young(ctx) ? 'Did you have your breakfast?' : 'Ready for today’s class?'}`;
       out.effects.rep = 1;
       return;
     case 'how_are_you':
-      out.text = `I’m well, thank you for asking, Mirnal. ${pick(['A full day of classes ahead!', 'Your class keeps me on my toes.', 'Just checking some notebooks.'], seed)}`;
+      out.text = `I’m well, thank you for asking. ${pick(['A full day of classes ahead!', 'Your class keeps me on my toes.', 'Just checking some notebooks.'], seed)}`;
       out.effects.rep = 1;
       return;
     case 'help_me':
@@ -728,7 +728,7 @@ function teacherReply(a, ctx, out, seed) {
       out.text = ctx.pending === 'check_understood' ? 'That’s alright. Raise your hand in class and I’ll go through it with an example.' : 'Alright.';
       return;
     case 'insult':
-      out.text = 'Mirnal! That is not how we speak in this school. I’m disappointed.';
+      out.text = 'That is not how we speak in this school. I’m disappointed.';
       out.effects.rep = -5;
       return;
     case 'apology':
@@ -736,7 +736,7 @@ function teacherReply(a, ctx, out, seed) {
       out.effects.rep = 1;
       return;
     case 'compliment':
-      out.text = 'Thank you, Mirnal. That’s kind of you.';
+      out.text = 'Thank you. That’s kind of you.';
       out.effects.rep = 1;
       return;
     case 'joke':
@@ -746,11 +746,11 @@ function teacherReply(a, ctx, out, seed) {
       out.text = 'I’m sorry to hear that. If something is worrying you, you can always talk to me or the counsellor.';
       return;
     case 'bye':
-      out.text = 'See you in class, Mirnal.';
+      out.text = 'See you in class.';
       out.end = true;
       return;
     default:
-      out.text = `I’m not sure I understood, Mirnal. You can ask me to explain a topic, about homework, or about the exams.`;
+      out.text = `I’m not sure I understood. You can ask me to explain a topic, about homework, or about the exams.`;
   }
 }
 
@@ -759,14 +759,14 @@ function staffReply(a, ctx, out, seed) {
   const who = ctx.npc.name;
   if (a.intent === 'greet' || a.intent === 'how_are_you') {
     out.text = role === 'guard' ? `Good ${partOfDay(ctx)}, beta! ${ctx.classNum <= 3 ? 'Walk carefully, okay?' : 'You’ve grown so tall!'}`
-      : role === 'canteen' ? 'Arre, Mirnal! What will you have today? Samosa is fresh.'
+      : role === 'canteen' ? 'Arre, beta! What will you have today? Samosa is fresh.'
         : role === 'librarian' ? 'Shh… welcome to the library. Looking for a book?'
-          : role === 'principal' ? `Good ${partOfDay(ctx)}, Mirnal. I hope Class ${ctx.classNum} is treating you well.`
-            : `Hello, Mirnal!`;
+          : role === 'principal' ? `Good ${partOfDay(ctx)}. I hope Class ${ctx.classNum} is treating you well.`
+            : `Hello there!`;
     return;
   }
   if (a.intent === 'bye' || a.intent === 'thanks') {
-    out.text = role === 'canteen' ? 'Come again, beta!' : 'Take care, Mirnal.';
+    out.text = role === 'canteen' ? 'Come again, beta!' : 'Take care.';
     out.end = a.intent === 'bye';
     return;
   }

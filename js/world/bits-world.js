@@ -267,7 +267,7 @@ export class BitsCampus extends Campus {
       this.hostels.push(new Hostel(this, b, { mine, outer: mine ? b.outer : entranceOrder(b.outer, D.roads) }));
       b.bb = bbox(b.outer);
     }
-    // the newer comb-shaped Bhawans (Bhagirath, a girls' hostel, stays closed to Mirnal)
+    // the newer comb-shaped Bhawans (Bhagirath, a girls' hostel, stays closed to the player)
     for (const name of Object.keys(COMB)) {
       const b = this.buildings.find((x) => x.name === name);
       if (!b) continue;

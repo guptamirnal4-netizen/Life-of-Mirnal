@@ -127,7 +127,7 @@ function setBike(on) {
   player.bike = on;
   bike.visible = on && state?.settings.view === 'third';
 }
-const avatar = new NPC(scene, { id: 'mirnal', name: 'Mirnal', role: 'student', color: '#ffffff', pants: '#24345a', skinIndex: 0 });
+const avatar = new NPC(scene, { id: 'player', name: 'You', role: 'student', color: '#ffffff', pants: '#24345a', skinIndex: 0 });
 avatar.tag.visible = false;
 avatar.group.visible = false;
 
@@ -285,9 +285,9 @@ function showYearIntro() {
   openPanel(h('div', {},
     h('div', { class: 'kicker' }, STAGES[stageOf(c)]),
     h('p', {}, c === 1 && attempt === 1
-      ? 'Mirnal’s very first day at Sunrise Public School! The gate looks enormous and the school bag is heavy. Somewhere inside, new friends are waiting.'
-      : attempt > 1 ? `Mirnal is repeating Class ${c}. Everything learnt last time is still in the Learning Journey, so this is a fresh chance.`
-        : `A new school year. Mirnal is taller now, and Class ${c} brings new subjects, new teachers and new challenges.`),
+      ? 'Your very first day at Sunrise Public School! The gate looks enormous and the school bag is heavy. Somewhere inside, new friends are waiting.'
+      : attempt > 1 ? `You are repeating Class ${c}. Everything learnt last time is still in the Learning Journey, so this is a fresh chance.`
+        : `A new school year. You are taller now, and Class ${c} brings new subjects, new teachers and new challenges.`),
     notes.map((n) => h('p', { class: 'good' }, n)),
     h('h4', {}, 'Today'),
     h('ul', { class: 'clean' },
@@ -326,7 +326,7 @@ function setupOrientation(intro) {
   if (!state.player) player.place(campus.spots.spawn, 0);
   if (intro) {
     openPanel(h('div', {},
-      h('p', {}, 'Class 10 is done! Today is Stream Orientation Day. Mirnal must choose the subjects for Classes 11 and 12.'),
+      h('p', {}, 'Class 10 is done! Today is Stream Orientation Day. Time to choose the subjects for Classes 11 and 12.'),
       h('ul', { class: 'clean' },
         h('li', {}, `🎓 Meet ${COUNSELLOR.name} in the Auditorium (required)`),
         h('li', {}, '🧑‍🎓 Talk to seniors from each stream: Science Lab, Classroom B, Library, Computer Lab'),
@@ -380,8 +380,8 @@ function showRoadmap() {
       h('div', { class: 'tile' }, h('div', { class: 'tile-n' }, sg(13) ?? '–'), h('div', { class: 'tile-l' }, 'SGPA · Semester 1')),
       h('div', { class: 'tile' }, h('div', { class: 'tile-n' }, sg(14) ?? '–'), h('div', { class: 'tile-l' }, 'SGPA · Semester 2')),
       h('div', { class: 'tile' }, h('div', { class: 'tile-n' }, cgpa(state) ?? '–'), h('div', { class: 'tile-l' }, 'CGPA after Year 1'))),
-    h('h4', {}, 'The road ahead (from Mirnal’s real resume)'),
-    h('ul', { class: 'clean roadmap' }, ROADMAP.map((r) => h('li', {}, h('b', {}, r.when), ` · ${r.what}`))),
+    FEATURES.resumeRoadmap && h('h4', {}, 'The road ahead (from a real BITSian’s resume)'),
+    FEATURES.resumeRoadmap && h('ul', { class: 'clean roadmap' }, ROADMAP.map((r) => h('li', {}, h('b', {}, r.when), ` · ${r.what}`))),
     h('p', { class: 'muted small' }, 'Years 2–4 are the next chapters of this game.'),
     h('div', { class: 'row' },
       h('button', { onclick: () => openJourney(ctx, 14) }, 'Open the Learning Journey'),
@@ -399,7 +399,7 @@ function beginCollege() {
 function setupGraduated() {
   slots = [{ id: 'graduated', type: 'graduated', label: 'Graduated!', start: 0, end: 24 * 60, location: 'assembly' }];
   state.day.clock = 17 * 60;
-  campus.rebuildClassroom(12, 'Class of Mirnal: Graduated!');
+  campus.rebuildClassroom(12, 'Class 12: Graduated!');
   spawnStaff();
   npcs.get('principal').teleport(campus.spots.stage);
   CLASSMATES.filter((c) => c.leaves >= 12).forEach((cm, i) => addNPC(`cm:${cm.id}`, { kind: 'classmate', cm }, { name: cm.name, role: 'student', color: cm.color, pants: '#3a3f4a', height: studentHeight(12), skinIndex: i }, campus.spots.assembly[i + 2]));
@@ -681,13 +681,13 @@ function openReport() {
 function runGraduation() {
   const preset = STREAMS.find((s) => s.id === state.stream?.presetId);
   openPanel(h('div', {},
-    h('p', {}, `The auditorium is full. ${PRINCIPAL.name} calls the name: “Mirnal!” Mirnal walks up and receives the school-leaving certificate${preset ? `, ${preset.name}` : ''}.`),
+    h('p', {}, `The auditorium is full. ${PRINCIPAL.name} calls your name! You walk up and receive the school-leaving certificate${preset ? `, ${preset.name}` : ''}.`),
     h('p', {}, 'Twelve years. Thousands of bells. One last photo with friends on the assembly ground.'),
     h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'open journey portfolio', onclick: () => {
       closeAll();
       loadYear({ intro: false });
       openFinalPortfolio(ctx);
-    } }, 'Open “The School Journey of Mirnal”'),
+    } }, 'Open “Your School Journey”'),
     h('button', { 'data-voice': 'college bits begin', onclick: () => beginCollege() }, 'Begin the College Journey (BITS Pilani) →'))), { title: 'Graduation Day 🎓' });
 }
 
@@ -766,15 +766,15 @@ function chatContext(extraFacts = []) {
   const weak = subjects.flatMap((s) => s.topics).find((t) => (state.topics[t.id]?.level ?? 0) < 3);
   const others = [...CLASSMATES.map((c) => c.name)];
   const facts = [
-    isCollege(state.classNum) ? `Mirnal is a first-year B.E. Chemical Engineering student at BITS Pilani (${COLLEGE[state.classNum].label}).` : `Mirnal is in Class ${state.classNum} at ${SCHOOL.name}.`,
+    isCollege(state.classNum) ? `The player is a first-year B.E. Chemical Engineering student at BITS Pilani (${COLLEGE[state.classNum].label}).` : `The player is in Class ${state.classNum} at ${SCHOOL.name}.`,
     slot ? `Right now: ${slot.label} (${fmt(clock)}).` : '',
     next ? `Next: ${next.label} at ${fmt(next.start)}.` : '',
-    lessons.length ? `Lessons Mirnal attended today: ${lessons.map((l) => `${l.name} (${l.topicName})`).join(', ')}.` : 'No lessons attended yet today.',
-    state.playerFacts?.favSubject ? `Mirnal once said their favourite subject is ${state.playerFacts.favSubject}.` : '',
-    state.playerFacts?.hobby ? `Mirnal once said they like ${state.playerFacts.hobby}.` : '',
-    state.playerFacts?.bitsat ? `Mirnal told friends their BITSAT score was ${state.playerFacts.bitsat}/390.` : '',
-    state.playerFacts?.hometown ? `Mirnal is from ${state.playerFacts.hometown}.` : '',
-    preset ? `Mirnal's stream: ${preset.name}.` : '',
+    lessons.length ? `Lessons the player attended today: ${lessons.map((l) => `${l.name} (${l.topicName})`).join(', ')}.` : 'No lessons attended yet today.',
+    state.playerFacts?.favSubject ? `The player once said their favourite subject is ${state.playerFacts.favSubject}.` : '',
+    state.playerFacts?.hobby ? `The player once said they like ${state.playerFacts.hobby}.` : '',
+    state.playerFacts?.bitsat ? `The player told friends their BITSAT score was ${state.playerFacts.bitsat}/390.` : '',
+    state.playerFacts?.hometown ? `The player is from ${state.playerFacts.hometown}.` : '',
+    preset ? `The player's stream: ${preset.name}.` : '',
     ...extraFacts,
   ].filter(Boolean);
   return {
@@ -795,9 +795,9 @@ function talkTo(npc, firstText = null) {
     const f = state.friends[cm.id];
     return openChat(ctx, {
       name: cm.name, kind: 'classmate', npc: cm, friendId: cm.id, subtitle: cm.personality, seed: cm.name.length,
-      persona: `${cm.name}, ${cm.college ? `Mirnal's first-year batchmate at BITS Pilani (${cm.discipline})` : `Mirnal's classmate (same age, Class ${state.classNum})`}. Personality: ${cm.personality}. ${cm.college ? `Branch: ${cm.discipline}. BITSAT score: ${cm.bitsat}/390. From ${cm.hometown}. ` : ''}Loves ${cm.interest}; plays ${cm.sport}. Good at ${cm.strengths.join(', ')}; finds ${cm.weak.join(', ')} hard. Friendship with Mirnal: ${f.level}/100.`,
+      persona: `${cm.name}, ${cm.college ? `the player's first-year batchmate at BITS Pilani (${cm.discipline})` : `the player's classmate (same age, Class ${state.classNum})`}. Personality: ${cm.personality}. ${cm.college ? `Branch: ${cm.discipline}. BITSAT score: ${cm.bitsat}/390. From ${cm.hometown}. ` : ''}Loves ${cm.interest}; plays ${cm.sport}. Good at ${cm.strengths.join(', ')}; finds ${cm.weak.join(', ')} hard. Friendship with the player: ${f.level}/100.`,
       context: () => {
-        const c = chatContext([`${cm.name}'s memories with Mirnal: ${f.memories.slice(-4).map((x) => `Class ${x.classNum}: ${x.text}`).join('; ') || 'none yet'}.`]);
+        const c = chatContext([`${cm.name}'s memories with the player: ${f.memories.slice(-4).map((x) => `Class ${x.classNum}: ${x.text}`).join('; ') || 'none yet'}.`]);
         return { ...c, friendLevel: f.level, memories: f.memories, others: c.others.filter((n) => n !== cm.name) };
       },
     }, { firstText });
@@ -806,7 +806,7 @@ function talkTo(npc, firstText = null) {
     const t = m.teacher;
     return openChat(ctx, {
       name: t.name, kind: 'teacher', npc: t, subtitle: m.subjects.map((s) => s.name).join(', ') || 'Physical Education', seed: t.name.length,
-      persona: `${t.name}, Mirnal's ${m.subjects.map((s) => s.name).join(' and ') || 'Physical Education'} ${isCollege(state.classNum) ? 'professor at BITS Pilani' : 'teacher'} (${t.style}). Addressed as ${t.honorific}. Warm but professional.`,
+      persona: `${t.name}, the player's ${m.subjects.map((s) => s.name).join(' and ') || 'Physical Education'} ${isCollege(state.classNum) ? 'professor at BITS Pilani' : 'teacher'} (${t.style}). Addressed as ${t.honorific}. Warm but professional.`,
       context: () => {
         const teacherSubjects = m.subjects.map((s) => ({ id: s.id, name: s.name, topics: s.topics.map((x) => ({ name: x.name, teach: x.teach, practised: !!state.topics[x.id]?.practiceCorrect })) }));
         const c = chatContext([`Topics this teacher teaches this year: ${teacherSubjects.flatMap((s) => s.topics.map((x) => `${x.name}: ${x.teach}`)).join(' | ') || 'sports and fitness'}.`]);
@@ -843,7 +843,7 @@ function talkTo(npc, firstText = null) {
   if (m.kind === 'farewell') {
     return openSimpleDialogue(ctx, m.cm.name, [
       'So… my family is moving after Class 10. New city, new school.',
-      `I'll miss this place. And you, Mirnal. Don't forget me, okay?`,
+      `I'll miss this place. And you. Don't forget me, okay?`,
     ], [{ label: 'I won’t. Let’s stay in touch!', go: (close) => { adjustFriend(state, 'tanvi', 10, 'we promised to stay in touch'); close(); toast('Tanvi waves goodbye.'); } }]);
   }
   if (m.kind === 'staff') {
@@ -912,7 +912,7 @@ function readBook() {
   state.day.optional.library = true;
   state.reputation += 1;
   state.day.clock += 10;
-  toast(`📖 Mirnal reads “${b}” for a while. (+10 minutes)`, 3200);
+  toast(`📖 You read “${b}” for a while. (+10 minutes)`, 3200);
 }
 
 function handleInteractable(id) {
@@ -945,7 +945,7 @@ function handleInteractable(id) {
     case 'blackboard': openPanel(h('p', {}, 'The blackboard shows today\'s lesson topics. They update every period.'), { title: 'Blackboard', closable: true }); break;
     case 'register': {
       const present = Object.values(state.day.attendance).filter((a) => a !== 'absent').length;
-      toast(`Attendance register: Mirnal present for ${present} period(s) today.`);
+      toast(`Attendance register: you were present for ${present} period(s) today.`);
       requestLock();
       break;
     }
@@ -1434,7 +1434,7 @@ function openSettings() {
         [['en-IN', 'English (India)'], ['hi-IN', 'Hindi'], ['hinglish', 'Hinglish (English-India recogniser)']].map(([v, l]) => h('option', { value: v, selected: s.voiceLang === v }, l)))),
     h('label', { class: 'setting' }, 'Camera view',
       h('select', { onchange: (e) => { s.view = e.target.value; } },
-        [['first', 'First person (through Mirnal’s eyes)'], ['third', 'Third person (see Mirnal)']].map(([v, l]) => h('option', { value: v, selected: s.view === v }, l)))),
+        [['first', 'First person (through your eyes)'], ['third', 'Third person (see yourself)']].map(([v, l]) => h('option', { value: v, selected: s.view === v }, l)))),
     h('label', { class: 'setting check' }, h('input', { type: 'checkbox', checked: s.voiceRequired, onchange: (e) => { s.voiceRequired = e.target.checked; } }), 'Listen for spoken answers automatically (you can always click too)'),
     h('label', { class: 'setting check' }, h('input', { type: 'checkbox', checked: s.tts, onchange: (e) => { s.tts = e.target.checked; } }), 'Characters speak out loud (text-to-speech)'),
     h('label', { class: 'setting check' }, h('input', { type: 'checkbox', checked: s.showObjectiveArrow, onchange: (e) => { s.showObjectiveArrow = e.target.checked; } }), 'Show objective arrow'),
@@ -1476,7 +1476,7 @@ function showTitle() {
     return s.phase === 'graduated' ? 'School · Graduated' : `School · Class ${s.classNum}`;
   })();
   const startNew = (college) => {
-    if (saved && !confirm(`Start ${college ? 'Mirnal’s College Life' : 'Mirnal’s School Life'} from the beginning? Your saved game (${saveInfo}) will be replaced.`)) return;
+    if (saved && !confirm(`Start ${college ? 'College Life at BITS Pilani' : 'School Life'} from the beginning? Your saved game (${saveInfo}) will be replaced.`)) return;
     const s = createState();
     if (touch.on) s.settings.graphics = 'medium';
     if (college) startCollege(s);
@@ -1492,8 +1492,8 @@ function showTitle() {
     filmPos && h('button', { class: 'title-resume', 'data-voice': 'resume the film', onclick: () => playFilm({ at: filmPos.t }) }, `▶ Resume the film · ${Math.floor(filmPos.t / 60)}:${String(Math.floor(filmPos.t % 60)).padStart(2, '0')}`),
     h('div', { class: 'title-label' }, 'Start a new game'),
     h('div', { class: 'mode-grid' },
-      FEATURES.school && choice('🎒', 'Mirnal’s School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
-      choice('🎓', 'Mirnal’s College Life', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
+      FEATURES.school && choice('🎒', 'School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
+      choice('🎓', 'College Life at BITS Pilani', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
     saveInfo && h('button', { class: 'primary', onclick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } }, `Continue · ${saveInfo}`),
     h('button', { 'data-voice': 'map explore 3d free roam campus', onclick: () => openExplorer() }, FEATURES.school ? '🗺️ Explore the 3D map · school and college' : '🗺️ Campus Free Roam · BITS Pilani'),
     h('button', { 'data-voice': 'paintball multiplayer friends play', 'data-pb': 'title-paintball', onclick: () => openPaintball() }, '🎯 Multiplayer Paintball'),
@@ -1501,7 +1501,7 @@ function showTitle() {
       saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
       h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
       h('button', { onclick: () => openPanel(h('div', {},
-        h('p', {}, 'PLAY WITH BITSIANS: explore the BITS Pilani campus in 3D, watch the story of a campus paintball competition, and play private multiplayer paintball matches with your friends, talking to your teammates by voice. Mirnal’s College Life follows a first-year student through Year 1 at BITS Pilani.'),
+        h('p', {}, 'PLAY WITH BITSIANS: explore the BITS Pilani campus in 3D, watch the story of a campus paintball competition, and play private multiplayer paintball matches with your friends, talking to your teammates by voice. College Life puts you in the shoes of a first-year student through Year 1 at BITS Pilani.'),
         h('p', {}, 'Built with Three.js (MIT licence). Every 3D object is generated from simple shapes in code, so there are no third-party art assets. National Anthem recording: U.S. Navy Band (public domain).'),
         h('p', {}, 'Sunrise Public School, its staff and students, and the professors and batchmates at college are fictional. BITS Pilani first-year courses follow the official course list. Lesson content is simplified for gameplay.'), h('p', {}, 'Campus map data © OpenStreetMap contributors (ODbL).')), { title: 'Credits', closable: true }) }, 'Credits')),
   ].filter(Boolean));
@@ -1694,7 +1694,7 @@ function updateView(dt) {
   camera.lookAt(head.clone().addScaledVector(dir, 3));
 }
 
-// ---------- National Anthem (sung by everyone, including Mirnal) ----------
+// ---------- National Anthem (sung by everyone, including the player) ----------
 let anthem = null;
 let anthemAudio = null;
 const anthemEl = document.getElementById('anthem');
@@ -2155,7 +2155,7 @@ function frame() {
         const departureEnd = slots.at(-1).end;
         state.day.clock = advanceClock(slots, state.day.clock, dt, state.settings.timeScale, fastForward ? FAST_FORWARD : 1);
         if (state.day.clock >= departureEnd) {
-          toast('The last bus is leaving! Mirnal heads home.');
+          toast('The last bus is leaving! Time to head home.');
           endDay();
         }
       }

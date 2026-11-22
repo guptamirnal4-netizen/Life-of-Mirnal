@@ -57,7 +57,7 @@ export function runLesson(ctx, { subject, classNum, makeUp = false }, onDone) {
             raised = true;
             ctx.state.stats.handsRaised += 1;
             ctx.state.reputation += 1;
-            const reply = `Good question, Mirnal! The key idea is: ${t.teach.split('. ')[0].replace(/\.$/, '')}.`;
+            const reply = `Good question! The key idea is: ${t.teach.split('. ')[0].replace(/\.$/, '')}.`;
             extra.append(h('div', { class: 'teacher-line soft' }, h('b', {}, `${teacher.name}: `), reply));
             ctx.voice.speak(reply);
           },
@@ -91,7 +91,7 @@ export function runLesson(ctx, { subject, classNum, makeUp = false }, onDone) {
     return h('div', { class: 'lesson' },
       h('h3', {}, `${subject.name}: lesson complete`),
       h('ul', { class: 'clean' }, results.map((r) => h('li', {}, `${r.topic.name}: `, h('span', { class: `badge m${r.level}` }, MASTERY[r.level])))),
-      h('p', { class: 'muted' }, 'Added to Mirnal’s Learning Journey.'),
+      h('p', { class: 'muted' }, 'Added to your Learning Journey.'),
       h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'done close continue', onclick: () => { close(); onDone?.(); } }, 'Done')));
   };
 
@@ -158,7 +158,7 @@ export function runProject(ctx, classNum, { late = false } = {}, onDone) {
     h('div', { class: 'kicker' }, late ? 'Late submission' : 'School project'),
     h('h3', {}, project.name),
     h('p', {}, project.description),
-    h('p', { class: 'muted' }, 'How will Mirnal approach it?'),
+    h('p', { class: 'muted' }, 'How will you approach it?'),
     grid), { title: 'Project work', closable: true });
   choices.forEach((c, k) => grid.append(h('button', { class: 'option', 'data-say': c.label, onclick: (e) => {
       if (!guardClick(ctx, e)) return;
@@ -248,7 +248,7 @@ export function showReportCard(ctx, classNum, handlers) {
   close = openPanel(h('div', { class: 'report' },
     h('div', { class: 'report-head' },
       h('div', {}, h('b', {}, 'Sunrise Public School'), h('div', { class: 'muted' }, `Report Card · Class ${classNum}${year.attempts > 1 ? ` (attempt ${year.attempts})` : ''}`)),
-      h('div', { class: 'muted' }, 'Student: Mirnal')),
+      h('div', { class: 'muted' }, 'Student: You')),
     h('table', {},
       h('thead', {}, h('tr', {}, ['Subject', 'Theory', 'Internal', 'Total', 'Grade', 'Result'].map((x) => h('th', {}, x)))),
       h('tbody', {}, subjects.map((r) => h('tr', { class: r.passed ? '' : 'fail' },
@@ -256,7 +256,7 @@ export function showReportCard(ctx, classNum, handlers) {
         h('td', {}, h('b', {}, r.total)), h('td', {}, r.grade), h('td', {}, r.passed ? 'Pass' : 'Below 33'))))),
     h('p', {}, `Lesson attendance: ${Math.round(ev.attendance * 100)}% · Average: ${avg}%`),
     h('p', {}, h('b', {}, `${classTeacher.name} (class teacher): `), remark(avg)),
-    h('p', { class: 'muted' }, `Parent-teacher meeting note: ${avg >= 60 ? 'Mirnal participates well. Encourage reading at home.' : 'Please help Mirnal revise a little every day.'}`),
+    h('p', { class: 'muted' }, `Parent-teacher meeting note: ${avg >= 60 ? 'Participates well. Encourage reading at home.' : 'Please help your child revise a little every day.'}`),
     ev.eligible ? h('p', { class: 'good' }, '✔ Eligible for promotion') : h('div', { class: 'bad' }, h('b', {}, 'Not yet promoted:'), h('ul', {}, ev.reasons.map((r) => h('li', {}, r)))),
     actions), { title: 'Report Card', wide: true });
 }
@@ -276,7 +276,7 @@ export function showYearSummary(ctx, classNum, onDone) {
       h('section', {}, h('h4', {}, 'Performance'), list(s.performance)),
       h('section', {}, h('h4', {}, 'Certificates'), list(s.certificates))),
     h('div', { class: 'row' }, h('button', { class: 'primary', 'data-voice': 'continue next', onclick: () => { close(); onDone?.(); } }, 'Continue →'))),
-  { title: `What Mirnal Learned in Class ${classNum}`, wide: true });
+  { title: `What You Learned in Class ${classNum}`, wide: true });
 }
 
 export function runMakeUp(ctx, classNum, onDone) {
@@ -318,7 +318,7 @@ function showGradeSheet(ctx, classNum, handlers) {
   close = openPanel(h('div', { class: 'report' },
     h('div', { class: 'report-head' },
       h('div', {}, h('b', {}, 'BITS Pilani · Grade Sheet'), h('div', { class: 'muted' }, `${COLLEGE[classNum].period} · B.E. Chemical Engineering`)),
-      h('div', { class: 'muted' }, 'Student: Mirnal')),
+      h('div', { class: 'muted' }, 'Student: You')),
     h('table', {},
       h('thead', {}, h('tr', {}, ['Code', 'Course', 'Units', 'Marks', 'Grade'].map((x) => h('th', {}, x)))),
       h('tbody', {}, rows.map(([, r]) => h('tr', { class: r.passed ? '' : 'fail' },

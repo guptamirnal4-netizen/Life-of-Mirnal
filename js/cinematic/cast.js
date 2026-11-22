@@ -8,7 +8,7 @@ import { TEAMS } from '../paintball/rules.js';
 
 // team: 0 Pink, 1 Cyan, null = not playing. loadout: primary first (models.js blaster ids, equipment.js names).
 export const CAST = [
-  { id: 'mirnal', name: 'Mirnal', gender: 'm', hair: 'short', color: '#ff7a45', skin: 0, height: 1.74, team: 0, loadout: ['standard', 'rapid'], role: 'Pink captain · the idea' },
+  { id: 'advait', name: 'Advait', gender: 'm', hair: 'short', color: '#ff7a45', skin: 0, height: 1.74, team: 0, loadout: ['standard', 'rapid'], role: 'Pink captain · the idea' },
   { id: 'aanya', name: 'Aanya', gender: 'f', hair: 'ponytail', color: '#ffd23d', skin: 1, height: 1.63, team: 0, loadout: ['rapid', 'standard'], role: 'Pink · fast runner' },
   { id: 'kabir', name: 'Kabir', gender: 'm', hair: 'spiky', color: '#27ae60', skin: 2, height: 1.79, team: 0, loadout: ['launcher', 'standard'], role: 'Pink · splash' },
   { id: 'tara', name: 'Tara', gender: 'f', hair: 'braids', color: '#e84393', skin: 3, height: 1.6, team: 0, loadout: ['burst', 'spread'], role: 'Pink · planner' },

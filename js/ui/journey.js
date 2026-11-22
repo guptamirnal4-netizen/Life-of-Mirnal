@@ -137,7 +137,7 @@ export function openJourney(ctx, initialClass = null) {
     else body = friendsView(state);
     return h('div', {}, tabs, body);
   };
-  close = openPanel(render(), { title: "Mirnal's Learning Journey", wide: true, closable: true, cls: 'journey' });
+  close = openPanel(render(), { title: 'Your Learning Journey', wide: true, closable: true, cls: 'journey' });
 }
 
 export function reflection(state) {
@@ -147,10 +147,10 @@ export function reflection(state) {
   const best = {};
   for (const y of Object.values(state.years)) for (const r of Object.values(y.results || {})) (best[r.name] ||= []).push(r.total);
   const fav = Object.entries(best).map(([n, v]) => [n, v.reduce((a, b) => a + b, 0) / v.length]).sort((a, b) => b[1] - a[1])[0];
-  return `Twelve years ago, a small Mirnal walked through the gate of Sunrise Public School, holding a school bag almost as big as the bench. `
-    + `Since then Mirnal has met ${totals.topicsIntroduced} topics and mastered ${totals.topicsMastered} of them, completed ${totals.practicals} practicals and ${totals.projects} projects, and earned ${totals.certificates} certificates. `
-    + `${fav ? `${fav[0]} was the subject Mirnal shone in most. ` : ''}`
-    + `${preset ? `After Class 10, Mirnal chose ${preset.name}, and that choice shaped the last two years, but not the whole future. ` : ''}`
+  return `Twelve years ago, a small you walked through the gate of Sunrise Public School, holding a school bag almost as big as the bench. `
+    + `Since then you have met ${totals.topicsIntroduced} topics and mastered ${totals.topicsMastered} of them, completed ${totals.practicals} practicals and ${totals.projects} projects, and earned ${totals.certificates} certificates. `
+    + `${fav ? `${fav[0]} was the subject you shone in most. ` : ''}`
+    + `${preset ? `After Class 10, you chose ${preset.name}, and that choice shaped the last two years, but not the whole future. ` : ''}`
     + `${closest.length ? `Through it all, ${closest.map((x) => x.c.name).join(' and ')} were the friends who were always there. ` : ''}`
     + 'The bell will ring tomorrow for someone else. The learning stays.';
 }
@@ -163,5 +163,5 @@ export function openFinalPortfolio(ctx) {
     portfolioView(state),
     h('h4', {}, 'Friendships'), friendsView(state),
     h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => openJourney(ctx, 12) }, 'Open the full Learning Journey'))),
-  { title: 'THE SCHOOL JOURNEY OF MIRNAL', wide: true, closable: true, cls: 'journey' });
+  { title: 'YOUR SCHOOL JOURNEY', wide: true, closable: true, cls: 'journey' });
 }

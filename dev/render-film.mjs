@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
-const OUT = args[0] || 'life-of-mirnal-film.mp4';
+const OUT = args[0] || 'play-with-bitsians-film.mp4';
 const URL = opt('url', 'http://localhost:8080/');
 const SCALE = Number(opt('scale', 1.5));
 const FPS = 30;

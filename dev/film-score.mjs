@@ -78,7 +78,7 @@ for (let c = 0; c * CHORD < DUR; c++) {
   }
 }
 
-// ---- plucked arpeggio on eighth notes, from Mirnal's arrival ----
+// ---- plucked arpeggio on eighth notes, from Advait's arrival ----
 const PATTERN = [0, 2, 1, 3, 2, 1, 3, 2];
 for (let k = 0; k * BEAT / 2 < DUR; k++) {
   const t0 = k * BEAT / 2; const a = actAt(t0);

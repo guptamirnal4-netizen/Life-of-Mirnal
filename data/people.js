@@ -12,13 +12,13 @@ export const CLASSMATES = [
     id: 'diya', name: 'Diya', personality: 'Helpful', color: '#d8573b',
     interest: 'reading stories', sport: 'badminton', strengths: ['eng', 'hist', 'pol', 'evs'], weak: ['math'],
     joins: 1, leaves: 12, futureGroup: 'humanities',
-    style: { greet: 'Hi Mirnal! Need help with anything today?', mood: 'Good! I just finished a new book.' },
+    style: { greet: 'Hi! Need help with anything today?', mood: 'Good! I just finished a new book.' },
   },
   {
     id: 'kabir', name: 'Kabir', personality: 'Funny', color: '#e6a72a',
     interest: 'drawing comics', sport: 'football', strengths: ['comp', 'bst', 'ent'], weak: ['sci', 'chem'],
     joins: 1, leaves: 12, futureGroup: 'commerce',
-    style: { greet: 'Mirnal! Want to hear a joke? Why did the maths book look sad? Too many problems!', mood: 'Hungry. Always hungry.' },
+    style: { greet: 'Hey! Want to hear a joke? Why did the maths book look sad? Too many problems!', mood: 'Hungry. Always hungry.' },
   },
   {
     id: 'meera', name: 'Meera', personality: 'Introverted', color: '#7e4fc4',
@@ -57,7 +57,7 @@ export const CLASSMATES = [
     bitsat: 289, hometown: 'Pune', id: 'ira', name: 'Ira', personality: 'Helpful', color: '#c2417a', college: true,
     interest: 'finance and the stock market', sport: 'badminton', strengths: ['math113', 'math111', 'trw112'], weak: ['eg110', 'ws112'],
     joins: 13, leaves: 99, futureGroup: 'commerce', discipline: 'Chemical Engineering',
-    style: { greet: 'Mirnal! Saved you a seat. Want my notes from yesterday?', mood: 'Pretty good! I found a great finance podcast.' },
+    style: { greet: 'Hey, you! Saved you a seat. Want my notes from yesterday?', mood: 'Pretty good! I found a great finance podcast.' },
   },
   {
     bitsat: 326, hometown: 'Hyderabad', id: 'rahul', name: 'Rahul', personality: 'Curious', color: '#1f9e8a', college: true,
@@ -69,19 +69,19 @@ export const CLASSMATES = [
     bitsat: 294, hometown: 'Lucknow', id: 'zoya', name: 'Zoya', personality: 'Funny', color: '#e0832a', college: true,
     interest: 'dance and Oasis rehearsals', sport: 'football', strengths: ['phy111', 'eee111'], weak: ['eg110', 'math113'],
     joins: 13, leaves: 99, futureGroup: 'science', discipline: 'Mechanical Engineering',
-    style: { greet: 'Mirnal! Quick, tell me something interesting before I fall asleep in this lecture.', mood: 'Running on ANC chai and pure willpower.' },
+    style: { greet: 'Hey! Quick, tell me something interesting before I fall asleep in this lecture.', mood: 'Running on ANC chai and pure willpower.' },
   },
   {
     bitsat: 281, hometown: 'Chandigarh', id: 'dev', name: 'Dev', personality: 'Sport enthusiast', color: '#3f8f3f', college: true,
     interest: 'football and the gym', sport: 'football', strengths: ['ws112', 'eg110'], weak: ['math111', 'math112'],
     joins: 13, leaves: 99, futureGroup: 'science', discipline: 'Mechanical Engineering',
-    style: { greet: 'Mirnal! Football at the ground after labs. You in?', mood: 'Great! Just back from a morning run.' },
+    style: { greet: 'Hey! Football at the ground after labs. You in?', mood: 'Great! Just back from a morning run.' },
   },
   {
     bitsat: 277, hometown: 'Kochi', id: 'saanvi', name: 'Saanvi', personality: 'Introverted', color: '#7a55c4', college: true,
     interest: 'photography', sport: 'yoga', strengths: ['bio111', 'chem111'], weak: ['cs111'],
     joins: 13, leaves: 99, futureGroup: 'science', discipline: 'Chemical Engineering',
-    style: { greet: '…oh, hi Mirnal.', mood: 'Okay. I took some nice photos of the Clock Tower at sunset.' },
+    style: { greet: '…oh, hi there.', mood: 'Okay. I took some nice photos of the Clock Tower at sunset.' },
   },
 ];
 
@@ -128,7 +128,7 @@ export const PRINCIPAL = { id: 'principal', name: 'Dr. Meera Krishnan', role: 'P
 export const GUARD = { id: 'guard', name: 'Ramesh Bhaiya', role: 'Security' };
 export const CANTEEN = { id: 'canteen', name: 'Shankar Uncle', role: 'Canteen' };
 export const LIBRARIAN = { id: 'librarian', name: 'Mrs. Gita Bhat', role: 'Librarian' };
-export const PARENTS = { id: 'parents', name: "Mirnal's parents", role: 'Family' };
+export const PARENTS = { id: 'parents', name: 'Your parents', role: 'Family' };
 
 export const CANTEEN_MENU = [
   { item: 'Samosa', price: 15 },
@@ -202,7 +202,7 @@ export const LOOKS = {
   'Shankar Uncle': { gender: 'm', outfit: 'kurta', hair: 'grey', mustache: true },
   'Mrs. Gita Bhat': { gender: 'f', outfit: 'saree', hair: 'bun', glasses: true },
   'Ms. Farah Ali': { gender: 'f', outfit: 'kurta', hair: 'long' },
-  "Mirnal's parents": { gender: 'm', outfit: 'formal', hair: 'short' },
+  'Your parents': { gender: 'm', outfit: 'formal', hair: 'short' },
   Kartik: { gender: 'm', hair: 'short', outfit: 'casual' },
   Ira: { gender: 'f', hair: 'long', outfit: 'casual' },
   Rahul: { gender: 'm', hair: 'spiky', glasses: true, outfit: 'casual' },

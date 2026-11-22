@@ -96,7 +96,7 @@ await page.waitForTimeout(400);
 const tp = await cam();
 log('camera', JSON.stringify({ fp, tp }));
 check(fp.d < 0.05 && fp.view === 'first', 'first person: camera at the eyes');
-check(tp.d > 2 && tp.view === 'third', 'V: third person, camera behind Mirnal');
+check(tp.d > 2 && tp.view === 'third', 'V: third person, camera behind the player');
 await page.keyboard.press('KeyC');
 await page.keyboard.down('KeyW'); await page.waitForTimeout(2500); await page.keyboard.up('KeyW');
 const cy = await g(() => ({ bike: window.__game.player.bike, speed: window.__game.player.speedNow, view: window.__game.graphics.view }));

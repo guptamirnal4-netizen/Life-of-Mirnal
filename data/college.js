@@ -189,7 +189,7 @@ export const COLLEGE_STAFF = {
 
 export const COLLEGE_INTRO = {
   13: [
-    'October 2022. Mirnal steps off the bus in Pilani, Rajasthan, with a suitcase, a new phone number and an admission letter for B.E. Chemical Engineering at BITS Pilani.',
+    'October 2022. You step off the bus in Pilani, Rajasthan, with a suitcase, a new phone number and an admission letter for B.E. Chemical Engineering at BITS Pilani.',
     'Branch courses come later. Year 1 is the same for everyone: physics, chemistry, maths, biology and engineering graphics, plus three labs.',
     'First stop: Academic Registration, to sign up for the Semester 1 courses. Then the first lectures, under the shadow of the Clock Tower.',
   ],
@@ -199,7 +199,8 @@ export const COLLEGE_INTRO = {
   ],
 };
 
-// Real milestones from Mirnal's resume, shown as the road ahead after Year 1.
+// Real milestones from the original author's resume, shown as the road ahead after Year 1 only when
+// FEATURES.resumeRoadmap is on (js/features.js); hidden by default.
 export const ROADMAP = [
   { when: 'Oct 2022 – Jun 2026', what: 'B.E. Chemical Engineering + Minor in Finance, BITS Pilani' },
   { when: 'May – Jul 2024', what: 'Chemical Engineering Intern, Reliance Industries, Nagothane: predictive turbine-maintenance automation that cut manual effort by 80%, plus Power BI supply-chain dashboards' },

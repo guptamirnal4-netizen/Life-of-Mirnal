@@ -1,6 +1,6 @@
 # BITS Pilani campus: master research index
 
-This index sets the scope and the owners for reconstructing BITS Pilani (Pilani campus) in Life of Mirnal. Coordinates, units and the rules every agent follows are in [COORDINATES.md](COORDINATES.md). The research for each building lives in [buildings/](buildings/).
+This index sets the scope and the owners for reconstructing BITS Pilani (Pilani campus) in Play with BITSians. Coordinates, units and the rules every agent follows are in [COORDINATES.md](COORDINATES.md). The research for each building lives in [buildings/](buildings/).
 
 Status labels:
 

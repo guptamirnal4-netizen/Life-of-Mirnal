@@ -66,6 +66,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Life of Mirnal in School → http://localhost:${PORT}`);
+  console.log(`Play with BITSians → http://localhost:${PORT}`);
   console.log(llmEnabled ? `Conversations: Claude (${MODEL})` : 'Conversations: offline engine (set ANTHROPIC_API_KEY for Claude-powered replies)');
 });

@@ -1,5 +1,6 @@
 import { SAVE_VERSION, DEFAULT_SETTINGS, OLD_DEFAULT_SPEEDS } from './state.js';
 
+// The key keeps the game's old name on purpose: renaming it would wipe every player's saved game.
 const KEY = 'life-of-mirnal.save.v1';
 
 export function serialize(state) {

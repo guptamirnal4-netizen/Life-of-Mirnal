@@ -87,7 +87,7 @@ export function openChat(ctx, who, { firstText = null } = {}) {
   };
 
   const bubble = (from, text) => {
-    const b = h('div', { class: `bubble ${from}` }, h('div', { class: 'who' }, from === 'me' ? 'Mirnal' : who.name), h('div', {}, text));
+    const b = h('div', { class: `bubble ${from}` }, h('div', { class: 'who' }, from === 'me' ? 'You' : who.name), h('div', {}, text));
     log.append(b);
     log.scrollTop = log.scrollHeight;
     return b;

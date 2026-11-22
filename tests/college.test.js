@@ -119,7 +119,7 @@ test('conversation: branch and BITSAT, exactly as asked', () => {
 test('greeting is not doubled', () => {
   const saanvi = CLASSMATES.find((c) => c.id === 'saanvi');
   const r = reply('hello', ctx({ npc: saanvi, turn: 0, lessons: [], slot: { type: 'arrival', label: 'Morning' } }));
-  assert.doesNotMatch(r.text, /Good morning, Mirnal!.*hi Mirnal/);
+  assert.doesNotMatch(r.text, /Good morning!.*hi there/);
 });
 
 test('"where are you from" does not also give directions', () => {
