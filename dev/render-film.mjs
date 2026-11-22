@@ -1,7 +1,12 @@
 // Renders the film (the Campus Royale trailer) to an MP4, frame by frame (so every frame is perfect, however long it takes to draw).
 //
 //   npm start                                  (in another terminal)
-//   node dev/render-film.mjs out.mp4 [--from 0] [--to <end>] [--scale 1.5] [--url http://localhost:8080/]
+//   node dev/render-film.mjs out.mp4 [--from 0] [--to <end>] [--scale 1.5] [--fps 30] [--url http://localhost:8080/]
+//                                    [--master] [--timeline timeline.json]
+//
+// --fps 60 renders a 60 fps film (default 30). --master writes a near-lossless, silent intermediate (x264 CRF 6) for
+// later editing (dev/make-trailer.mjs) instead of the finished H.264 + score; --timeline also saves the film's
+// timeline (shots, titles, marks). --from/--to render a chunk (chunks join with ffmpeg's concat demuxer).
 //
 // Needs Chrome, ffmpeg, and playwright-core (npm i -D playwright-core). The film runs on Ultra with depth of field;
 // frames are drawn at --scale × 1920×1080 and downscaled, and the score (dev/film-score.mjs) is muxed in.
@@ -17,7 +22,8 @@ const opt = (k, d) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i
 const OUT = args[0] || 'play-with-bitsians-film.mp4';
 const URL = opt('url', 'http://localhost:8080/');
 const SCALE = Number(opt('scale', 1.5));
-const FPS = 30;
+const FPS = Number(opt('fps', 30));
+const MASTER = args.includes('--master');
 const here = dirname(fileURLToPath(import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'film-'));
 
@@ -35,9 +41,13 @@ const timeline = await page.evaluate(async () => {
 });
 const from = Number(opt('from', 0)); const to = Math.min(Number(opt('to', timeline.duration)), timeline.duration);
 writeFileSync(join(work, 'timeline.json'), JSON.stringify(timeline));
-execFileSync('node', [join(here, 'film-score.mjs'), join(work, 'timeline.json'), join(work, 'score.wav')], { stdio: 'inherit' });
+if (opt('timeline')) writeFileSync(opt('timeline'), JSON.stringify(timeline, null, 1));
+if (!MASTER) execFileSync('node', [join(here, 'film-score.mjs'), join(work, 'timeline.json'), join(work, 'score.wav')], { stdio: 'inherit' });
 
-const ff = spawn('ffmpeg', ['-v', 'error', '-y',
+const ff = spawn('ffmpeg', MASTER ? ['-v', 'error', '-y',
+  '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
+  '-vf', 'scale=1920:1080:flags=lanczos,format=yuv420p',
+  '-c:v', 'libx264', '-preset', 'medium', '-crf', '6', '-g', String(FPS), '-an', OUT] : ['-v', 'error', '-y',
   '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
   '-ss', String(from), '-i', join(work, 'score.wav'),
   '-vf', 'scale=1920:1080:flags=lanczos,format=yuv420p',
