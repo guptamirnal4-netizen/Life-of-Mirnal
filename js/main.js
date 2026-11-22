@@ -32,6 +32,11 @@ import { openJourney, openFinalPortfolio } from './ui/journey.js';
 import { Voice, tokens } from './voice.js';
 import { Explorer } from './explorer/explorer.js';
 import { FEATURES } from './features.js';
+import { createPortal } from './portal/portal.js';
+import { settings as prefsSettings, onSettings, graphicsChoice } from './portal/settings.js';
+import { installAudioBus, audioDebug } from './portal/audio.js';
+import { introSeen, markIntroSeen, loadPrefs } from './portal/prefs.js';
+installAudioBus(); // Settings → volumes reach every sound (the film, paintball effects, voice chat)
 
 // ---------- Renderer & scene ----------
 const canvas = document.getElementById('game');
@@ -1458,16 +1463,22 @@ function openPause() {
   { title: 'Paused', closable: true });
 }
 
-// ---------- Title screen ----------
+// ---------- Title screen: the portal ----------
+// The start screen is the multiplayer paintball portal (js/portal/portal.js). Entries hidden from the MVP come back
+// with their flags in js/features.js: College Life (and its Continue / Learning Journey), School Life, and Campus
+// Free Roam on the main screen (it is always in Settings).
 const titleEl = document.getElementById('title');
-function showTitle() {
-  mode = 'title';
-  titleBackdrop = false;
-  exitLock();
-  document.getElementById('hud').classList.add('hidden');
-  titleEl.classList.remove('hidden');
-  const saved = hasSave();
-  const menu = titleEl.querySelector('.title-menu');
+let portal = null;
+function credits() {
+  openPanel(h('div', {},
+    h('p', {}, `PLAY WITH BITSIANS: private multiplayer paintball matches with your friends on the BITS Pilani campus, with voice chat, an intro film about a campus paintball competition, and Campus Free Roam to explore the campus in 3D.${FEATURES.collegeLife ? ' College Life puts you in the shoes of a first-year student through Year 1 at BITS Pilani.' : ''}`),
+    h('p', {}, `Built with Three.js (MIT licence). Every 3D object is generated from simple shapes in code, so there are no third-party art assets.${FEATURES.collegeLife ? ' National Anthem recording: U.S. Navy Band (public domain).' : ''}`),
+    h('p', {}, `The characters are fictional.${FEATURES.school ? ' Sunrise Public School, its staff and students are fictional.' : ''}${FEATURES.collegeLife ? ' BITS Pilani first-year courses follow the official course list; lesson content is simplified for gameplay.' : ''}`),
+    h('p', {}, 'Campus map data © OpenStreetMap contributors (ODbL).')), { title: 'Credits', closable: true });
+}
+// The life-sim entries (behind FEATURES flags), shown under the portal's menu when switched back on.
+function titleExtras() {
+  const saved = (FEATURES.collegeLife || FEATURES.school) && hasSave();
   const saveInfo = (() => {
     if (!saved) return null;
     const s = loadGame();
@@ -1482,35 +1493,55 @@ function showTitle() {
     if (college) startCollege(s);
     startGame(s);
   };
-  const choice = (emoji, title, sub, college) => h('button', { class: 'mode-card', 'data-voice': title, onclick: () => startNew(college) },
-    h('span', { class: 'mode-emoji' }, emoji),
-    h('span', { class: 'mode-text' }, h('b', {}, title), h('small', {}, sub)));
-  const filmPos = savedFilmPosition();
+  return [
+    FEATURES.school && { label: 'SCHOOL LIFE', sub: 'Class 1 to Class 12 at Sunrise Public School', voice: 'school life', onClick: () => startNew(false) },
+    FEATURES.collegeLife && { label: 'COLLEGE LIFE AT BITS PILANI', sub: 'B.E. Chemical Engineering · Year 1', voice: 'college life', onClick: () => startNew(true) },
+    saveInfo && { label: 'CONTINUE', sub: saveInfo, voice: 'continue', onClick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } },
+    saveInfo && { label: 'LEARNING JOURNEY', sub: 'Your progress so far', voice: 'journey learning', onClick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } },
+    FEATURES.freeRoamOnPortal && { label: 'CAMPUS FREE ROAM', sub: FEATURES.school ? 'School and college in 3D' : 'BITS Pilani in 3D', voice: 'map explore free roam campus', onClick: () => openFreeRoam() },
+  ].filter(Boolean);
+}
+function openFreeRoam() {
+  if (paintball?.room) { toast(`You are in paintball room ${paintball.room.roomId}. Leave the room first to use Campus Free Roam.`, 4000); return null; }
+  return openExplorer('college');
+}
+function getPortal() {
+  portal ||= createPortal({
+    root: titleEl,
+    hooks: {
+      create: (nickname) => openPaintball({ action: 'create', nickname, portal: true }),
+      join: (code, nickname) => openPaintball({ action: 'join', code, nickname, portal: true }),
+      playIntro: () => playFilm(),
+      openFreeRoam,
+      roomCode: () => paintball?.room?.roomId || null,
+      extras: titleExtras,
+      touch: () => touch.on,
+      voice,
+      toast: (t) => toast(t, 3000),
+      credits,
+    },
+  });
+  return portal;
+}
+function showTitle(info = {}) {
+  mode = 'title';
+  titleBackdrop = false;
+  exitLock();
+  closeAll();
+  document.getElementById('hud').classList.add('hidden');
+  titleEl.classList.remove('hidden');
   setTitleBackdrop();
-  menu.replaceChildren(...[
-    h('button', { class: 'primary title-film', 'data-voice': 'watch the film movie', onclick: () => playFilm() }, '🎬 Watch the film'),
-    filmPos && h('button', { class: 'title-resume', 'data-voice': 'resume the film', onclick: () => playFilm({ at: filmPos.t }) }, `▶ Resume the film · ${Math.floor(filmPos.t / 60)}:${String(Math.floor(filmPos.t % 60)).padStart(2, '0')}`),
-    h('div', { class: 'title-label' }, 'Start a new game'),
-    h('div', { class: 'mode-grid' },
-      FEATURES.school && choice('🎒', 'School Life', 'Class 1 to Class 12 at Sunrise Public School', false),
-      choice('🎓', 'College Life at BITS Pilani', 'BITS Pilani · B.E. Chemical Engineering · Year 1', true)),
-    saveInfo && h('button', { class: 'primary', onclick: () => { const s = loadGame(); if (s) startGame(s, true); else toast('Save file could not be loaded.'); } }, `Continue · ${saveInfo}`),
-    h('button', { 'data-voice': 'map explore 3d free roam campus', onclick: () => openExplorer() }, FEATURES.school ? '🗺️ Explore the 3D map · school and college' : '🗺️ Campus Free Roam · BITS Pilani'),
-    h('button', { 'data-voice': 'paintball multiplayer friends play', 'data-pb': 'title-paintball', onclick: () => openPaintball() }, '🎯 Multiplayer Paintball'),
-    h('div', { class: 'title-row' },
-      saveInfo && h('button', { onclick: () => { const s = loadGame(); if (s) { state = s; openJourney(ctx); } } }, 'Learning Journey'),
-      h('button', { onclick: () => { state ||= createState(); openSettings(); } }, 'Settings'),
-      h('button', { onclick: () => openPanel(h('div', {},
-        h('p', {}, 'PLAY WITH BITSIANS: explore the BITS Pilani campus in 3D, watch the story of a campus paintball competition, and play private multiplayer paintball matches with your friends, talking to your teammates by voice. College Life puts you in the shoes of a first-year student through Year 1 at BITS Pilani.'),
-        h('p', {}, 'Built with Three.js (MIT licence). Every 3D object is generated from simple shapes in code, so there are no third-party art assets. National Anthem recording: U.S. Navy Band (public domain).'),
-        h('p', {}, 'Sunrise Public School, its staff and students, and the professors and batchmates at college are fictional. BITS Pilani first-year courses follow the official course list. Lesson content is simplified for gameplay.'), h('p', {}, 'Campus map data © OpenStreetMap contributors (ODbL).')), { title: 'Credits', closable: true }) }, 'Credits')),
-  ].filter(Boolean));
+  getPortal().show(info);
+}
+function hideTitle() {
+  titleEl.classList.add('hidden');
+  portal?.hide();
 }
 
 function startGame(s, resumed = false) {
   state = s;
   mode = 'playing';
-  titleEl.classList.add('hidden');
+  hideTitle();
   document.getElementById('hud').classList.remove('hidden');
   const savedPos = state.player;
   loadYear({ intro: !resumed });
@@ -1919,11 +1950,11 @@ function playFilm({ capture = false, at = 0, back = null } = {}) {
   for (const n of npcs.npcs.values()) if (n.group.visible) { n.group.visible = false; back.hidden.push(n); }
   avatar.group.visible = false;
   bike.visible = false;
-  titleEl.classList.add('hidden');
+  hideTitle();
   document.getElementById('hud').classList.add('hidden');
   useWorld('college');
   minimap.setVisible(false);
-  graphics.setQuality(capture ? 'ultra' : state?.settings.graphics || (touch.on ? 'medium' : 'high'));
+  graphics.setQuality(capture ? 'ultra' : quality());
   mode = 'film';
   film = new PaintballFilm({
     scene, camera, campus: bitsCampus, graphics, range: COLLEGE_RANGE,
@@ -1939,6 +1970,7 @@ function playFilm({ capture = false, at = 0, back = null } = {}) {
 
 function endFilm(back, { title = true } = {}) {
   if (!film) return;
+  if (!film.capturing) markIntroSeen(); // first visit: the intro has been seen (or skipped); next time, the portal
   film.stop();
   film = null;
   for (const n of back.hidden) n.group.visible = true;
@@ -1977,6 +2009,7 @@ function setTitleBackdrop() {
   else requestAnimationFrame(() => setTimeout(ready, 30));
 }
 function titleFrame(dt) {
+  graphics.setQuality(quality());
   const a = Math.sin(elapsed * 0.025) * 0.55;
   camera.position.set(-10 + Math.sin(a) * 125, 34 + Math.sin(elapsed * 0.04) * 4, -50 + Math.cos(a) * 125);
   camera.lookAt(-12, 20, -82);
@@ -1994,11 +2027,14 @@ function titleFrame(dt) {
 let explorer = null;
 function openExplorer(kind = 'college', { place = null, fromFilm = false } = {}) {
   if (explorer || film) return explorer;
+  // Free Roam never runs alongside paintball: in a room, leave it first
+  if (paintball?.room) { toast(`You are in paintball room ${paintball.room.roomId}. Leave the room first to use Campus Free Roam.`, 4000); return null; }
+  if (paintball || paintballLoading) return null;
   closeAll();
   exitLock();
   minimap.closeBig();
   bhawanGuide.hide();
-  titleEl.classList.add('hidden');
+  hideTitle();
   document.getElementById('hud').classList.add('hidden');
   setBike(false);
   avatar.group.visible = false;
@@ -2015,6 +2051,8 @@ function openExplorer(kind = 'college', { place = null, fromFilm = false } = {})
     },
   });
   explorer.switchTo(kind);
+  const exitBtn = explorer.ui.root.querySelector('.ex-exit');
+  if (exitBtn) { exitBtn.textContent = '← Back to the portal'; exitBtn.dataset.portal = 'free-roam-exit'; }
   if (place) { const p = explorer.places?.find((q) => q.name === place); if (p) explorer.select(p); }
   if (fromFilm && filmReturn) {
     explorer.ui.back.parentElement.prepend(h('button', { class: 'primary ex-film', 'data-voice': 'return to the film', onclick: () => returnToFilm() }, '🎬 Return to the film'));
@@ -2060,7 +2098,8 @@ function exploreFrame(dt) {
     document.getElementById('crosshair').classList.add('hidden');
   }
   touch.update({ playing: explorer.walking, college: false, prompt: false, seated: false });
-  graphics.setQuality(state?.settings.graphics || (touch.on ? 'medium' : 'high'));
+  applyControls();
+  graphics.setQuality(quality());
   hudTimer += dt;
   if (hudTimer > 0.25) { hudTimer = 0; campus.setClock?.(explorer.clock); }
   graphics.update(dt, { clock: explorer.clock, focus: focus || player.pos, view: explorer.walking ? explorer.view : 'map' });
@@ -2072,8 +2111,9 @@ function exploreFrame(dt) {
 // Ground of the same BitsCampus. From the title screen, ?paintball, ?room=CODE, or window.__game.openPaintball().
 let paintball = null;
 let paintballLoading = null;
+// opts: { action: 'create' | 'join', code, nickname, portal } (see PaintballMode.open)
 function openPaintball(opts = {}) {
-  if (paintball) { if (opts.code && !paintball.room) paintball.open(opts); return Promise.resolve(paintball); }
+  if (paintball) { if ((opts.code || opts.action) && !paintball.room) paintball.open(opts); return Promise.resolve(paintball); }
   if (paintballLoading) return paintballLoading;
   if (film) endFilm({ mode: 'title', hidden: [], quality: graphics.quality.name });
   if (explorer) { explorer.stop(); explorer = null; }
@@ -2081,7 +2121,7 @@ function openPaintball(opts = {}) {
   exitLock();
   minimap.closeBig();
   bhawanGuide.hide();
-  titleEl.classList.add('hidden');
+  hideTitle();
   document.getElementById('hud').classList.add('hidden');
   setBike(false);
   avatar.group.visible = false;
@@ -2090,9 +2130,10 @@ function openPaintball(opts = {}) {
   mode = 'paintball';
   paintballLoading = import('./paintball/client/index.js').then(({ PaintballMode }) => {
     paintball = new PaintballMode({
-      scene, camera, canvas, player, touch,
+      scene, camera, canvas, player, touch, settings: prefsSettings,
+      openSettings: () => getPortal().openSettings(),
       loadWorld: () => { useWorld('college'); minimap.setVisible(false); return bitsCampus; },
-      onExit: () => {
+      onExit: (info = {}) => {
         paintball = null;
         for (const n of hidden) n.group.visible = true;
         scene.remove(camera);
@@ -2100,7 +2141,7 @@ function openPaintball(opts = {}) {
         player.place(new THREE.Vector3(0, 0, 58), 0);
         camera.position.set(0, 6, 62);
         camera.lookAt(0, 2, 0);
-        showTitle();
+        showTitle(info.status ? { status: info.status, bad: info.bad } : {});
       },
     });
     scene.add(camera); // the first-person paintball blaster hangs off the camera
@@ -2113,10 +2154,28 @@ function openPaintball(opts = {}) {
 function paintballFrame(dt) {
   paintball?.update(dt);
   touch.update({ playing: !!paintball?.inMatch, college: false, prompt: false, seated: false });
-  graphics.setQuality(state?.settings.graphics || (touch.on ? 'medium' : 'high'));
+  applyControls();
+  graphics.setQuality(quality());
   graphics.update(dt, { clock: 15.5 * 60, focus: paintball?.focus || player.pos, view: paintball?.inMatch ? paintball.viewName : 'map' });
   graphics.render();
 }
+
+// ---------- Settings (js/portal/settings.js) ----------
+// The graphics profile: the life-sim keeps its own setting while you play it; everything else follows Settings.
+function quality() { return mode === 'playing' && state ? state.settings.graphics : graphicsChoice(touch.on); }
+// Controls for the paintball match and Free Roam (touch may switch on after load, so this runs every frame).
+function applyControls() {
+  const s = prefsSettings;
+  player.sensitivity = touch.on ? s.touchSensitivity : s.mouseSensitivity;
+  player.invertY = s.invertY;
+  player.fov = s.fov;
+}
+onSettings((s, key) => {
+  if (mode !== 'playing') applyControls();
+  if (key === undefined || key === 'showStats') graphics.perf.setVisible(s.showStats);
+  if (key === 'graphics' && mode !== 'playing') graphics.setQuality(quality());
+  document.body.classList.toggle('reduce-motion', s.reduceMotion);
+});
 
 // ---------- Live map ----------
 // The route to the current objective along the roads (refreshed every second), for the minimap and the big map.
@@ -2231,10 +2290,14 @@ camera.lookAt(0, 2, 0);
 detectLLM();
 showTitle();
 frame();
+// URL launchers: ?film, ?explore, ?room=CODE (joins straight away, no intro), ?paintball (the paintball client's own
+// start screen). Otherwise a first visit gets "Press to start" → the intro film → the portal.
 const launch = new URLSearchParams(location.search);
 if (launch.has('film')) playFilm();
 else if (launch.has('explore')) openExplorer(launch.get('explore') === 'school' ? 'school' : 'college');
-else if (launch.has('room') || launch.has('paintball')) openPaintball({ code: launch.get('room') || '' });
+else if (launch.has('room')) openPaintball({ action: 'join', code: launch.get('room') || '', nickname: loadPrefs().nickname, portal: true });
+else if (launch.has('paintball')) openPaintball({});
+else if (!introSeen()) getPortal().splash({ onStart: () => playFilm() });
 
 // Exposed for automated testing in the browser.
-window.__game = { playFilm, openExplorer, openPaintball, get paintball() { return paintball; }, get explorer() { return explorer; }, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };
+window.__game = { playFilm, openExplorer, get portal() { return portal; }, settings: prefsSettings, audioDebug, get mode() { return mode; }, skipFilm: () => { if (film?.finish) film.finish(); else if (film) endFilm(film.back); }, openPaintball, get paintball() { return paintball; }, get explorer() { return explorer; }, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };

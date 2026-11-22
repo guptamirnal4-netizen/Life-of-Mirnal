@@ -93,7 +93,8 @@ export class MatchView {
     const cam = this.camera; const p = this.player;
     const eye = this.eye;
     const zoomed = this.zoom && this.me && EQUIPMENT_BY_ID[this.me.equip]?.zoom;
-    const fov = zoomed ? 72 / EQUIPMENT_BY_ID[this.me.equip].zoom : 72;
+    const base = p.fov || 72; // Settings → field of view
+    const fov = zoomed ? base / EQUIPMENT_BY_ID[this.me.equip].zoom : base;
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov += (fov - cam.fov) * Math.min(1, dt * 14); cam.updateProjectionMatrix(); }
     const alive = this.me?.alive && ACTIVE.has(state.phase);
     if (this.view === 'third' || !alive) {

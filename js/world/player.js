@@ -27,6 +27,7 @@ export class Player {
     this.seated = null;
     this.eye = 1.0;
     this.sensitivity = 1;
+    this.invertY = false; // Settings → invert Y
     this.enabled = false;
     this.moving = false;
     this.lastMove = new THREE.Vector3();
@@ -40,7 +41,7 @@ export class Player {
       if (!this.enabled || document.pointerLockElement !== this.dom) return;
       const k = 0.0022 * this.sensitivity;
       this.yaw -= e.movementX * k;
-      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch - e.movementY * k));
+      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch - e.movementY * k * (this.invertY ? -1 : 1)));
     });
     document.addEventListener('keydown', (e) => this.keys.add(e.code));
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));

@@ -78,7 +78,7 @@ export function createTouchControls({ canvas, player, onMenu }) {
     if (f.role === 'look') {
       const k = 0.0055 * player.sensitivity;
       player.yaw -= (e.clientX - f.x) * k;
-      player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - (e.clientY - f.y) * k));
+      player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - (e.clientY - f.y) * k * (player.invertY ? -1 : 1)));
     } else {
       let dx = e.clientX - f.x0; let dy = e.clientY - f.y0;
       const d = Math.hypot(dx, dy);

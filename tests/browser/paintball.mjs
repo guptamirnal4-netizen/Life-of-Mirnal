@@ -1,7 +1,7 @@
 // Multiplayer paintball in real browsers: three pages join one room by code, customise, ready up, the host
 // starts, everyone sees the others move, one page tags another (firing driven from the page), HUD and results
 // render; voice chat with Chrome's fake microphone (peer connections, team-only audio, push-to-talk); a phone
-// viewport with touch controls; the title screen's Campus Free Roam and film buttons still work.
+// viewport with touch controls; the portal (the start screen): Create Room, Settings → Campus Free Roam, the film.
 //
 //   node tests/browser/paintball.mjs [screenshot dir]
 // Starts the static dev server (PORT=8120) and the game server (test flag, a free port) itself.
@@ -63,11 +63,12 @@ const pb = (page, fn, arg) => page.evaluate(fn, arg);
 try {
   // ---------- three players ----------
   const [A, B, C] = [await newPage('A'), await newPage('B'), await newPage('C')];
+  // A creates the room from the portal (the start screen; the first visit's intro is marked as seen)
+  await A.addInitScript(() => { try { localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
   await A.goto(`${BASE}?${PB}`, { waitUntil: 'load' });
   await A.waitForTimeout(500);
-  await A.locator('[data-pb=title-paintball]').click();
-  await A.locator('input[aria-label=Nickname]').fill('Asha');
-  await A.locator('[data-pb=create]').click();
+  await A.locator('[data-portal=nickname]').fill('Asha');
+  await A.locator('[data-portal=create]').click();
   await A.locator('[data-pb=code]').waitFor();
   const code = (await A.locator('[data-pb=code]').innerText()).trim();
   check(/^[A-Z2-9]{5}$/.test(code), `room created with code ${code}`);
@@ -174,7 +175,8 @@ try {
   check(/Asha wins/.test(res) && /RUNNER-UP/.test(res) && /MVP/.test(res) && /Times tagged/i.test(res), 'results show winner, runner-up, MVP and rankings');
   check(await B.locator('[data-pb=results] [data-pb=rematch]').count() === 0 && await A.locator('[data-pb=rematch]').count() === 1, 'only the host gets Play again / Return to lobby / Close room');
   await A.locator('[data-pb=close]').click();
-  for (const p of [B, C]) await p.waitForFunction(() => !window.__pb.room, null, { timeout: 10000 });
+  for (const p of [B, C]) await p.waitForFunction(() => !window.__pb?.room, null, { timeout: 10000 });
+  check(await C.waitForFunction(() => window.__game.portal?.visible && /closed/.test(document.querySelector('[data-portal=status]')?.textContent || ''), null, { timeout: 10000 }).then(() => true, () => false), 'a player who came by share link (?room=) is back on the portal, told the room closed');
   check(/closed/.test(await B.locator('[data-pb=status]').innerText()), 'closing the room tells the others');
   for (const p of [A, B, C]) await p.context().close();
 
@@ -229,12 +231,14 @@ try {
   await phone.screenshot({ path: path.join(OUT, 'mobile.png') });
   await phone.context().close(); await buddy.context().close();
 
-  // ---------- the title screen still works ----------
+  // ---------- the portal (title screen) still works ----------
   const T = await newPage('title');
+  await T.addInitScript(() => { try { localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
   await T.goto(BASE, { waitUntil: 'load' });
   await T.waitForTimeout(500);
   check(/PLAY WITH/.test(await T.locator('#title h1').innerText()) && (await T.title()) === 'Play with BITSians', 'title renamed to Play with BITSians');
-  await T.getByRole('button', { name: /Campus Free Roam/ }).click();
+  await T.locator('[data-portal=settings]').click();
+  await T.locator('[data-portal=free-roam]').click(); // Settings → Campus Free Roam (optional experience)
   await T.waitForFunction(() => !!window.__game.explorer, null, { timeout: 30000 });
   check(true, 'Campus Free Roam opens');
   await T.goto(BASE, { waitUntil: 'load' });

@@ -18,23 +18,29 @@ import { ARENAS, ARENAS_BY_ID } from '../arena.js';
 import { MODES, MODES_BY_ID, TEAMS, TIMING, modeLabel, MAX_PLAYERS } from '../rules.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../equipment.js';
 import { CHARACTERS, OUTFIT_COLOURS, PANTS_COLOURS, MASK_COLOURS, ACCESSORIES } from '../looks.js';
+import { loadPrefs, savePrefs, cleanNickname, randomNickname } from '../../portal/prefs.js';
 
 export const GAME_NAME = 'Play with BITSians';
 const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
 const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* private mode */ } } };
+// the nickname, look and blasters chosen on the portal (js/portal/prefs.js) are where the lobby starts
+const savedNick = () => loadPrefs().nickname || store.get('pb-nick') || '';
+const rememberNick = (n) => { store.set('pb-nick', n); savePrefs({ nickname: n }); };
 const lockPointer = (c) => { try { const p = c.requestPointerLock?.(); p?.catch?.(() => {}); } catch { /* not allowed now */ } };
 const typing = (e) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
 const teamName = (t) => (t >= 0 ? TEAMS[t].name : '');
 const teamColour = (t) => (t >= 0 ? TEAMS[t].colour : '#888');
 
 export class PaintballMode {
-  constructor({ scene, camera, canvas, player, touch, loadWorld, onExit }) {
-    Object.assign(this, { scene, camera, canvas, player, touch, loadWorld, onExit });
+  // settings: the game's live settings object (js/portal/settings.js); openSettings(): the portal's Settings panel
+  constructor({ scene, camera, canvas, player, touch, loadWorld, onExit, settings = null, openSettings = null }) {
+    Object.assign(this, { scene, camera, canvas, player, touch, loadWorld, onExit, settings, openSettings });
     this.net = new Net();
     this.room = null; this.view = null; this.voice = null;
     this.screen = 'start'; this.sig = ''; this.feed = [];
-    this.look = { character: 0, outfit: OUTFIT_COLOURS[0], pants: PANTS_COLOURS[0], mask: MASK_COLOURS[0], accessory: 'none' };
-    this.loadout = ['standard', 'rapid'];
+    const prefs = loadPrefs();
+    this.look = prefs.look;
+    this.loadout = prefs.loadout;
     this.board = false; this.orbit = 0; this.voiceErr = '';
     if (!document.getElementById('pb-css')) document.head.append(h('link', { id: 'pb-css', rel: 'stylesheet', href: 'css/paintball.css' }), h('link', { id: 'pb-royale-css', rel: 'stylesheet', href: 'css/paintball-royale.css' }));
     this.root = h('div', { id: 'pb-root' });
@@ -76,29 +82,39 @@ export class PaintballMode {
   feedPush(text, mine = false) { this.feed.push({ text, at: performance.now(), cls: mine ? 'mine' : '' }); if (this.feed.length > 6) this.feed.shift(); }
 
   // ---------- start screen ----------
-  open({ code } = {}) {
+  // The entry point. action 'create' hosts a new room, 'join' (or a code alone) joins one; nickname overrides the
+  // remembered one. portal: opened from the portal (js/portal/portal.js), so leaving the room or a failed
+  // create/join goes back there (with the message) instead of to this client's own start screen.
+  open({ code, action = null, nickname = null, portal = false } = {}) {
+    this.portal = !!portal;
+    const nick = cleanNickname(nickname);
+    if (nick) rememberNick(nick);
+    const name = nick || savedNick() || randomNickname();
     const c = normaliseCode(code);
-    if (c && isCode(c)) return this.connect({ code: c, nickname: store.get('pb-nick') || `BITSian ${Math.floor(10 + Math.random() * 89)}` });
+    if (action === 'create') return this.connect({ nickname: name });
+    if (c && isCode(c)) return this.connect({ code: c, nickname: name });
+    if (action === 'join') return this.showStart('Room codes are 5 letters/numbers, like K7PQ2.', true);
     this.showStart();
   }
 
   showStart(status = '', bad = false) {
+    if (this.portal && !this.exiting) { this.exit({ status, bad }); return; }
     this.screen = 'start';
-    const nick = h('input', { type: 'text', maxlength: 16, placeholder: 'Your nickname for this session', value: store.get('pb-nick') || '', 'aria-label': 'Nickname' });
+    const nick = h('input', { type: 'text', maxlength: 16, placeholder: 'Your nickname', value: savedNick(), 'aria-label': 'Nickname' });
     const code = h('input', { type: 'text', class: 'code', maxlength: 5, placeholder: 'CODE', 'aria-label': 'Room code' });
-    const name = () => { const n = nick.value.trim() || `BITSian ${Math.floor(10 + Math.random() * 89)}`; store.set('pb-nick', n); return n; };
+    const name = () => { const n = cleanNickname(nick.value) || randomNickname(); rememberNick(n); return n; };
     const conf = this.net.configured;
     this.mount(h('div', { class: 'pb-screen' }, h('div', { class: 'pb-card narrow pb-stack' },
       h('h1', {}, GAME_NAME),
       h('div', { class: 'pb-sub' }, '🎯 Multiplayer paintball on the Med-C Ground or across the whole campus (Campus Royale) · private rooms for up to 12 friends'),
       !conf && h('div', { class: 'pb-status bad', 'data-pb': 'not-configured' }, 'The multiplayer game server is not configured for this site yet, so rooms cannot be created or joined. (Nothing here is simulated: there are no fake rooms or players.)'),
       status && h('div', { class: `pb-status${bad ? ' bad' : ''}`, 'data-pb': 'status' }, status),
-      h('label', { class: 'pb-sub' }, 'Nickname (temporary, only for this session)'), nick,
+      h('label', { class: 'pb-sub' }, 'Nickname (remembered in this browser only)'), nick,
       h('button', { class: 'primary', disabled: !conf, 'data-pb': 'create', onclick: () => this.connect({ nickname: name() }) }, '➕ Create a private room'),
       h('div', { class: 'pb-row' }, code, h('button', { class: 'go grow', disabled: !conf, 'data-pb': 'join', onclick: () => { const c = normaliseCode(code.value); if (!isCode(c)) { code.focus(); return this.showStart('Room codes are 5 letters/numbers, like K7PQ2.', true); } this.connect({ code: c, nickname: name() }); } }, 'Join with code')),
       h('div', { class: 'pb-note' }, 'Laptop: WASD move · Shift run · Space jump · mouse aim, click to fire · R reload · Q / wheel / 1–6 switch blaster · right-click zoom · V view · Tab scores · hold T to talk. Campus Royale: E open crates / pick up · G paint bomb · B colour smoke · H clean · C paint shield · Z paint scan · X drop blaster · M map. Phone: joystick, drag to aim, on-screen buttons.'),
-      h('button', { 'data-pb': 'back', onclick: () => this.exit() }, '← Back to the title screen'))));
-    setTimeout(() => (store.get('pb-nick') ? code : nick).focus(), 50);
+      h('button', { 'data-pb': 'back', onclick: () => this.exit() }, '← Back to the portal'))));
+    setTimeout(() => (savedNick() ? code : nick).focus(), 50);
   }
 
   async connect({ code = null, nickname }) {
@@ -112,8 +128,10 @@ export class PaintballMode {
     try {
       this.statusEl.textContent = code ? `Joining room ${code}…` : 'Creating your room…';
       const opts = { nickname, look: this.look, loadout: this.loadout };
-      const room = code ? await this.net.join(code, opts) : await this.net.create(opts);
+      const prefs = loadPrefs(); // the host's default mode and arena (the portal's Game Modes)
+      const room = code ? await this.net.join(code, opts) : await this.net.create({ ...opts, arena: prefs.arena });
       this.attach(room);
+      if (!code && prefs.mode !== 'ffa') room.send('config', { mode: prefs.mode });
     } catch (e) {
       this.showStart(joinError(e), true);
     }
@@ -122,7 +140,7 @@ export class PaintballMode {
   showRetry(msg, args) {
     this.mount(h('div', { class: 'pb-screen' }, h('div', { class: 'pb-card narrow pb-stack' }, h('h1', {}, GAME_NAME),
       h('div', { class: 'pb-status bad', 'data-pb': 'unreachable' }, msg),
-      h('div', { class: 'pb-row' }, h('button', { class: 'primary grow', onclick: () => this.connect(args) }, '↻ Try again'), h('button', { onclick: () => this.showStart() }, 'Back')))));
+      h('div', { class: 'pb-row' }, h('button', { class: 'primary grow', onclick: () => this.connect(args) }, '↻ Try again'), h('button', { 'data-pb': 'retry-back', onclick: () => this.showStart(this.portal ? msg : '', this.portal) }, 'Back')))));
   }
 
   // ---------- in a room ----------
@@ -130,6 +148,7 @@ export class PaintballMode {
     this.room = room; this.sig = ''; this.feed = []; this.lastPhase = null;
     history.replaceState(null, '', `${location.pathname}?room=${room.roomId}${new URLSearchParams(location.search).get('pbserver') ? `&pbserver=${encodeURIComponent(new URLSearchParams(location.search).get('pbserver'))}` : ''}`);
     this.view = new MatchView({ scene: this.scene, camera: this.camera, arena: this.arena, player: this.player, room });
+    if (this.settings?.thirdPerson) this.view.view = 'third';
     this.royale = new RoyaleView(this); this.royale.attach(room);
     this.voice = new VoiceChat({ room, onFail: (id, msg) => this.note(`🔇 ${msg}`), onChange: () => { this.sig = ''; } });
     room.onMessage('error', (m) => this.note(`⚠️ ${m.message}`));
@@ -248,6 +267,7 @@ export class PaintballMode {
       h('div', { class: 'pb-row' },
         h('button', { class: me.ready ? 'on grow' : 'go grow', 'data-pb': 'ready', onclick: () => this.room.send('ready', { ready: !me.ready }) }, me.ready ? '✓ Ready (click to undo)' : '✋ I’m ready'),
         host && h('button', { class: 'primary grow', 'data-pb': 'start', disabled: !check.ok, title: check.reason || '', onclick: () => this.room.send('start', {}) }, '▶ Start the paintball match'),
+        this.openSettings && h('button', { 'data-pb': 'settings', title: 'Settings', onclick: () => this.openSettings() }, '⚙'),
         h('button', { 'data-pb': 'leave', onclick: () => this.leave() }, 'Leave')),
       host && !check.ok && h('div', { class: 'pb-note', 'data-pb': 'start-reason' }, check.reason));
     const right = h('div', { class: 'pb-stack' }, this.customiser(me), this.equipmentPicker(me));
@@ -264,12 +284,12 @@ export class PaintballMode {
   }
 
   customiser(me) {
-    const send = (patch) => { Object.assign(this.look, patch); this.room.send('custom', { ...this.look }); this.sig = ''; };
+    const send = (patch) => { Object.assign(this.look, patch); savePrefs({ look: this.look }); this.room.send('custom', { ...this.look }); this.sig = ''; };
     this.look = { character: me.character, outfit: me.outfit, pants: me.pants, mask: me.mask, accessory: me.accessory };
     const sw = (list, key) => h('div', { class: 'pb-swatches' }, ...list.map((c) => h('button', { class: `pb-swatch${this.look[key] === c ? ' sel' : ''}`, style: `background:${c}`, 'aria-label': `${key} ${c}`, onclick: () => send({ [key]: c }) })));
     if (!this.preview) this.preview = new Preview();
     this.preview.set({ ...this.look, nickname: me.nickname, equip: me.primary });
-    const nick = h('input', { type: 'text', maxlength: 16, value: me.nickname, 'aria-label': 'Nickname', onchange: (e) => { store.set('pb-nick', e.target.value); this.room.send('nick', { nickname: e.target.value }); } });
+    const nick = h('input', { type: 'text', maxlength: 16, value: me.nickname, 'aria-label': 'Nickname', onchange: (e) => { rememberNick(cleanNickname(e.target.value)); this.room.send('nick', { nickname: e.target.value }); } });
     return h('div', { class: 'pb-stack', 'data-pb': 'customise' },
       h('h3', {}, 'Your character'),
       this.preview.canvas,
@@ -288,6 +308,7 @@ export class PaintballMode {
       if (chosen.includes(id)) return; // keep two: picking a third replaces the older choice
       next = [chosen[1], id];
       this.loadout = next;
+      savePrefs({ loadout: next });
       this.room.send('loadout', { primary: next[0], secondary: next[1] });
     };
     return h('div', { class: 'pb-stack', 'data-pb': 'equipment' },
@@ -333,7 +354,7 @@ export class PaintballMode {
     // drag on the fire button to aim while firing
     const fire = hold('p-fire', '🎯', () => { this.view.fireHeld = true; }, () => { this.view.fireHeld = false; });
     let last = null;
-    fire.addEventListener('pointermove', (e) => { if (last) { const k = 0.0055 * this.player.sensitivity; this.player.yaw -= (e.clientX - last.x) * k; this.player.pitch = Math.max(-1.45, Math.min(1.45, this.player.pitch - (e.clientY - last.y) * k)); } last = { x: e.clientX, y: e.clientY }; });
+    fire.addEventListener('pointermove', (e) => { if (last) { const k = 0.0055 * this.player.sensitivity; this.player.yaw -= (e.clientX - last.x) * k; this.player.pitch = Math.max(-1.45, Math.min(1.45, this.player.pitch - (e.clientY - last.y) * k * (this.player.invertY ? -1 : 1))); } last = { x: e.clientX, y: e.clientY }; });
     fire.addEventListener('pointerup', () => { last = null; });
     box.append(fire,
       hold('p-jump', '⤒', () => this.player.keys.add('Space'), () => this.player.keys.delete('Space')),
@@ -510,6 +531,7 @@ export class PaintballMode {
         h('button', { class: 'primary', onclick: () => { close(); if (!this.touch.on) lockPointer(this.canvas); } }, 'Back to the match'),
         h('button', { onclick: () => { this.toggleView(); close(); } }, `Switch to ${this.viewName === 'first' ? 'third' : 'first'}-person view (V)`),
         this.voice && h('button', { onclick: () => { close(); this.toggleVoice(); } }, this.voice.on ? 'Switch voice off' : 'Switch voice on'),
+        this.openSettings && h('button', { 'data-pb': 'menu-settings', onclick: () => { close(); this.openSettings(); } }, '⚙ Settings'),
         h('button', { class: 'danger', onclick: () => { close(); this.leave(); } }, 'Leave the paintball match')), { title: '🎯 Paintball match', closable: true });
     });
   }
@@ -593,7 +615,8 @@ export class PaintballMode {
 
   mount(...els) { this.root.replaceChildren(...els.filter(Boolean)); }
 
-  async exit() {
+  // info: { status, bad } for the portal (why the player is back there), when opened from it
+  async exit(info = {}) {
     this.exiting = true;
     await this.leave();
     this.teardownRoom();
@@ -603,21 +626,22 @@ export class PaintballMode {
     document.body.classList.remove('pb-mode');
     this.player.enabled = false; this.player.keys.clear();
     if (globalThis.__pb === this) globalThis.__pb = null;
-    this.onExit();
+    this.onExit(info);
   }
 }
 
-// The lobby's live 3D preview of your character (its own small renderer).
-class Preview {
-  constructor() {
-    this.canvas = h('canvas', { class: 'pb-preview', width: 360, height: 276, 'data-pb': 'preview' });
+// The live 3D preview of your character (its own small renderer): the lobby's, and the portal's (bigger, so
+// width/height and the class can be set).
+export class Preview {
+  constructor({ width = 360, height = 276, cls = 'pb-preview', name = 'preview' } = {}) {
+    this.canvas = h('canvas', { class: cls, width, height, 'data-pb': name });
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene = new THREE.Scene();
     this.scene.add(new THREE.HemisphereLight('#ffffff', '#445566', 1.6));
     const sun = new THREE.DirectionalLight('#ffffff', 1.8); sun.position.set(2, 4, 3); this.scene.add(sun);
-    this.camera = new THREE.PerspectiveCamera(30, 360 / 276, 0.1, 20);
+    this.camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 20);
     this.camera.position.set(0, 1.25, 4.3); this.camera.lookAt(0, 0.95, 0);
     this.key = ''; this.t = 0;
   }
