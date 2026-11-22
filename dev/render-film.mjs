@@ -1,4 +1,4 @@
-// Renders the campus film to an MP4, frame by frame (so every frame is perfect, however long it takes to draw).
+// Renders the film (the Campus Royale trailer) to an MP4, frame by frame (so every frame is perfect, however long it takes to draw).
 //
 //   npm start                                  (in another terminal)
 //   node dev/render-film.mjs out.mp4 [--from 0] [--to <end>] [--scale 1.5] [--url http://localhost:8080/]
@@ -25,11 +25,13 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: SCALE });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
+await page.addInitScript(() => { try { localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } }); // no portal splash over the frames
 await page.goto(URL, { waitUntil: 'load' });
 await page.waitForTimeout(1000);
-const timeline = await page.evaluate(() => {
+const timeline = await page.evaluate(async () => {
   const f = window.__game.playFilm({ capture: true });
-  return { duration: f.duration, dips: f.dips, titles: f.titles, shots: f.shots.map((s) => ({ name: s.name, t0: s.t0, t1: s.t1 })) };
+  await f.ready; // the game's HUD styles and the landing/supply registries
+  return { duration: f.duration, dips: f.dips, titles: f.titles, marks: f.marks, shots: f.shots.map((s) => ({ name: s.name, t0: s.t0, t1: s.t1 })) };
 });
 const from = Number(opt('from', 0)); const to = Math.min(Number(opt('to', timeline.duration)), timeline.duration);
 writeFileSync(join(work, 'timeline.json'), JSON.stringify(timeline));
