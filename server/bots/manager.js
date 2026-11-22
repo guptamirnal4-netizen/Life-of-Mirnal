@@ -111,7 +111,8 @@ export class BotManager {
       if (mates.some(([, q]) => !q.bot) || mates.find(([, q]) => q.bot)?.[0] !== b.id) return;
     }
     const taken = [];
-    for (const q of s.players.values()) if (q !== p && q.drop >= 0 && drops[q.drop]) taken.push(drops[q.drop]);
+    const all = this.room.royale.spots.drops; // q.drop is a campus-wide drop id, not an index into `drops`
+    for (const q of s.players.values()) if (q !== p && q.drop >= 0 && all[q.drop]) taken.push(all[q.drop]);
     const d = pickLanding(drops, taken, b.rand);
     if (d) c.dispatch('land', { id: d.id });
   }

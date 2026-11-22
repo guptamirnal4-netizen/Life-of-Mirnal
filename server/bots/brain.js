@@ -98,7 +98,7 @@ export function pickLanding(drops, taken, rand, tries = 40) {
   for (let i = 0; i < tries && pool.length; i++) {
     const d = pool[Math.floor(rand() * pool.length)];
     const near = taken.length ? Math.min(...taken.map((t) => Math.hypot(t.x - d.x, t.z - d.z))) : 500;
-    const s = Math.min(near, 400) + rand() * 60;
+    const s = Math.min(near, 400) + rand() * 8; // small tiebreak only: noise must not beat a much farther spot
     if (s > bs) { bs = s; best = d; }
   }
   return best;
