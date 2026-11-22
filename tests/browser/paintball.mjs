@@ -175,7 +175,8 @@ try {
   check(/Asha wins/.test(res) && /RUNNER-UP/.test(res) && /MVP/.test(res) && /Times tagged/i.test(res), 'results show winner, runner-up, MVP and rankings');
   check(await B.locator('[data-pb=results] [data-pb=rematch]').count() === 0 && await A.locator('[data-pb=rematch]').count() === 1, 'only the host gets Play again / Return to lobby / Close room');
   await A.locator('[data-pb=close]').click();
-  for (const p of [B, C]) await p.waitForFunction(() => !window.__pb.room, null, { timeout: 10000 });
+  for (const p of [B, C]) await p.waitForFunction(() => !window.__pb?.room, null, { timeout: 10000 });
+  check(await C.waitForFunction(() => window.__game.portal?.visible && /closed/.test(document.querySelector('[data-portal=status]')?.textContent || ''), null, { timeout: 10000 }).then(() => true, () => false), 'a player who came by share link (?room=) is back on the portal, told the room closed');
   check(/closed/.test(await B.locator('[data-pb=status]').innerText()), 'closing the room tells the others');
   for (const p of [A, B, C]) await p.context().close();
 
@@ -237,7 +238,7 @@ try {
   await T.waitForTimeout(500);
   check(/PLAY WITH/.test(await T.locator('#title h1').innerText()) && (await T.title()) === 'Play with BITSians', 'title renamed to Play with BITSians');
   await T.locator('[data-portal=settings]').click();
-  await T.getByRole('button', { name: /Campus Free Roam/ }).click();
+  await T.locator('[data-portal=free-roam]').click(); // Settings → Campus Free Roam (optional experience)
   await T.waitForFunction(() => !!window.__game.explorer, null, { timeout: 30000 });
   check(true, 'Campus Free Roam opens');
   await T.goto(BASE, { waitUntil: 'load' });

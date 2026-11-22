@@ -61,7 +61,7 @@ export function createPortal({ root, hooks }) {
   document.body.append(sheets);
 
   // ---------- the portal itself ----------
-  const nick = h('input', { type: 'text', maxlength: 16, placeholder: 'Your nickname', value: prefs.nickname, 'aria-label': 'Nickname', 'data-portal': 'nickname', autocomplete: 'off', spellcheck: 'false',
+  const nick = h('input', { type: 'text', maxlength: 16, placeholder: 'Your nickname', value: prefs.nickname, 'aria-label': 'Player nickname', 'data-portal': 'nickname', autocomplete: 'off', spellcheck: 'false',
     oninput: () => { prefs = savePrefs({ nickname: cleanNickname(nick.value) }); renderPreview(); },
     onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); menuEl.querySelector('[data-portal=create]')?.focus(); } } });
   const status = h('div', { class: 'p-status hidden', role: 'status', 'data-portal': 'status' });
@@ -334,8 +334,11 @@ export function createPortal({ root, hooks }) {
     const m = t.match(/\b(?:join|code)\b(.*)$/);
     if (m) { const c = normaliseCode(m[1]); if (isCode(c)) { join(c); return 'join'; } }
     if (!sheet && /\b(create|host|new room|start a room)\b/.test(t)) { create(); return 'create'; }
-    const scope = sheet ? sheet.el : menuEl;
-    const b = hooks.voice?.matchButton?.(text, scope) || (sheet ? hooks.voice?.matchButton?.(text, menuEl) : null);
+    const said = [[/\bsettings?\b|\boptions\b/, 'settings'], [/\bcustomi[sz]e|\bcharacter\b|\blook\b/, 'customise'], [/\bmodes?\b|\barenas?\b/, 'modes'], [/how to|\bhelp\b|\bcontrols\b/, 'howto'], [/\bintro\b|\bfilm\b|\bmovie\b/, 'intro'], [/\bjoin\b/, 'join']].find(([re]) => re.test(t));
+    const inSheet = sheet && hooks.voice?.matchButton?.(text, sheet.el); // a choice on the open panel first ("turban", "low")
+    if (inSheet) { inSheet.click(); return inSheet.dataset.portal || 'button'; }
+    if (said && visible) { if (sheet) closeSheet(false); menuEl.querySelector(`[data-portal=${said[1]}]`)?.click(); return said[1]; }
+    const b = visible && hooks.voice?.matchButton?.(text, menuEl);
     if (b) { b.click(); return b.dataset.portal || 'button'; }
     hooks.toast?.(`🎤 Heard “${text}”. Try “create room”, “join room K7PQ2”, “customise” or “settings”.`);
     return null;

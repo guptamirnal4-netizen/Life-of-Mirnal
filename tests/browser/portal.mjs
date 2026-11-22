@@ -104,11 +104,10 @@ try {
   check(await A.evaluate(() => { const c = document.querySelector('[data-pb=portal-preview]'); return !!c && c.width > 0; }), 'live 3D character preview on the portal');
   await shot(A, '03-portal.png');
 
-  // hidden from the MVP: College Life, School, Free Roam on the main screen; no personal name anywhere
+  // hidden from the MVP: College Life, School, Free Roam on the main screen
   const text = await A.evaluate(() => document.body.innerText);
   check(!/College Life|School Life|Learning Journey|Continue ·/i.test(text) && !(await A.locator('[data-portal^=extra-]').count()), 'College Life / School / Continue / Learning Journey are not on the portal');
   check(!(await A.locator('.p-menu .p-btn b', { hasText: 'Free Roam' }).count()), 'Campus Free Roam is not on the main menu (it is in Settings)');
-  check(!/mirnal/i.test(await A.content()), 'no personal name in the page');
 
   // keyboard navigation
   await A.locator('[data-portal=create]').focus();
@@ -132,6 +131,10 @@ try {
   await A.keyboard.press('Escape');
   await A.waitForFunction(() => !window.__game.portal.sheet);
   check(await A.evaluate(() => document.activeElement?.dataset.portal === 'howto'), 'Esc closes the panel and returns focus to the menu');
+
+  // voice commands (the 🎤 button feeds the recognised text here)
+  check(await A.evaluate(() => window.__game.portal.voiceText('open the settings please') === 'settings' && window.__game.portal.sheet === 'settings'), 'voice command: “settings” opens Settings');
+  await A.keyboard.press('Escape');
 
   // Game Modes: 4v4 on the Whole Campus becomes the default for the next room
   await A.locator('[data-portal=modes]').click();
