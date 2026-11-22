@@ -1,6 +1,7 @@
 // Paintball frame time with 12 connected clients: one real Chrome page (measured, first person, the game's
 // default "high" quality on a laptop) plus 11 @colyseus/sdk bots that run, turn and fire paintballs.
-//   node tests/browser/paintball-perf.mjs [seconds] [headed]
+//   node tests/browser/paintball-perf.mjs [seconds] [headed] [campus]
+// campus: a Campus Royale match on the whole campus (players land spread over campus; supply crates, zone).
 // The CPU/frame measurement is the same as tests/browser/perf.mjs.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
@@ -13,6 +14,7 @@ import { Bot, until, sleep } from '../mp/helpers.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SECS = Number(process.argv[2] || 12);
 const headed = process.argv[3] === 'headed';
+const CAMPUS = process.argv.includes('campus');
 const freePort = () => new Promise((res) => { const s = net.createServer(); s.listen(0, () => { const p = s.address().port; s.close(() => res(p)); }); });
 const procs = [];
 const start = (args, env, ready) => new Promise((res, rej) => {
@@ -48,12 +50,13 @@ const code = (await page.locator('[data-pb=code]').innerText()).trim();
 const bots = [];
 for (let i = 0; i < 11; i++) bots.push(new Bot(await new Client(`ws://localhost:${GP}`).joinById(code, { nickname: `Bot ${i + 1}`, loadout: [['standard', 'rapid'], ['rapid', 'spread'], ['burst', 'launcher'], ['precision', 'standard']][i % 4] })));
 await page.waitForFunction(() => window.__pb.state.players.size === 12);
-await page.evaluate(() => window.__pb.room.send('config', { duration: 300 }));
+await page.evaluate((c) => window.__pb.room.send('config', c ? { arena: 'campus' } : { duration: 300 }), CAMPUS);
+if (CAMPUS) await page.waitForFunction(() => window.__pb.state.arena === 'campus' && !!window.__pb.arena.geo, null, { timeout: 60000 });
 for (const b of bots) b.send('ready', { ready: true });
 await page.locator('[data-pb=ready]').click();
 await page.waitForFunction(() => [...window.__pb.state.players.values()].every((p) => p.ready));
 await page.locator('[data-pb=start]').click();
-await page.waitForFunction(() => window.__pb.state.phase === 'playing');
+await page.waitForFunction(() => window.__pb.state.phase === 'playing', null, { timeout: 60000 });
 await page.evaluate(() => { const c = document.getElementById('game'); Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => c }); });
 // bots: run around, turn, aim at the measured player now and then, fire in bursts
 let t = 0;
@@ -72,12 +75,12 @@ await page.evaluate(() => { const P = window.__perf; P.cpu = []; P.gaps = []; P.
 await page.keyboard.up('KeyW');
 await page.mouse.move(700, 450);
 for (let i = 0; i < SECS * 4; i++) { await page.evaluate((k) => { window.__game.player.yaw += 0.04 * Math.sin(k / 6); }, i); await sleep(250); }
-const P = await page.evaluate(() => ({ cpu: window.__perf.cpu, gaps: window.__perf.gaps, draws: window.__perf.draws, players: window.__pb.state.players.size, splats: window.__pb.view.splats.length, quality: window.__game.graphics.quality.name }));
+const P = await page.evaluate(() => ({ spread: (() => { const ps = [...window.__pb.state.players.values()]; const me = window.__pb.me; return Math.round(Math.max(...ps.map((p) => Math.hypot(p.x - me.x, p.z - me.z)))); })(), visibleAvatars: [...window.__pb.view.avatars.values()].filter((a) => a.npc.group.visible).length, crates: window.__pb.royale?.crates.size || 0, cpu: window.__perf.cpu, gaps: window.__perf.gaps, draws: window.__perf.draws, players: window.__pb.state.players.size, splats: window.__pb.view.splats.length, quality: window.__game.graphics.quality.name }));
 clearInterval(drive);
 const gpu = await page.evaluate(() => { const c = document.createElement('canvas').getContext('webgl2'); const d = c.getExtension('WEBGL_debug_renderer_info'); return d ? c.getParameter(d.UNMASKED_RENDERER_WEBGL) : ''; });
 const gp = stats(P.gaps);
 const shots = bots.reduce((n, b) => n + b.events('shot').length, 0);
-console.log(JSON.stringify({ scene: 'paintball 12 clients', players: P.players, fps: +(1000 / gp.avg).toFixed(1), frame_ms: gp, cpu_ms: stats(P.cpu), draws: stats(P.draws).avg, splats: P.splats, quality: P.quality, paintballs_seen_by_bots: shots }));
+console.log(JSON.stringify({ scene: CAMPUS ? 'Campus Royale 12 clients spread over campus' : 'paintball 12 clients', spread_m: P.spread, avatars_drawn: P.visibleAvatars, crates_drawn: P.crates, players: P.players, fps: +(1000 / gp.avg).toFixed(1), frame_ms: gp, cpu_ms: stats(P.cpu), draws: stats(P.draws).avg, splats: P.splats, quality: P.quality, paintballs_seen_by_bots: shots }));
 console.log('GPU', gpu, '| errors', JSON.stringify(errors));
 for (const b of bots) await b.leave();
 await browser.close();

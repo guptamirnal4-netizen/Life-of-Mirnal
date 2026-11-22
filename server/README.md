@@ -8,8 +8,45 @@ history. Voice chat is peer-to-peer WebRTC. The server only relays the connectio
 between players in the same voice channel, and it never receives or stores audio.
 
 Files: `index.js` (bootstrap, `/health`, origin checks), `PaintballRoom.js` (the room), `schema.js` (synced
-state), `logic/match.js` (pure rules, unit-tested). The shared rules, equipment, arena and movement code live in
-`../js/paintball/` and the browser uses the same files.
+state), `logic/match.js` (pure rules, unit-tested), `logic/royale.js` (Campus Royale), `geo.js` (loads the campus
+geometry). The shared rules, equipment, arenas, items and movement code live in `../js/paintball/` and the
+browser uses the same files.
+
+## Arenas and rulesets
+
+- **Med-C Ground** (arena `medc`): the 70 × 40 m bunker field, timed match, respawn after a tag, overtime on a tie.
+- **Whole Campus · Campus Royale** (arena `campus`): the whole BITS campus inside its boundary wall. Landing phase
+  (pick a spot on the campus map from a verified registry; squads land together; no pick → placed far from
+  everyone), supply crates at verified supply spots (open with E, server-owned contents, unique item uids), paint
+  bombs, colour smoke, protective gear, cleaning kits, paint shield, paint-scan pulse, a special supply drop
+  mid-match, a paint zone shrinking in 7 timed phases (~10 min), no respawn (squads: a teammate can clean you off
+  within 20 s), last player or squad standing wins; results with placement, survival time and supplies collected.
+  Rules: `js/paintball/royale.js`, items: `js/paintball/items.js`.
+
+## Campus geometry (Campus Royale)
+
+The server cannot run the browser's campus builder, so the built campus is exported once and committed:
+
+| File | What |
+| --- | --- |
+| `js/paintball/data/campus-collision.bin` | gzip of every collider (boxes in cm, trees as circles), ~0.95 MB |
+| `js/paintball/data/campus-collision.json` | header: version, hash, boundary wall polygon, sunken courts (pits), water, doorways |
+| `js/paintball/data/campus-probes.json` | the life-sim player's own walks (stairs, a wall) the paintball sim is tested against |
+| `js/paintball/data/royale-spots.json` | verified landing spots (with squad slots), supply spots, final-zone centres |
+
+`js/paintball/geometry.js` decodes it into typed arrays with a 4 m spatial grid (movement copies
+`js/world/player.js`: walls block, 0.7 m step-ups, floors and stairs, sunken NAB / Rotunda courts; paintballs and
+paint bombs are swept against it). The server loads it at startup (~40 ms, ~110 MB RSS for the whole process) and
+refuses to start if the hash does not match; the browser fetches the same files and checks the same hash.
+
+**When campus modules change** (`js/world/bits-world.js`, `js/world/buildings/*`, `hostel.js`, `comb-hostel.js`,
+`data/bits-campus.js`), re-export and rebuild the registries, then run the tests:
+
+```sh
+node dev/export-campus-collision.mjs   # headless Chrome; deterministic (same campus → same hash)
+node dev/build-royale-spots.mjs        # Node only, ~40 s: reachability flood fill, validated spots
+npm test && npm run test:mp
+```
 
 ## Run locally
 
@@ -26,13 +63,15 @@ On a `localhost` page, the browser connects to `ws://localhost:2567`. Tests poin
 | --- | --- | --- |
 | `PORT` | `2567` | Listening port (Render sets it) |
 | `HOST` | `0.0.0.0` | Listening address |
-| `ALLOWED_ORIGINS` | (none) | Extra browser origins, comma-separated. `https://play-with-bitsians.vercel.app`, `https://play-with-bitsian.vercel.app`, `https://life-of-mirnal.vercel.app` and any `localhost` origin are always allowed. Other origins get a 403 on the WebSocket upgrade, and CORS does not reflect them. |
+| `ALLOWED_ORIGINS` | (none) | Extra browser origins, comma-separated. `https://play-with-bitsians.vercel.app`, `https://play-with-bitsian.vercel.app` and any `localhost` origin are always allowed (add older deployment addresses here). Other origins get a 403 on the WebSocket upgrade, and CORS does not reflect them. |
 | `PB_TEST` | unset | `1` turns on the test flag: short match durations and test helpers. Never set it in production. |
 
 Health check: `GET /health` returns `{"ok":true,"rooms":N,"test":false}`.
 
-Tests: `npm test` (pure logic), `npm run test:mp` (the real server plus `@colyseus/sdk` clients over WebSocket),
-`node tests/browser/paintball.mjs` (real Chrome pages; it starts both servers itself).
+Tests: `npm test` (pure logic, campus geometry, registries), `npm run test:mp` (the real server plus
+`@colyseus/sdk` clients over WebSocket: `tests/mp/paintball.mjs` and `tests/mp/royale.mjs`),
+`node tests/browser/paintball.mjs` and `node tests/browser/paintball-campus.mjs` (real Chrome pages; they start both
+servers themselves), `node tests/browser/paintball-perf.mjs 12 x campus` (frame time with 12 clients).
 
 ## Deploy (Render)
 

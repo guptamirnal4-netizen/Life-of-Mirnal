@@ -11,7 +11,10 @@ import * as sfx from './sounds.js';
 
 const INTERP_MS = 110;
 const MAX_SPLATS = 160;
-const ACTIVE = new Set(['countdown', 'playing', 'overtime']);
+const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
+const FAR = 260; // m: players further than this are not drawn (Campus Royale is 1.8 km long)
+const LOD = 70; // m: beyond this, no arm pose (cheaper)
+const DOWN_SPEED = 0.3; // js/paintball/royale.js ROYALE.downSpeed
 
 export class MatchView {
   constructor({ scene, camera, arena, player, room }) {
@@ -49,7 +52,8 @@ export class MatchView {
     const me = state.players.get(this.room.sessionId); this.me = me;
     if (!me) return;
     const live = state.phase === 'playing' || state.phase === 'overtime';
-    const frozen = !live || !me.alive;
+    const frozen = !live || !me.alive || me.out;
+    this.mul = me.down ? DOWN_SPEED : 1;
     if (!this.placed || !ACTIVE.has(state.phase)) {
       Object.assign(this.pos, { x: me.x, y: me.y, z: me.z, vy: me.vy }); this.smooth.set(0, 0, 0);
       if (!this.placed && ACTIVE.has(state.phase)) { this.player.yaw = me.yaw; this.player.pitch = 0; this.placed = true; this.slot = me.slot; this.seq = Math.max(this.seq, me.seq); }
@@ -61,7 +65,7 @@ export class MatchView {
       if (!ACTIVE.has(state.phase)) continue;
       const i = this.inputFrom(keys, frozen);
       this.reloadPressed = false;
-      stepMove(this.pos, i, INPUT_DT, this.arena, frozen);
+      stepMove(this.pos, i, INPUT_DT, this.arena, frozen, this.mul);
       this.pending.push(i); this.sendBuf.push(i);
     }
     if (this.pending.length > 90) this.pending.splice(0, this.pending.length - 90);
@@ -77,7 +81,7 @@ export class MatchView {
     const before = { ...this.pos };
     this.pos.x = me.x; this.pos.y = me.y; this.pos.z = me.z; this.pos.vy = me.vy;
     this.pending = this.pending.filter((i) => i.seq > me.seq);
-    for (const i of this.pending) stepMove(this.pos, i, INPUT_DT, this.arena, frozen);
+    for (const i of this.pending) stepMove(this.pos, i, INPUT_DT, this.arena, frozen, this.mul || 1);
     const d = Math.hypot(before.x - this.pos.x, before.y - this.pos.y, before.z - this.pos.z);
     if (d < 2) this.smooth.add(new THREE.Vector3(before.x - this.pos.x, before.y - this.pos.y, before.z - this.pos.z));
     else this.smooth.set(0, 0, 0); // respawn or a big correction: snap
@@ -134,7 +138,8 @@ export class MatchView {
       }
       if (a.equip !== p.equip) { equip(a.npc, p.equip); a.equip = p.equip; }
       const mine = id === this.room.sessionId;
-      const visible = ACTIVE.has(state.phase) && p.alive && (!mine || (this.view === 'third'));
+      const far = !mine && Math.hypot(p.x - this.camera.position.x, p.z - this.camera.position.z) > FAR;
+      const visible = ACTIVE.has(state.phase) && p.alive && !p.out && !far && (!mine || (this.view === 'third'));
       a.npc.group.visible = visible;
       if (!visible) { if (!p.alive && a.marks.length) this.clearMarks(a); continue; }
       let x; let y; let z; let yaw; let pitch; let speed;
@@ -158,8 +163,12 @@ export class MatchView {
       }
       const walking = speed > 0.6;
       a.npc.gait = speed > MOVE.walk + 0.5 ? 'run' : 'walk';
-      a.npc.poseAs({ x, y, z }, yaw, walking, false, dt, a.npc.gait, speed);
-      poseAim(a.npc, pitch);
+      a.npc.poseAs({ x, y, z }, yaw, walking && !p.down, false, dt, a.npc.gait, speed);
+      const lod = !mine && Math.hypot(x - this.camera.position.x, z - this.camera.position.z) > LOD;
+      if (!lod) poseAim(a.npc, pitch);
+      // fully painted, waiting for a squadmate: lying down
+      a.npc.group.rotation.x = p.down ? -1.35 : 0;
+      if (p.down) a.npc.group.position.y = y + 0.3;
       a.npc.tag.visible = !mine;
       // spawn protection: a soft blink
       const prot = p.protectedUntil > state.now;

@@ -10,8 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { Server, matchMaker, createRouter, createEndpoint } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { PaintballRoom, TestPaintballRoom, liveRooms } from './PaintballRoom.js';
+import { loadCampus } from './geo.js';
 
-const DEFAULT_ORIGINS = ['https://play-with-bitsians.vercel.app', 'https://play-with-bitsian.vercel.app', 'https://life-of-mirnal.vercel.app'];
+// Older deployment addresses can be allowed with ALLOWED_ORIGINS (set on the host, not in the repo).
+const DEFAULT_ORIGINS = ['https://play-with-bitsians.vercel.app', 'https://play-with-bitsian.vercel.app'];
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 export function originAllowed(origin, extra = []) {
@@ -20,6 +22,7 @@ export function originAllowed(origin, extra = []) {
 }
 
 export async function startServer({ port = Number(process.env.PORT) || 2567, host = process.env.HOST || '0.0.0.0', test = process.env.PB_TEST === '1', origins = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean), quiet = false } = {}) {
+  const campus = loadCampus(); // the Whole Campus geometry and registries, once, before any room opens
   matchMaker.controller.standardHttpStatus = true; // a missing room is a 404, not Colyseus' 522 (SDK 0.18.10+ reads the body)
   // Browsers: only the game's own origins may call the matchmaking HTTP routes or open a WebSocket.
   matchMaker.controller.getCorsHeaders = (headers) => {
@@ -30,12 +33,12 @@ export async function startServer({ port = Number(process.env.PORT) || 2567, hos
     beforeUpgrade: (request) => (originAllowed(request.headers.get('origin'), origins) ? undefined : new Response('origin not allowed', { status: 403 })),
   });
   const server = new Server({ transport, greet: false, gracefullyShutdown: !test && !quiet, logger: quiet ? { info() {}, debug() {}, warn() {}, error: console.error } : undefined });
-  const health = createEndpoint('/health', { method: 'GET' }, async () => new Response(JSON.stringify({ ok: true, rooms: liveRooms.size, test }), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }));
+  const health = createEndpoint('/health', { method: 'GET' }, async () => new Response(JSON.stringify({ ok: true, rooms: liveRooms.size, test, geo: campus.geo.hash }), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }));
   server.router = createRouter({ health });
   server.define('paintball', test ? TestPaintballRoom : PaintballRoom);
   await server.listen(port, host);
   const actual = transport.server?.address?.()?.port ?? port;
-  if (!quiet) console.log(`Play with BITSians paintball server → ws://localhost:${actual}${test ? ' (test flag on)' : ''}`);
+  if (!quiet) console.log(`Play with BITSians paintball server → ws://localhost:${actual}${test ? ' (test flag on)' : ''} · campus geometry ${campus.geo.hash} loaded in ${campus.ms} ms · RSS ${Math.round(process.memoryUsage().rss / 1048576)} MB`);
   return { server, port: actual, close: () => server.gracefullyShutdown(false) };
 }
 

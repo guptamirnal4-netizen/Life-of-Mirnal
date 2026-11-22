@@ -1,0 +1,55 @@
+/* Campus Royale (js/paintball/client/royale.js): inventory, paint zone, supply drop, crate panel, maps, landing. */
+#pb-hud.royale .minimap { width: 170px; height: 170px; border-radius: 50%; }
+#pb-hud.royale .feed { top: 196px; }
+#pb-hud .feed .mine { background: rgba(255,61,127,0.75); }
+#pb-hud .pb-inv { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; max-width: 62vw; }
+#pb-hud .pb-inv span { background: rgba(10,12,28,0.65); border: 2px solid rgba(255,255,255,0.25); border-radius: 9px; padding: 3px 8px; font-weight: 800; font-size: 13px; white-space: nowrap; }
+#pb-hud .pb-inv .slot { border-color: var(--c, rgba(255,255,255,0.25)); }
+#pb-hud .pb-inv .slot.sel { background: rgba(255,255,255,0.22); box-shadow: 0 0 0 2px var(--c); }
+#pb-hud .pb-inv .slot.empty, #pb-hud .pb-inv .none { opacity: 0.45; }
+#pb-hud .pb-inv small { font-size: 10px; opacity: 0.7; margin-left: 3px; }
+#pb-hud .pb-zoneinfo { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: rgba(10,12,28,0.65); padding: 4px 12px; border-radius: 10px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+#pb-hud .pb-zoneinfo.warn { background: rgba(255,61,127,0.85); animation: pb-pulse 1s infinite; }
+@keyframes pb-pulse { 50% { transform: translateX(-50%) scale(1.04); } }
+#pb-hud .pb-left { position: absolute; top: 10px; right: 196px; background: rgba(10,12,28,0.65); padding: 5px 11px; border-radius: 10px; font-weight: 700; font-size: 13px; }
+#pb-hud .pb-dropinfo { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); background: rgba(120,80,0,0.8); padding: 4px 12px; border-radius: 10px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+#pb-hud .pb-prompt { position: absolute; left: 50%; top: calc(50% + 40px); transform: translateX(-50%); background: rgba(10,12,28,0.75); padding: 6px 14px; border-radius: 10px; font-weight: 800; }
+#pb-hud .pb-channel { position: absolute; left: 50%; top: calc(50% + 80px); transform: translateX(-50%); width: 220px; height: 10px; border-radius: 5px; background: rgba(255,255,255,0.2); overflow: hidden; }
+#pb-hud .pb-channel i { display: block; height: 100%; background: #7cff4f; }
+#pb-hud .pb-channel::after { content: attr(data-label); position: absolute; top: 12px; left: 0; right: 0; text-align: center; font-size: 12px; }
+#pb-hud .pb-bigmap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 14px; border: 3px solid rgba(255,255,255,0.6); box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+#pb-hud .hidden { display: none; }
+#pb-hud .pb-crate { position: absolute; left: calc(50% + 60px); top: calc(50% - 40px); min-width: 230px; display: grid; gap: 5px; background: rgba(10,12,28,0.88); border: 2px solid #ffd23d; border-radius: 14px; padding: 10px 12px; pointer-events: auto; }
+#pb-hud .pb-crate-item { display: flex; gap: 8px; align-items: center; text-align: left; font-weight: 700; padding: 6px 9px; border-radius: 9px; background: rgba(255,255,255,0.1); color: #fff; border: 0; cursor: pointer; }
+#pb-hud .pb-crate-item .k { font: 800 12px ui-monospace, monospace; background: #ffd23d; color: #0b1020; border-radius: 5px; padding: 0 5px; }
+#pb-hud .pb-crate-item .dot { width: 10px; height: 10px; border-radius: 50%; }
+.pb-landing { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 16px; background: rgba(8,10,24,0.55); color: #fff; overflow: auto; }
+.pb-landing h2 { margin: 4px 0 0; }
+.pb-landinfo { font-weight: 800; background: rgba(10,12,28,0.7); padding: 4px 12px; border-radius: 10px; }
+.pb-landmap { border-radius: 12px; border: 3px solid rgba(255,255,255,0.6); cursor: crosshair; touch-action: none; }
+#pb-touch .p-pick { right: calc(112px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); background: rgba(255,210,61,0.6); }
+#pb-touch .p-bomb { right: calc(166px + env(safe-area-inset-right)); bottom: calc(80px + env(safe-area-inset-bottom)); }
+#pb-touch .p-clean { right: calc(166px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); }
+#pb-touch .p-shield { right: calc(220px + env(safe-area-inset-right)); bottom: calc(80px + env(safe-area-inset-bottom)); }
+#pb-touch .p-scan { right: calc(220px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); }
+#pb-touch .p-map { left: calc(118px + env(safe-area-inset-left)); top: calc(96px + env(safe-area-inset-top)); }
+#pb-touch .p-inv { left: calc(170px + env(safe-area-inset-left)); top: calc(96px + env(safe-area-inset-top)); }
+body.touch #pb-hud.royale .minimap { width: 110px; height: 110px; }
+body.touch #pb-hud.royale .pb-left { right: 130px; font-size: 11px; }
+body.touch #pb-hud.royale .feed { top: 128px; }
+body.touch #pb-hud .pb-inv { display: none; bottom: 46px; max-width: 70vw; }
+body.touch #pb-hud.inv-open .pb-inv { display: flex; }
+body.touch #pb-hud .pb-zoneinfo { top: 44px; font-size: 11px; }
+body.touch #pb-hud .pb-dropinfo { top: 68px; font-size: 11px; }
+body.touch #pb-hud.royale .ammo { top: 92px; }
+body.touch #pb-hud .pb-crate { left: 50%; top: 24%; transform: translateX(-50%); }
+#pb-hud.royale .hint { bottom: 92px; }
+#pb-hud.royale .pb-inv { max-width: 72vw; }
+#pb-hud.royale .pb-inv span { font-size: 12px; padding: 2px 7px; }
+#pb-hud .pb-zoneinfo.warn { background: #ff3d7f; color: #fff; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+#pb-hud.landing > * { visibility: hidden; }
+#pb-hud.out .ammo, #pb-hud.out .pb-inv, #pb-hud.out .cross, #pb-hud.out .paint { display: none; }
+#pb-touch .tbtn[data-n]::after { content: attr(data-n); position: absolute; right: -2px; top: -2px; min-width: 18px; height: 18px; border-radius: 9px; background: #ffd23d; color: #0b1020; font: 800 12px/18px system-ui; text-align: center; }
+body.touch #pb-hud.royale .pb-inv { bottom: 58px; max-width: 56vw; }
+body.touch #pb-hud.royale .center-msg { top: 60%; font-size: 13px; padding: 5px 10px; }
+body.touch #pb-hud.royale .pb-prompt { top: calc(50% + 28px); font-size: 13px; }

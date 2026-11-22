@@ -10,13 +10,16 @@ import { ARENAS_BY_ID, validateSpawns, spawnSet } from '../js/paintball/arena.js
 import { INPUT_DT, sanitizeInput, stepMove, aimDir, sweepArena, segPlayer, blocked, BODY } from '../js/paintball/sim.js';
 import { cleanLook } from '../js/paintball/looks.js';
 import { sameChannel } from '../js/paintball/channels.js';
-import { rng, makeCode, cleanNick, assignTeams, smallestTeam, canStart, slotsFor, pickSpawn, standings, timeUp, overtimeCheck, finalise } from './logic/match.js';
+import { rng, makeCode, cleanNick, assignTeams, smallestTeam, canStart, slotsFor, pickSpawn, standings, timeUp, overtimeCheck, finalise, finaliseRoyale } from './logic/match.js';
+import { RoyaleRules } from './logic/royale.js';
+import { loadCampus } from './geo.js';
+import { ROYALE } from '../js/paintball/royale.js';
 
 export const CLOSE_BY_HOST = 4101;
 export const CLOSE_IDLE = 4102;
 const codes = new Set(); // codes of open rooms (unique per server process)
 export const liveRooms = new Set(); // for tests: rooms not yet disposed
-const ACTIVE = new Set(['countdown', 'playing', 'overtime']);
+const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
 const RTC_KINDS = new Set(['offer', 'answer', 'ice', 'bye']);
 
 export class PaintballRoom extends Room {
@@ -24,6 +27,7 @@ export class PaintballRoom extends Room {
 
   onCreate(options = {}) {
     const test = this.constructor.test;
+    loadCampus(); // once per process (the Whole Campus geometry and registries)
     const arena = ARENAS_BY_ID[options.arena] || ARENAS_BY_ID.medc;
     const problems = validateSpawns(arena);
     if (problems.length) throw new Error(`Arena ${arena.id} has an invalid spawn registry: ${problems.join('; ')}`);
@@ -40,7 +44,10 @@ export class PaintballRoom extends Room {
     this.timing = {
       countdown: num(o.countdown, TIMING.countdown), respawn: num(o.respawn, TIMING.respawn), protection: num(o.protection, TIMING.protection),
       overtime: num(o.overtime, TIMING.overtime), reconnect: num(o.reconnect, TIMING.reconnect), idle: num(o.idle, TIMING.roomIdleClose),
+      // Campus Royale
+      landing: num(o.landing, ROYALE.landing), zoneScale: num(o.zoneScale, 1) || 1, down: num(o.down, ROYALE.down), revive: num(o.revive, ROYALE.revive), hardCap: num(o.hardCap, ROYALE.hardCap),
     };
+    this.royale = new RoyaleRules(this);
     this.state = new PbState();
     const s = this.state;
     s.code = this.roomId; s.arena = arena.id; s.duration = TIMING.duration; s.testMode = test; s.slotsOpen = MAX_PLAYERS;
@@ -108,14 +115,46 @@ export class PaintballRoom extends Room {
       const target = this.clients.find((c) => c.sessionId === msg.to);
       target?.send('rtc', { from: client.sessionId, kind: msg.kind, data });
     });
+    // Campus Royale: landing spot, supplies, throws, cleaning, spectating (server-validated in logic/royale.js)
+    const royale = (fn) => (client, p, msg) => (this.arena.royale ? fn.call(this.royale, client.sessionId, p, msg) : undefined);
+    on('land', royale(this.royale.choose));
+    on('open', royale(this.royale.open));
+    on('pick', royale(this.royale.pick));
+    on('drop', royale(this.royale.drop));
+    on('throw', royale(this.royale.throw));
+    on('use', royale(this.royale.use));
+    on('revive', royale(this.royale.revive));
+    on('spectate', royale(this.royale.spectate));
     // A client claiming a hit is ignored on purpose: only the server's own paintball sweeps paint anyone.
     on('hit', () => {});
     if (test) {
       on('test:place', (client, p, msg) => {
         if (Number.isFinite(msg.x)) p.x = msg.x; if (Number.isFinite(msg.z)) p.z = msg.z; p.y = 0; p.vy = 0;
+        if (this.arena.geo) p.y = this.arena.geo.floorAt(p.x, p.z, Number.isFinite(msg.y) ? msg.y + 0.05 : 0.05);
         if (Number.isFinite(msg.yaw)) p.yaw = msg.yaw; if (Number.isFinite(msg.pitch)) p.pitch = msg.pitch;
         if (msg.unprotect) p.protectedUntil = 0;
+        if (Number.isFinite(msg.paint)) p.paint = msg.paint;
       });
+      // Campus Royale test helpers: put an item on the ground, fill an inventory, pin the zone, end now
+      on('test:loot', (client, p, msg) => {
+        if (!this.arena.royale || typeof msg.item !== 'string') return;
+        const x = Number.isFinite(msg.x) ? msg.x : p.x; const z = Number.isFinite(msg.z) ? msg.z : p.z;
+        client.send('test:loot', { id: this.royale.addCrate('pile', [[msg.item, msg.n || 1]], x, Number.isFinite(msg.y) ? msg.y : this.arena.geo.floorAt(x, z, p.y + 0.05), z), tag: msg.tag });
+      });
+      on('test:give', (client, p, msg) => {
+        if (!this.arena.royale) return;
+        for (const k of ['paintbomb', 'smoke', 'wipes', 'kit', 'shield', 'scan', 'gearMask', 'gearVest', 'hopper0', 'hopper1']) if (Number.isFinite(msg[k])) p[k] = msg[k];
+        for (const k of ['primary', 'secondary']) if (typeof msg[k] === 'string') p[k] = msg[k];
+        if (msg.ammo) for (const [k, v] of Object.entries(msg.ammo)) p.ammo.set(k, v);
+        if (typeof msg.primary === 'string') { p.slot = 0; p.equip = msg.primary; p.switchUntil = 0; }
+        this.royale.mirror(p);
+      });
+      on('test:zone', (client, p, msg) => {
+        if (!this.arena.royale) return;
+        this.royale.zoneOverride = msg.off ? null : { x: msg.x, z: msg.z, r: msg.r, next: { x: msg.x, z: msg.z, r: msg.r }, phase: 1, shrinking: false, ends: 999, dps: msg.dps ?? 10 };
+      });
+      on('test:airdrop', () => { if (this.arena.royale && this.state.phase === 'playing') this.royale.airdropTick(this.state.now - this.state.playStart, true); });
+      on('test:end', () => { if (this.arena.royale && this.state.phase === 'playing') this.state.phaseEnds = this.state.now; });
     }
     this.onMessage('*', () => {}); // unknown message types are ignored (not a disconnect)
 
@@ -168,6 +207,7 @@ export class PaintballRoom extends Room {
     const p = s.players.get(client.sessionId);
     if (!p) return;
     const wasHost = p.host;
+    if (this.arena.royale && ACTIVE.has(s.phase) && p.alive && !p.out) this.royale.eliminate(client.sessionId, 'left');
     s.players.delete(client.sessionId);
     this.sim.delete(client.sessionId);
     this.joinOrder = this.joinOrder.filter((id) => id !== client.sessionId);
@@ -203,6 +243,7 @@ export class PaintballRoom extends Room {
     codes.delete(this.roomId);
     liveRooms.delete(this);
     this.projectiles.length = 0;
+    this.royale.bombs.length = 0;
     this.sim.clear();
   }
 
@@ -216,6 +257,16 @@ export class PaintballRoom extends Room {
     s.teamScores.clear();
     for (let t = 0; t < mode.teams; t++) s.teamScores.push(0);
     this.projectiles.length = 0;
+    if (this.arena.royale) {
+      for (const id of this.joinOrder) {
+        const p = s.players.get(id); if (!p) continue;
+        Object.assign(p, { score: 0, tags: 0, assists: 0, timesTagged: 0, used: '', ready: false });
+        Object.assign(this.sim.get(id), this.newSim());
+      }
+      this.royale.start();
+      this.lock();
+      return;
+    }
     const reserved = new Set();
     for (const id of this.joinOrder) {
       const p = s.players.get(id); if (!p) continue;
@@ -232,7 +283,13 @@ export class PaintballRoom extends Room {
   toLobby() {
     const s = this.state;
     s.phase = 'lobby'; s.teamsLocked = false; s.phaseEnds = 0;
-    for (const p of s.players.values()) { p.ready = false; p.alive = false; }
+    for (const p of s.players.values()) { p.ready = false; p.alive = false; p.out = false; p.down = false; }
+    s.crates.clear(); this.royale.bombs.length = 0;
+    for (const [id, p] of s.players) {
+      const lo = this.sim.get(id)?.loadout; // Campus Royale borrowed the blaster slots: give the lobby choice back
+      if (lo) { p.primary = lo[0]; p.secondary = lo[1]; this.sim.get(id).loadout = null; }
+      p.slot = 0; p.equip = p.primary;
+    }
     this.projectiles.length = 0;
     this.unlock();
     this.updateSlots();
@@ -276,6 +333,26 @@ export class PaintballRoom extends Room {
     this.broadcast('ended', { draw: r.draw, winner: r.winner });
   }
 
+  // Campus Royale: winner is a player id, 't<team>' (a squad) or null (a draw)
+  endRoyale(winner) {
+    const s = this.state;
+    this.projectiles.length = 0; this.royale.bombs.length = 0;
+    const list = [...s.players.entries()].map(([id, p]) => ({ id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags, assists: p.assists, timesTagged: p.timesTagged, connected: p.connected, placement: p.placement, survived: p.survived, supplies: p.supplies }));
+    const r = finaliseRoyale(s.mode, list, { winner });
+    for (const q of list) s.players.get(q.id).score = q.score;
+    const R = s.results;
+    R.draw = r.draw; R.winner = r.winner || ''; R.runnerUp = r.runnerUp || ''; R.mvp = r.mvp || ''; R.mvpName = r.mvpName || '';
+    R.rankings.clear(); R.teams.clear();
+    for (const k of r.rankings) R.rankings.push(Object.assign(new PbRank(), k));
+    for (const k of r.teams) R.teams.push(Object.assign(new PbTeamResult(), k));
+    R.ready = true;
+    for (const [id, p] of s.players) { p.used = [...(this.sim.get(id)?.used || [])].join(','); p.ready = false; p.channel = ''; }
+    s.phase = 'results';
+    s.phaseEnds = 0;
+    this.updateTeamScores();
+    this.broadcast('ended', { draw: r.draw, winner: r.winner });
+  }
+
   plainPlayers() { return [...this.state.players.entries()].map(([id, p]) => ({ id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags })); }
 
   updateTeamScores() {
@@ -297,14 +374,18 @@ export class PaintballRoom extends Room {
       this.disconnect(CLOSE_IDLE);
       return;
     }
-    if (s.phase === 'countdown' && s.now >= s.phaseEnds) { s.phase = 'playing'; s.phaseEnds = s.now + s.duration; }
+    if (s.phase === 'countdown' && s.now >= s.phaseEnds) {
+      s.phase = 'playing';
+      if (this.arena.royale) { s.playStart = s.now; s.phaseEnds = s.now + this.timing.hardCap; } else s.phaseEnds = s.now + s.duration;
+    }
+    const royale = !!this.arena.royale;
     const active = ACTIVE.has(s.phase);
     const live = s.phase === 'playing' || s.phase === 'overtime';
     for (const [id, p] of s.players) {
       const sim = this.sim.get(id);
       if (!sim) continue;
       sim.budget = Math.min(sim.budget + dt, 0.3);
-      const frozen = !live || !p.alive;
+      const frozen = !live || !p.alive || p.out;
       let n = 0;
       sim.pulled = false;
       while (sim.queue.length && sim.budget >= INPUT_DT * 0.5 && n < 12) {
@@ -312,10 +393,11 @@ export class PaintballRoom extends Room {
         sim.budget -= INPUT_DT;
         if (active) {
           const pos = { x: p.x, y: p.y, z: p.z, vy: p.vy };
-          stepMove(pos, i, INPUT_DT, this.arena, frozen);
+          stepMove(pos, i, INPUT_DT, this.arena, frozen, p.down ? ROYALE.downSpeed : 1);
           p.x = pos.x; p.y = pos.y; p.z = pos.z; p.vy = pos.vy;
           p.yaw = i.yaw; p.pitch = i.pitch;
-          sim.trigger = i.fire;
+          sim.trigger = i.fire && !p.down;
+          if (royale && i.fire && p.channel) p.channel = ''; // firing stops cleaning
           if (i.fire) sim.pulled = true;
           if (i.reload) sim.reloadWanted = true;
           if (i.slot !== p.slot && live && p.alive) this.switchTo(p, sim, i.slot);
@@ -329,12 +411,14 @@ export class PaintballRoom extends Room {
         p.y = pos.y; p.vy = pos.vy; sim.budget = 0.2; sim.trigger = false;
       }
       if (!p.connected) { sim.trigger = false; sim.pulled = false; }
-      if (live) this.blasterTick(id, p, sim);
-      if (live && !p.alive && s.now >= p.respawnAt) this.spawn(id, p);
+      if (live && !p.down) this.blasterTick(id, p, sim);
+      if (royale && live) this.royale.syncAmmo(p);
+      if (live && !royale && !p.alive && s.now >= p.respawnAt) this.spawn(id, p);
     }
     if (live) this.flyPaintballs(dt);
+    if (royale) this.royale.tick(dt);
     if (active) this.updateTeamScores();
-    if (s.phase === 'playing' && s.now >= s.phaseEnds) {
+    if (royale) { /* Campus Royale ends in royale.checkEnd() */ } else if (s.phase === 'playing' && s.now >= s.phaseEnds) {
       const r = timeUp(standings(s.mode, this.plainPlayers()));
       if (r.result === 'overtime') { s.phase = 'overtime'; s.phaseEnds = s.now + this.timing.overtime; this.broadcast('overtime', {}); } else this.endMatch(r);
     } else if (s.phase === 'overtime') {
@@ -344,6 +428,7 @@ export class PaintballRoom extends Room {
   }
 
   switchTo(p, sim, slot) {
+    if (!(slot ? p.secondary : p.primary)) return; // an empty slot (Campus Royale)
     p.slot = slot; p.equip = slot ? p.secondary : p.primary;
     p.reloadUntil = 0; sim.burstLeft = 0; sim.reloadWanted = false;
     p.switchUntil = this.state.now + EQUIPMENT_BY_ID[p.equip].cooldown;
@@ -352,6 +437,7 @@ export class PaintballRoom extends Room {
   blasterTick(id, p, sim) {
     const now = this.state.now;
     const e = EQUIPMENT_BY_ID[p.equip];
+    if (!e) return; // no blaster in hand (Campus Royale)
     const H = p.slot ? 'hopper1' : 'hopper0'; const C = p.slot ? 'carried1' : 'carried0';
     // finish a reload
     if (p.reloadUntil > 0 && now >= p.reloadUntil) {
@@ -362,7 +448,7 @@ export class PaintballRoom extends Room {
     const startReload = () => { if (!reloading && p[C] > 0 && p[H] < e.magazine) { p.reloadUntil = now + e.reload; sim.burstLeft = 0; } };
     if (sim.reloadWanted) { sim.reloadWanted = false; startReload(); }
     if (reloading || p.reloadUntil > 0) return;
-    const canFire = now >= p.protectedUntil && now >= p.switchUntil;
+    const canFire = now >= p.protectedUntil && now >= p.switchUntil && now >= p.shieldUntil;
     // the rest of a burst
     while (sim.burstLeft > 0 && now >= sim.nextBurst && canFire) {
       if (p[H] <= 0) { sim.burstLeft = 0; startReload(); break; }
@@ -408,7 +494,7 @@ export class PaintballRoom extends Room {
         const wall = sweepArena(a, b, this.arena);
         let who = null;
         for (const [id, p] of s.players) {
-          if (id === pb.owner || !p.alive || pb.hit.has(id)) continue;
+          if (id === pb.owner || !p.alive || p.out || pb.hit.has(id)) continue;
           if (teams && p.team === pb.team) continue; // no friendly fire: teammates are not painted
           const hit = segPlayer(a, b, p);
           if (hit && (!who || hit.t < who.t)) who = { ...hit, id };
@@ -448,7 +534,7 @@ export class PaintballRoom extends Room {
     const teams = MODES_BY_ID[s.mode].teams;
     const from = { x: pt.x + n.x * 0.15, y: Math.max(0.05, pt.y + n.y * 0.15), z: pt.z + n.z * 0.15 };
     for (const [id, p] of s.players) {
-      if (id === pb.owner || id === direct || !p.alive || pb.hit.has(id)) continue;
+      if (id === pb.owner || id === direct || !p.alive || p.out || pb.hit.has(id)) continue;
       if (teams && p.team === pb.team) continue;
       const c = { x: p.x, y: p.y + 0.9, z: p.z };
       const d = Math.max(0, Math.hypot(c.x - pt.x, c.y - pt.y, c.z - pt.z) - BODY.radius);
@@ -462,9 +548,15 @@ export class PaintballRoom extends Room {
   paint(targetId, shooterId, amount, precision, e, splash = false) {
     const s = this.state;
     const t = s.players.get(targetId); const sh = s.players.get(shooterId);
-    if (!t || !t.alive || amount <= 0) return;
+    if (!t || !t.alive || t.out || amount <= 0) return;
     if (s.now < t.protectedUntil) { this.sendTo(shooterId, 'hit', { t: targetId, protected: true }); return; }
     if (sh && MODES_BY_ID[s.mode].teams && sh.team === t.team) return;
+    if (this.arena.royale) {
+      if (t.down) { this.sendTo(shooterId, 'hit', { t: targetId, a: 0, fin: true }); this.royale.eliminate(targetId, 'tag'); return; } // finished off
+      if (s.now < t.shieldUntil) { this.sendTo(shooterId, 'hit', { t: targetId, shield: true }); return; } // the paint shield
+      amount = this.royale.gear(t, amount, precision);
+      t.channel = ''; // being painted stops cleaning
+    }
     t.paint = Math.min(PAINT_MAX, t.paint + amount);
     const tsim = this.sim.get(targetId);
     tsim?.painters.set(shooterId, s.now);
@@ -474,7 +566,7 @@ export class PaintballRoom extends Room {
   }
 
   // A tag: the target is out for this round (round elimination) and comes back after TIMING.respawn.
-  tag(targetId, shooterId, precision) {
+  tag(targetId, shooterId, precision, zone = false) {
     const s = this.state;
     const t = s.players.get(targetId); const sh = s.players.get(shooterId);
     const tsim = this.sim.get(targetId);
@@ -485,11 +577,13 @@ export class PaintballRoom extends Room {
       const a = s.players.get(pid); if (!a) continue;
       a.assists++; a.score += SCORE.assist; assists.push(pid);
     }
-    t.timesTagged++; t.alive = false; t.respawnAt = s.now + this.timing.respawn; t.paint = PAINT_MAX;
+    t.timesTagged++;
     tsim?.painters.clear();
     if (tsim) { tsim.trigger = false; tsim.burstLeft = 0; }
     t.reloadUntil = 0;
-    this.broadcast('tag', { by: shooterId, byName: sh?.nickname || '', target: targetId, targetName: t.nickname, assists, precision: !!precision });
+    this.broadcast('tag', { by: shooterId, byName: sh?.nickname || '', target: targetId, targetName: t.nickname, assists, precision: !!precision, zone: zone || undefined });
+    if (this.arena.royale) { this.royale.tagged(targetId, shooterId, zone); return; } // no respawn
+    t.alive = false; t.respawnAt = s.now + this.timing.respawn; t.paint = PAINT_MAX;
   }
 
   sendTo(id, type, msg) { this.clients.find((c) => c.sessionId === id)?.send(type, msg); }
