@@ -39,7 +39,8 @@ export class BotManager {
     this.searches = [];
     this.cache = new Map();
     this.seed = 1;
-    this.totals = { rays: 0, raysDenied: 0, expansions: 0, searches: 0, cacheHits: 0 };
+    this.totals = { rays: 0, raysDenied: 0, expansions: 0, searches: 0, cacheHits: 0, noises: 0 };
+    this.lastPos = new Map(); this.speeds = new Map(); this.lastNoise = new Map();
   }
   get size() { return this.brains.size; }
   has(id) { return this.brains.has(id); }
@@ -54,9 +55,28 @@ export class BotManager {
   resetAll() { for (const b of this.brains.values()) { const st = b.stats; b.reset(); b.stats = st; } this.searches.length = 0; this.cache.clear(); }
   clear() { this.brains.clear(); this.searches.length = 0; this.cache.clear(); }
 
+  // Something everyone nearby can hear (paintballs fired, a paint bomb bursting, a crate opening): bots within
+  // `radius` (not the source, not its teammates) get a rough position to investigate, rougher further away.
+  noise(x, y, z, src, radius) {
+    const s = this.room.state; if (!this.brains.size) return;
+    const k = `${src}`; const last = this.lastNoise.get(k) || -9;
+    if (s.now - last < 0.4) return;
+    this.lastNoise.set(k, s.now); this.totals.noises++;
+    const from = s.players.get(src); const teams = this.room.teams();
+    for (const [id, b] of this.brains) {
+      if (id === src) continue;
+      const q = s.players.get(id); if (!q || !q.alive || q.out || (teams && from && from.team === q.team)) continue;
+      const d = Math.hypot(q.x - x, q.z - z); if (d > radius) continue;
+      const j = 2 + d * 0.1;
+      b.hear(x + (b.rand() - 0.5) * 2 * j, y, z + (b.rand() - 0.5) * 2 * j, s.now);
+    }
+  }
+
   tick(dt) {
     const room = this.room; const s = room.state;
     if (!this.brains.size || !ACTIVE.has(s.phase)) return;
+    // how fast everyone moves (running feet are heard further)
+    for (const [id, q] of s.players) { const l = this.lastPos.get(id); if (l) this.speeds.set(id, Math.hypot(q.x - l.x, q.z - l.z) / Math.max(dt, 1e-3)); this.lastPos.set(id, { x: q.x, z: q.z }); }
     this.rays = this.arena.geo ? BUDGET.rays : BUDGET.rays * 3;
     this.runSearches();
     let thinks = 0;
@@ -85,7 +105,7 @@ export class BotManager {
     if (b.landAt === null) b.landAt = s.now + Math.min(2, Math.max(0, s.phaseEnds - s.now) * 0.3) * b.rand();
     if (s.now < b.landAt) return;
     b.landed = true;
-    const drops = this.room.royale.spots.drops;
+    const drops = this.room.royale.landingDrops();
     if (c.teams) {
       const mates = [...s.players.entries()].filter(([, q]) => q.team === p.team);
       if (mates.some(([, q]) => !q.bot) || mates.find(([, q]) => q.bot)?.[0] !== b.id) return;
@@ -103,6 +123,7 @@ export class BotManager {
     return {
       id, p, s, now: s.now, L: b.level, royale: !!this.arena.royale, teams,
       player: (pid) => s.players.get(pid),
+      speed: (pid) => M.speeds.get(pid) || 0,
       *opponents() { for (const [qid, q] of s.players) if (qid !== id && q.alive && !q.out && !(teams && q.team === p.team)) yield [qid, q]; },
       nearestMate() { let best = null; let bd = Infinity; for (const [qid, q] of s.players) if (qid !== id && teams && q.team === p.team && q.alive && !q.out && !q.down) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < bd) { bd = d; best = { id: qid, p: q }; } } return best; },
       leader() {
@@ -156,7 +177,8 @@ export class BotManager {
     return null;
   }
 
-  // Somewhere to wander: Med-C anywhere on the field; the campus a node 30–70 m away, towards the zone's middle.
+  // Somewhere to wander: Med-C anywhere on the field; the campus a node 30–80 m away, towards the middle of the next
+  // circle (where everyone ends up), so bots drift together long before the zone forces them.
   roamPoint(p, b) {
     const r = b.rand;
     if (!this.arena.geo) {
@@ -168,10 +190,10 @@ export class BotManager {
       return { x: this.arena.centre.x, z: this.arena.centre.z, y: 0 };
     }
     const Z = this.room.state.zone; const g = this.graph;
-    const cx = Z.r ? Z.x : this.arena.centre.x; const cz = Z.r ? Z.z : this.arena.centre.z;
-    const toC = Math.atan2(cz - p.z, cx - p.x);
+    const cx = Z.nr > 0 ? Z.nx : Z.r ? Z.x : this.arena.centre.x; const cz = Z.nr > 0 ? Z.nz : Z.r ? Z.z : this.arena.centre.z;
+    const toC = Math.atan2(cz - p.z, cx - p.x); const far = Math.hypot(cx - p.x, cz - p.z);
     for (let k = 0; k < 6; k++) {
-      const a = toC + (r() - 0.5) * (k < 3 ? 2.2 : 6); const d = 30 + r() * 40;
+      const a = toC + (r() - 0.5) * (k < 3 ? (far > 60 ? 1.2 : 3) : 6); const d = Math.min(far > 20 ? far : 40, 30 + r() * 50);
       let x = p.x + Math.cos(a) * d; let z = p.z + Math.sin(a) * d;
       if (Z.r && Math.hypot(x - Z.x, z - Z.z) > Z.r * 0.8) { x = (x + Z.x) / 2; z = (z + Z.z) / 2; }
       const n = g.near(x, z, p.y, 20, 30, 1)[0];

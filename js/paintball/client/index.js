@@ -272,7 +272,7 @@ export class PaintballMode {
         ARENAS_BY_ID[s.arena]?.royale ? h('span', { class: 'pb-note' }, `⏱ the paint zone decides (~${Math.round(zoneLength() / 60)} min)`) : sel(durations.map((d) => [d, d >= 60 ? `${d / 60} min` : `${d} s (test)`]), s.duration, (v) => this.room.send('config', { duration: Number(v) }), 'Duration'),
         host && mode.teams > 0 && h('button', { class: 'small', 'data-pb': 'randomise', onclick: () => this.room.send('randomise', {}) }, '🎲 Re-randomise teams')),
       !host && h('div', { class: 'pb-note' }, 'The host picks the mode, arena and length.'),
-      ARENAS_BY_ID[s.arena]?.royale && h('div', { class: 'pb-note', 'data-pb': 'royale-rules' }, `🪂 Campus Royale: pick a landing spot on the campus map, land with a Standard blaster and ${ROYALE.start.hopper} paintballs, open supply crates for blasters, paintballs, paint bombs, protective gear, cleaning kits, a paint shield and paint scans. One tag and you are out for the match (squads: a teammate can clean you off within ${ROYALE.down} s). The paint zone shrinks in ${ZONE_PHASES.length} phases; paint builds up outside it. A special supply drop lands mid-match. Last player or squad standing wins.${this.geoErr ? ` ⚠️ Campus map: ${this.geoErr}` : ''}`),
+      ARENAS_BY_ID[s.arena]?.royale && h('div', { class: 'pb-note', 'data-pb': 'royale-rules' }, `🪂 Campus Royale: pick a landing spot on the campus map, land with a Standard blaster and ${ROYALE.start.hopper} paintballs, open supply crates for blasters, paintballs, paint bombs, protective gear, cleaning kits, a paint shield and paint scans. One tag and you are out for the match (squads: a teammate can clean you off within ${ROYALE.down} s). The paint zone shrinks in ${ZONE_PHASES.length} phases; paint builds up outside it. A special supply drop lands mid-match. Last player or squad standing wins. With bots in the room the match plays in a smaller area sized to the players, with a faster zone.${this.geoErr ? ` ⚠️ Campus map: ${this.geoErr}` : ''}`),
       h('h3', {}, 'Voice chat'),
       h('div', { class: 'pb-row' },
         h('button', { class: `small${this.voice?.on ? ' on' : ''}`, 'data-pb': 'voice', onclick: () => this.toggleVoice() }, this.voice?.on ? '🎤 Voice on' : '🎤 Switch voice on'),
@@ -614,8 +614,9 @@ export class PaintballMode {
   // over the campus while players pick their landing spots
   aerialCam(dt) {
     this.orbit += dt * 0.04;
-    const c = this.arena.centre;
-    this.camera.position.set(c.x + Math.cos(this.orbit) * 700, 420, c.z + Math.sin(this.orbit) * 700);
+    const S = this.state; const reg = S?.regionR > 0; // a room with bots: over its play area
+    const c = reg ? { x: S.regionX, z: S.regionZ } : this.arena.centre; const R = reg ? Math.max(260, S.regionR * 1.6) : 700;
+    this.camera.position.set(c.x + Math.cos(this.orbit) * R, reg ? R * 0.6 : 420, c.z + Math.sin(this.orbit) * R);
     this.camera.lookAt(c.x, 0, c.z);
     if (this.view?.vm) this.view.vm.visible = false;
   }

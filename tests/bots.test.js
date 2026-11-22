@@ -217,7 +217,7 @@ function fakeCtx({ seeEnemy = true, level = 'hard', enemyAt = { x: MEDC.centre.x
   const s = { phase: 'playing', players, zone: { r: 0 }, crates: new Map(), airdrop: { announced: false } };
   const c = {
     id: 'me', p: me, s, now: 0, L: BOT_LEVELS_BY_ID[level], royale: false, teams: 0,
-    player: (id) => players.get(id), *opponents() { yield ['foe', foe]; },
+    player: (id) => players.get(id), speed: () => 0, *opponents() { yield ['foe', foe]; },
     nearestMate: () => null, leader: () => null,
     los: () => { rays++; return seeEnemy; }, walkable: () => true, coverFrom: () => null, roamPoint: () => ({ x: me.x, z: me.z, y: 0 }),
     requestPath: (b) => b.setPath([[b.goal.x, b.goal.z, 0]]), dispatch: (type, msg) => sent.push([type, msg]),
@@ -278,4 +278,20 @@ test('sweepArena is what the bots see through: a bunker blocks the line, open gr
   const C = MEDC.centre;
   assert.ok(sweepArena({ x: C.x - 3, y: 1.3, z: C.z }, { x: C.x + 3, y: 1.3, z: C.z }, MEDC), 'the centre tower blocks');
   assert.equal(sweepArena({ x: C.x - 30, y: 1.3, z: C.z + 6 }, { x: C.x + 30, y: 1.3, z: C.z + 6 }, MEDC), null, 'the open lane does not');
+});
+
+test('rooms with bots play in a region sized to the player count: enough landing and supply spots, the final spot inside, a faster zone', async () => {
+  const { planRegion, regionPhases, zoneLength, planZone, ZONE_PHASES } = await import('../js/paintball/royale.js');
+  for (const [n, seed] of [[12, 1], [12, 2], [6, 3], [4, 4]]) {
+    const R = planRegion(raw, n, rng(seed));
+    assert.ok(R && R.r >= 130 && R.r < 600, `region r ${R?.r} for ${n} players`);
+    const drops = spots.drops.filter((d) => !d.indoor && Math.hypot(d.x - R.x, d.z - R.z) < R.r * 0.85).length;
+    const sup = spots.supplies.filter((d) => Math.hypot(d.x - R.x, d.z - R.z) < R.r * 0.9).length;
+    assert.ok(drops >= 2 * n && sup >= 3 * n, `${drops} landing spots, ${sup} supply spots`);
+    assert.ok(Math.hypot(R.final.x - R.x, R.final.z - R.z) < R.r * 0.45, 'final spot well inside');
+    const ph = regionPhases(R.r);
+    const circles = planZone(rng(seed), { centre: R, startR: R.r, final: R.final }, ph);
+    for (let i = 1; i < circles.length; i++) assert.ok(circles[i].r <= circles[i - 1].r && Math.hypot(circles[i].x - circles[i - 1].x, circles[i].z - circles[i - 1].z) <= circles[i - 1].r - circles[i].r + 0.01, 'each circle inside the last');
+    assert.ok(zoneLength(ph) < 6 * 60 && zoneLength(ph) < zoneLength(ZONE_PHASES) / 1.5, 'a faster zone');
+  }
 });

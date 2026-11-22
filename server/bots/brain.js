@@ -124,7 +124,7 @@ export class Brain {
     this.stuck = { x: 0, z: 0, t: 0, n: 0, until: 0, side: 1 };
     this.actions = []; this.lastPainted = -9; this.painter = null; this.coverUntil = 0; this.coverRoll = -9;
     this.bombAt = 0; this.ignore = new Map(); this.lootAt = 0; this.crateErr = 0; this.landed = false; this.landAt = null;
-    this.airdropRoll = null; this.roamUntil = 0; this.shieldRoll = -9; this.cleanRoll = -9; this.wasAlive = false;
+    this.airdropRoll = null; this.roamUntil = 0; this.shieldRoll = -9; this.cleanRoll = -9; this.wasAlive = false; this.heard = null;
   }
 
   // a message the room sent this player (the same as a browser would get)
@@ -178,14 +178,18 @@ export class Brain {
     // someone just went out of sight: chase where they were (Medium / Hard remember longer)
     const last = this.lastSeen(now, L.memory);
     if (last && (!c.royale || this.hasAmmo(p))) { this.mode = 'chase'; this.setGoal(c, last.x, last.z, last.y, 'chase'); return; }
+    const ready = !c.royale || this.kitted(p);
     if (c.royale) {
       if (this.thinkRevive(c)) return;
       if (this.thinkZone(c, true)) return;
+      if (ready && L.id !== 'easy' && this.thinkHeard(c)) return; // armed: go and see who that was
       if (this.thinkLoot(c)) return;
       if (this.thinkAirdrop(c)) return;
     }
+    if (this.thinkHeard(c)) return;
     if (this.thinkFollow(c)) return;
     if (c.royale && this.thinkZone(c, false)) return;
+    if (ready && this.thinkHunt(c)) return;
     this.thinkRoam(c);
   }
 
@@ -201,13 +205,16 @@ export class Brain {
       if (d > L.view || Math.abs(q.y - p.y) > 25) continue;
       const off = Math.abs(wrap(yawTo(dx, dz) - (this.yaw ?? p.yaw)));
       const painter = this.painter === id && now - this.lastPainted < 1.5;
-      if (off > L.fov / 2 && d > L.hear && !painter) continue;
+      const steps = d < L.hear * 1.8 && c.speed(id) > 5.5; // running footsteps carry further
+      if (off > L.fov / 2 && d > L.hear && !painter && !steps) continue;
       cands.push([id, q, d - (id === this.target ? 15 : 0) - (painter ? 10 : 0)]);
     }
     cands.sort((a, b) => a[2] - b[2]);
+    // the three nearest, and one of the others in turn (so a far opponent is not hidden behind near ones)
+    if (cands.length > 3) { const k = 3 + (this.stats.thinks % (cands.length - 3)); cands.splice(3, cands.length - 3, cands[k]); }
     let seen = null; let checks = 0;
     for (const [id, q] of cands) {
-      if (checks >= 3) break;
+      if (checks >= 4) break;
       const vis = c.los(eye, { x: q.x, y: q.y + 1.3, z: q.z });
       if (vis === null) break; // the room's ray budget for this tick is spent: decide next time
       checks++; this.stats.losChecks++;
@@ -228,8 +235,19 @@ export class Brain {
     }
     // a painter is known by where the paint came from
     if (this.painter && now - this.lastPainted < 0.3) { const q = c.player(this.painter); if (q) { const m = this.mem.get(this.painter); if (!m || now - m.t > 0.5) this.mem.set(this.painter, { x: q.x, y: q.y, z: q.z, vx: 0, vz: 0, t: now - 0.3 }); } }
-    for (const [id, m] of this.mem) if (now - m.t > 8) this.mem.delete(id);
+    for (const [id, m] of this.mem) if (now - m.t > 40) this.mem.delete(id);
+    if (seen && this.heard && Math.hypot(this.heard.x - p.x, this.heard.z - p.z) < 25) this.heard = null;
   }
+
+  // a sound (paintballs fired, a paint bomb bursting, a crate opening, running feet): roughly where, not who
+  hear(x, y, z, now) {
+    const h = this.heard;
+    if (h && now - h.t < 1.5) return;
+    this.heard = { x, y, z, t: now };
+  }
+
+  // Campus Royale: kitted up = a second blaster or plenty of paintballs
+  kitted(p) { return (!!p.secondary && ammoOf(p, 1) > 10) || ammoOf(p, 0) + ammoOf(p, 1) >= 60; }
   lastSeen(now, memory) {
     let best = null;
     for (const [id, m] of this.mem) if (now - m.t < memory && (!best || m.t > best.t)) best = { id, ...m };
@@ -261,6 +279,28 @@ export class Brain {
     if (this.rand() >= L.bombs) return;
     const d = Math.hypot(aim.x - p.x, aim.z - p.z);
     this.act('throw', { kind: 'paintbomb' }, { yaw: yawTo(aim.x - p.x, aim.z - p.z), pitch: bombPitch(d) });
+  }
+
+  // investigate a sound heard in the last few seconds (Easy bots only when it was close)
+  thinkHeard(c) {
+    const { p, now, L } = c; const h = this.heard;
+    if (!h || now - h.t > (L.id === 'easy' ? 6 : 12) || !this.hasAmmo(p)) return false;
+    const d = Math.hypot(h.x - p.x, h.z - p.z);
+    if (d < 4 || (L.id === 'easy' && d > 45)) { if (d < 4) this.heard = null; return false; }
+    this.mode = 'investigate';
+    this.setGoal(c, h.x, h.z, h.y, 'chase');
+    return true;
+  }
+  // Hard bots hunt: towards where the nearest opponent was last seen or heard (up to 40 s ago)
+  thinkHunt(c) {
+    const { p, now, L } = c;
+    if (L.id !== 'hard') return false;
+    let best = null; let bd = Infinity;
+    for (const [id, m] of this.mem) { const q = c.player(id); if (!q || !q.alive || q.out || now - m.t > 40) continue; const d = Math.hypot(m.x - p.x, m.z - p.z); if (d > 6 && d < bd) { bd = d; best = m; } }
+    if (!best) return false;
+    this.mode = 'hunt';
+    this.setGoal(c, best.x, best.z, best.y, 'chase');
+    return true;
   }
 
   thinkRevive(c) {

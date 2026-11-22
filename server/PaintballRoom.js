@@ -628,6 +628,7 @@ export class PaintballRoom extends Room {
       const pb = { id: ++this.pid, owner: id, team: p.team, equip: e.id, x: eye.x, y: eye.y, z: eye.z, vx: d.x * e.speed, vy: d.y * e.speed, vz: d.z * e.speed, dist: 0, hit: new Set() };
       this.projectiles.push(pb);
       if (p.bot) { const b = this.bots.brains.get(id); if (b) b.stats.shots++; }
+      if (k === 0) this.bots.noise(p.x, p.y, p.z, id, this.arena.geo ? 120 : 90); // the sound of a paintball blaster
       this.broadcast('shot', { i: pb.id, o: id, e: e.id, x: r3(pb.x), y: r3(pb.y), z: r3(pb.z), vx: r3(pb.vx), vy: r3(pb.vy), vz: r3(pb.vz) });
     }
   }

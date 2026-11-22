@@ -144,4 +144,8 @@ export const PbState = schema({
   standing: t.uint8().default(0), // players not yet eliminated
   groups: t.uint8().default(0), // players (free-for-all) or squads still standing
   playStart: t.float32().default(0),
+  // rooms with bots: the play area (a circle sized to the player count; 0 = the whole campus)
+  regionX: t.float32().default(0),
+  regionZ: t.float32().default(0),
+  regionR: t.float32().default(0),
 }, 'PbState');
