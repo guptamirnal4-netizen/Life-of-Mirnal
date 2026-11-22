@@ -353,7 +353,7 @@ export class Brain {
     const lead = c.leader();
     if (!lead || lead.id === this.id) return false;
     const d = Math.hypot(lead.p.x - p.x, lead.p.z - p.z);
-    if (d < (c.royale ? 14 : 10)) { if (this.goalKind === 'follow') { this.goal = null; this.path = null; } return false; }
+    if (d < (c.royale ? 14 : 18)) { if (this.goalKind === 'follow') { this.goal = null; this.path = null; } return false; }
     this.mode = 'follow';
     if (!this.goal || this.goalKind !== 'follow' || Math.hypot(this.goal.x - lead.p.x, this.goal.z - lead.p.z) > 6) this.setGoal(c, lead.p.x + (this.rand() - 0.5) * 4, lead.p.z + (this.rand() - 0.5) * 4, lead.p.y, 'follow');
     return true;

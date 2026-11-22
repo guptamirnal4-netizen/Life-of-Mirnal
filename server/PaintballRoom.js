@@ -178,7 +178,8 @@ export class PaintballRoom extends Room {
     // A client claiming a hit is ignored on purpose: only the server's own paintball sweeps paint anyone.
     on('hit', () => {});
     if (test) {
-      on('test:place', (client, p, msg) => {
+      on('test:place', (client, me, msg) => {
+        const p = typeof msg.id === 'string' && s.players.get(msg.id)?.bot ? s.players.get(msg.id) : me; // a bot can be placed too
         if (Number.isFinite(msg.x)) p.x = msg.x; if (Number.isFinite(msg.z)) p.z = msg.z; p.y = 0; p.vy = 0;
         if (this.arena.geo) p.y = this.arena.geo.floorAt(p.x, p.z, Number.isFinite(msg.y) ? msg.y + 0.05 : 0.05);
         if (Number.isFinite(msg.yaw)) p.yaw = msg.yaw; if (Number.isFinite(msg.pitch)) p.pitch = msg.pitch;
@@ -204,7 +205,12 @@ export class PaintballRoom extends Room {
         this.royale.zoneOverride = msg.off ? null : { x: msg.x, z: msg.z, r: msg.r, next: { x: msg.x, z: msg.z, r: msg.r }, phase: 1, shrinking: false, ends: 999, dps: msg.dps ?? 10 };
       });
       on('test:airdrop', () => { if (this.arena.royale && this.state.phase === 'playing') this.royale.airdropTick(this.state.now - this.state.playStart, true); });
-      on('test:end', () => { if (this.arena.royale && this.state.phase === 'playing') this.state.phaseEnds = this.state.now; });
+      on('test:end', () => {
+        if (this.arena.royale) { if (this.state.phase === 'playing') this.state.phaseEnds = this.state.now; return; }
+        if (this.state.phase !== 'playing' && this.state.phase !== 'overtime') return;
+        const r = timeUp(standings(s.mode, this.plainPlayers()));
+        this.endMatch(r.result === 'overtime' ? { result: 'draw' } : r);
+      });
     }
     this.onMessage('*', () => {}); // unknown message types are ignored (not a disconnect)
 
@@ -423,7 +429,7 @@ export class PaintballRoom extends Room {
   toLobby() {
     const s = this.state;
     s.phase = 'lobby'; s.teamsLocked = false; s.phaseEnds = 0;
-    for (const p of s.players.values()) { p.ready = false; p.alive = false; p.out = false; p.down = false; }
+    for (const p of s.players.values()) { p.ready = !!p.bot; p.alive = false; p.out = false; p.down = false; } // bots are always ready
     s.crates.clear(); this.royale.bombs.length = 0;
     for (const [id, p] of s.players) {
       const lo = this.sim.get(id)?.loadout; // Campus Royale borrowed the blaster slots: give the lobby choice back

@@ -115,7 +115,7 @@ export function createPortal({ root, hooks }) {
           h('label', { class: 'p-nick' }, h('small', {}, 'NICKNAME'), nick),
           loadoutEl)),
       h('aside', { class: 'p-right' }, nextEl,
-        h('div', { class: 'p-tip' }, h('small', {}, 'SQUAD UP'), h('span', {}, 'Create a room, share its code or link, and play on the Med-C Ground or across the whole campus. Voice chat in the lobby; team-only in team matches.')))),
+        h('div', { class: 'p-tip' }, h('small', {}, 'SQUAD UP'), h('span', {}, 'Create a room, share its code or link, and play on the Med-C Ground or across the whole campus. Voice chat in the lobby; team-only in team matches. No one around? Play vs Bots, or fill empty slots with bots.')))),
     h('footer', { class: 'p-foot' },
       h('span', { class: 'p-keys' }, h('kbd', {}, '↑'), h('kbd', {}, '↓'), ' navigate ', h('kbd', {}, 'Enter'), ' select ', h('kbd', {}, 'Esc'), ' back'),
       h('span', { class: 'p-device' }, 'Laptop (mouse + keyboard) or phone (touch, best sideways) · Chrome recommended'),
@@ -312,8 +312,11 @@ export function createPortal({ root, hooks }) {
       scoring: () => [h('h3', {}, 'Scoring'), h('table', { class: 'p-table' }, h('tbody', {},
         ...[[`+${SCORE.tag}`, 'Tag: you fill an opponent’s paint meter'], [`+${SCORE.assist}`, `Assist: you painted them within ${ASSIST_WINDOW} s before someone else tagged them`], [`+${SCORE.completion}`, 'Still in the room when the match ends'], [`+${SCORE.win}`, 'Win (you, or every player on the winning team)'], [`+${SCORE.place}`, 'Campus Royale: per player or squad you outlast']].map(([k, v]) => h('tr', {}, h('td', {}, h('b', {}, k)), h('td', {}, v))))),
         h('p', {}, `A hit adds paint; at 100 you are tagged (a round elimination). Med-C Ground: back in after ${TIMING.respawn} s with ${TIMING.protection} s of spawn protection; a tie for first place goes to ${TIMING.overtime} s of overtime. Campus Royale: one tag and you are out (squads: a teammate can clean you off within ${ROYALE.down} s).`)],
+      bots: () => [h('h3', {}, `${BOT_BADGE} Bots`), h('p', {}, `Computer-controlled players, always marked ${BOT_BADGE}. PLAY VS BOTS starts a private match against them straight away (free-for-all with 1–11 bots, or a team mode where bots are your squadmates and the other teams). In a room with friends, the host can add bots, fill the empty slots with bots or remove them, and pick their difficulty; team modes can then start with bots filling the teams.`),
+        h('ul', { class: 'p-list' }, ...BOT_LEVELS.map((l) => h('li', {}, h('b', {}, l.name), ` · ${l.blurb}`))),
+        h('p', {}, 'Bots play by the same rules as everyone: they only see what is in front of them (walls and bunkers hide you), take time to react, reload, run out of paintballs, loot crates, follow the paint zone and can be tagged. They score like players and never join voice chat. A room closes when its last person leaves.')],
     };
-    const names = [['controls', 'Controls'], ['items', 'Items'], ['crates', 'Crates'], ['bombs', 'Paint bombs'], ['zone', 'Paint zone'], ['scoring', 'Scoring']];
+    const names = [['controls', 'Controls'], ['items', 'Items'], ['crates', 'Crates'], ['bombs', 'Paint bombs'], ['zone', 'Paint zone'], ['scoring', 'Scoring'], ['bots', 'Bots']];
     const content = h('div', { class: 'p-tab-body', 'data-portal': 'howto-body' });
     const bar = h('div', { class: 'p-tabs', role: 'tablist' });
     const show = (k) => { content.replaceChildren(...tabs[k]()); for (const b of bar.children) { const on = b.dataset.tab === k; b.classList.toggle('sel', on); b.setAttribute('aria-selected', String(on)); } };
