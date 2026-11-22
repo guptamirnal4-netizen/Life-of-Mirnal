@@ -54,16 +54,16 @@ const STYLE = `
 #film .title p { margin: 1.8vh 0 0; font-weight: 800; font-size: clamp(12px, 2.6vh, 26px); letter-spacing: 0.32em; padding-left: 0.32em; text-transform: uppercase; text-shadow: 0 2px 14px rgba(0,0,0,0.9); }
 #film .title.end p { letter-spacing: 0.08em; padding-left: 0; text-transform: none; font-size: clamp(14px, 3.2vh, 30px); }
 #film .cap { position: absolute; opacity: 0; z-index: 3; pointer-events: none; }
-#film .cap.punch { left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
-#film .cap.punch .k { display: inline-block; font-size: clamp(11px, 2vh, 18px); letter-spacing: 0.4em; padding: 0.2em 0.6em 0.2em 1em; font-weight: 900; color: #0b1020; background: #ffd23d; transform: skewX(-12deg); }
-#film .cap.punch .n { font-size: clamp(26px, 8.5vh, 92px); font-weight: 900; font-style: italic; letter-spacing: 0.02em; margin-top: 0.6vh; text-shadow: 0 5px 0 rgba(0,0,0,0.4), 0 0 30px rgba(0,0,0,0.4); -webkit-text-stroke: 1px rgba(0,0,0,0.25); }
-#film .cap.tag { left: 4vw; bottom: 24vh; }
-#film .cap.tag .k { font-size: clamp(10px, 1.7vh, 15px); letter-spacing: 0.32em; font-weight: 900; color: #ffd23d; text-shadow: 0 2px 8px rgba(0,0,0,0.9); }
-#film .cap.tag .n { font-size: clamp(18px, 4.6vh, 44px); font-weight: 900; font-style: italic; margin-top: 0.3vh; text-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 18px rgba(0,0,0,0.5); }
+#film .cap.s-punch { left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
+#film .cap.s-punch .k { display: inline-block; font-size: clamp(11px, 2vh, 18px); letter-spacing: 0.4em; padding: 0.2em 0.6em 0.2em 1em; font-weight: 900; color: #0b1020; background: #ffd23d; transform: skewX(-12deg); }
+#film .cap.s-punch .n { font-size: clamp(26px, 8.5vh, 92px); font-weight: 900; font-style: italic; letter-spacing: 0.02em; margin-top: 0.6vh; text-shadow: 0 5px 0 rgba(0,0,0,0.4), 0 0 30px rgba(0,0,0,0.4); -webkit-text-stroke: 1px rgba(0,0,0,0.25); }
+#film .cap.s-tag { left: 4vw; bottom: 24vh; }
+#film .cap.s-tag .k { font-size: clamp(10px, 1.7vh, 15px); letter-spacing: 0.32em; font-weight: 900; color: #ffd23d; text-shadow: 0 2px 8px rgba(0,0,0,0.9); }
+#film .cap.s-tag .n { font-size: clamp(18px, 4.6vh, 44px); font-weight: 900; font-style: italic; margin-top: 0.3vh; text-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 18px rgba(0,0,0,0.5); }
 #film .cap .rule { height: 5px; margin-top: 0.8vh; border-radius: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #30d5ff, rgba(48,213,255,0)); }
-#film .cap.plain { left: 5vw; top: 13vh; }
-#film .cap.plain .k { font-size: clamp(10px, 1.7vh, 15px); letter-spacing: 0.34em; font-weight: 800; color: #ffd23d; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
-#film .cap.plain .n { font-size: clamp(18px, 4vh, 40px); font-weight: 900; text-shadow: 0 2px 16px rgba(0,0,0,0.7); }
+#film .cap.s-plain { left: 5vw; top: 13vh; }
+#film .cap.s-plain .k { font-size: clamp(10px, 1.7vh, 15px); letter-spacing: 0.34em; font-weight: 800; color: #ffd23d; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+#film .cap.s-plain .n { font-size: clamp(18px, 4vh, 40px); font-weight: 900; text-shadow: 0 2px 16px rgba(0,0,0,0.7); }
 #film .line { position: absolute; left: 3vw; bottom: 22vh; max-width: min(70vw, 520px); font-size: clamp(13px, 2.2vh, 20px); font-weight: 700; line-height: 1.3; background: rgba(10,12,28,0.72); padding: 0.4em 0.8em 0.45em; border-radius: 10px; border-left: 4px solid #fff; opacity: 0; z-index: 3; }
 #film .line b { display: block; font-size: 0.66em; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 0.1em; }
 #film .line b::before { content: '🎙 '; }
@@ -118,6 +118,10 @@ const STYLE = `
 #film .win .pb-sub { font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,0.9); }
 /* the in-match HUD lives in #pb-hud (the game's own styles); the landing map in .pb-landing */
 #film #pb-hud { z-index: 2; transition: none; }
+#film #pb-hud .top { left: 0; right: 0; transform: none; justify-content: center; }
+#film #pb-hud .teamscores { position: absolute; left: 12px; top: 88px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+#film #pb-hud .tscore { padding: 3px 7px; font-size: 13px; }
+@media (max-width: 900px) { #film #pb-hud .teamscores { display: none; } }
 #film #pb-hud .hidden { display: none; }
 #film #pb-hud .pb-crate-item.taking { background: #ffd23d; color: #0b1020; }
 #film #pb-hud .pb-crate { pointer-events: none; }
@@ -180,7 +184,7 @@ const STYLE = `
   #film .intel { transform: translateY(-50%) scale(0.8); transform-origin: left center; }
   #film .intro { transform: translate(-50%, -50%) scale(0.7); }
   #film .chapters { bottom: 70px; max-height: 70vh; overflow: auto; }
-  #film .cap.tag { bottom: 30vh; } #film .line { bottom: 30vh; font-size: 13px; }
+  #film .cap.s-tag { bottom: 30vh; } #film .line { bottom: 30vh; font-size: 13px; }
 }
 `;
 
@@ -502,7 +506,7 @@ export class FilmUI {
       const a = smooth(cap.t0, cap.t0 + 0.25, t) * (1 - smooth(cap.t1 - 0.4, cap.t1, t));
       ui.cap.style.opacity = a.toFixed(3);
       const st = cap.style || 'plain';
-      if (ui.cap.className !== `cap ${st}`) ui.cap.className = `cap ${st}`;
+      if (ui.cap.className !== `cap s-${st}`) ui.cap.className = `cap s-${st}`;
       const pop = 1 - smooth(cap.t0, cap.t0 + 0.3, t);
       ui.cap.style.transform = st === 'punch' ? `translate(-50%, -50%) scale(${(1 + pop * 0.35).toFixed(3)}) skewX(-6deg)` : `translateX(${(pop * -30).toFixed(1)}px)`;
       ui.rule.style.width = `${(smooth(cap.t0 + 0.1, cap.t0 + 0.8, t) * 100).toFixed(1)}%`;
@@ -696,7 +700,7 @@ export class FilmUI {
   }
   draw_tactical(lt, el) {
     const cv = el.querySelector('canvas'); if (!cv) return;
-    const Hh = Math.max(220, Math.min(innerHeight * 0.68, 640)); const k = Hh / 1820;
+    const Hh = Math.max(200, Math.min(innerHeight * 0.6, 600)); const k = Hh / 1820;
     const cw = Math.round(1130 * k); const chh = Math.round(Hh);
     if (cv.width !== cw || cv.height !== chh) { cv.width = cw; cv.height = chh; cv.style.width = `${cw}px`; cv.style.height = `${chh}px`; }
     const g = cv.getContext('2d'); const w = mapXform(cv, 4);
@@ -781,15 +785,15 @@ export class FilmUI {
     el.className = 'pb-card side-card';
     const c = CAST_BY_ID.advait;
     const k = Math.min(Math.floor(lt / 0.35), c.character + 6);
-    const charSel = lt < 1.4 ? k % CHARACTERS.length : c.character;
+    const charSel = lt < 1.0 ? k % CHARACTERS.length : c.character;
     const sel = (at, v, d) => (lt > at ? v : d);
     const sw = (list, cur) => `<div class="pb-swatches">${list.map((x) => `<span class="pb-swatch${x === cur ? ' sel' : ''}" style="background:${x}"></span>`).join('')}</div>`;
     return `<h3 style="margin-top:0">YOUR CHARACTER</h3><div class="fake-input">${esc(c.name)}</div>
       <div class="pb-row">${CHARACTERS.map((x, i) => `<button class="${i === charSel ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
-      <div class="lbl">Outfit</div>${sw(OUTFIT_COLOURS, sel(2.2, c.outfit, OUTFIT_COLOURS[0]))}
-      <div class="lbl">Trousers</div>${sw(PANTS_COLOURS, sel(2.9, c.pants, PANTS_COLOURS[0]))}
-      <div class="lbl">Paintball mask (your team colour shows in team matches)</div>${sw(MASK_COLOURS, sel(3.6, teamColour(c), MASK_COLOURS[2]))}
-      <div class="pb-row" style="margin-top:8px">${ACCESSORIES.map((a) => `<button class="${a.id === sel(4.3, c.accessory, 'none') ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
+      <div class="lbl">Outfit</div>${sw(OUTFIT_COLOURS, sel(1.5, c.outfit, OUTFIT_COLOURS[0]))}
+      <div class="lbl">Trousers</div>${sw(PANTS_COLOURS, sel(2.0, c.pants, PANTS_COLOURS[0]))}
+      <div class="lbl">Paintball mask (your team colour shows in team matches)</div>${sw(MASK_COLOURS, sel(2.5, teamColour(c), MASK_COLOURS[2]))}
+      <div class="pb-row" style="margin-top:8px">${ACCESSORIES.map((a) => `<button class="${a.id === sel(3.0, c.accessory, 'none') ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
       <div class="lbl" style="margin-top:10px">Squad: <b style="color:${teamColour(c)}">Team ${TEAMS[c.team].name}</b> · with Aanya</div>`;
   }
 
@@ -812,11 +816,12 @@ export class FilmUI {
   }
 
   // Scene 4: the match intro: mode, arena, players, squads, starting equipment.
-  panel_intro(lt) {
+  panel_intro(lt, el) {
+    el.className = 'intro';
     const squad = (q, k) => `<div class="pb-team${lt > 1.0 + k * 0.35 ? '' : ' off'}" style="--team:${q.colour}"><b style="color:${q.colour}">Team ${q.name}</b>${q.members.map((id) => esc(CAST_BY_ID[id].name)).join(' · ')}<br><small>🎯 ${EQUIPMENT_BY_ID[ROYALE.start.blaster].short} blaster · ${ROYALE.start.hopper} paintballs</small></div>`;
-    return `<div class="intro"><div class="pb-note" style="letter-spacing:.3em;font-weight:800;opacity:.9">PLAY WITH BITSIANS · MULTIPLAYER PAINTBALL</div><div class="mode">CAMPUS ROYALE</div>
+ return `<div class="pb-note" style="letter-spacing:.3em;font-weight:800;opacity:.9">PLAY WITH BITSIANS · MULTIPLAYER PAINTBALL</div><div class="mode">CAMPUS ROYALE</div>
       <div class="chips"><span class="chip">🗺️ Arena: Whole Campus · BITS Pilani</span><span class="chip">⚔️ ${MATCH.mode}</span><span class="chip">👥 ${CAST.length} players · ${SQUADS.length} squads</span><span class="chip">🎨 Last squad standing</span></div>
-      <div class="pb-teams">${SQUADS.map(squad).join('')}</div></div>`;
+      <div class="pb-teams">${SQUADS.map(squad).join('')}</div>`;
   }
 
   panel_win(lt, el) { el.className = 'win'; return `<div class="pb-winner">🏆 ${esc(this.film.results.winner)} wins!</div><div class="pb-sub">Campus Royale · last squad standing</div>`; }

@@ -343,7 +343,7 @@ export class PaintballFilm {
     // crates: lid and items by time
     for (const c of this.crates || []) {
       const sp = c.spec;
-      const open = sp.open ? smooth(sp.open[0], sp.open[1], lt) : sp.opened ? 1 : 0;
+      const open = sp.kind === 'pile' ? 1 : sp.open ? smooth(sp.open[0], sp.open[1], lt) : sp.opened ? 1 : 0;
       const taken = (sp.take || []).filter(([tt]) => lt >= tt).length;
       c.prop.group.visible = lt >= (sp.from ?? -1);
       c.prop.pose(open, sp.kind === 'pile' ? 0 : taken, lt);
@@ -523,6 +523,13 @@ export class PaintballFilm {
       const d = tg.clone().sub(m).setY(0).normalize(); const r = V(-d.z, 0, d.x);
       return { pos: m.clone().addScaledVector(d, -back).addScaledVector(r, side).setY(m.y + up), look: tg, fov };
     };
+    // an orbit that keeps the subject left of centre (room for a panel on the right)
+    const offsetOrbit = (c, r, a0, a1, h0, h1, shift, fov) => (x) => {
+      const a = a0 + (a1 - a0) * x.e; const rr = r[0] + (r[1] - r[0]) * x.e;
+      const pos = V(c[0] + Math.sin(a) * rr, h0 + (h1 - h0) * x.e, c[1] + Math.cos(a) * rr); const tg = V(c[0], 1.2, c[1]);
+      const d = tg.clone().sub(pos).setY(0).normalize();
+      return { pos, look: tg.addScaledVector(V(-d.z, 0, d.x), shift), fov };
+    };
     const orbit = (c, r, a0, a1, h0, h1, lookY = 1.2, fov = 42) => (x) => {
       const a = a0 + (a1 - a0) * x.e; const rr = Array.isArray(r) ? r[0] + (r[1] - r[0]) * x.e : r;
       return { pos: V(c[0] + Math.sin(a) * rr, h0 + (h1 - h0) * x.e, c[1] + Math.cos(a) * rr), look: V(c[0], lookY, c[1]), fov };
@@ -577,13 +584,13 @@ export class PaintballFilm {
       },
       {
         name: 'lowpass', scene: 0, dur: 7, clock: [hm(15, 28), hm(15, 29)], ease: 'linear',
-        cam: path([[-6, 9, -66], [12, 4.5, -35], [42, 3.2, -28], [70, 2.8, -14], [96, 3.4, -4], [124, 6, -2]], [[2, 7, -20], [36, 3, -30], [66, 2.6, -18], [94, 2.4, -8], [118, 3, -14], [130, 8, -30]], [50, 56]),
+        cam: path([[-36, 12, 36], [-8, 3.5, 8], [27, 2.4, 3.5], [56, 2.2, -2.5], [72, 2.3, 6], [92, 2.4, 4], [114, 4.5, -4]], [[-8, 2, 8], [27, 1.6, 3.5], [56, 1.8, -2.5], [72, 2, 6], [92, 2.2, 4], [112, 3, -8], [104, 8, -30]], [50, 56]),
         caption: { kicker: 'BITS PILANI · WHOLE CAMPUS', title: 'Every building. Every lawn. Every road.', at: 0.6, hold: 5.6 },
         cues: [[0.1, 'whoosh'], [4.2, 'whoosh']],
       },
       // ================= 2 · Deployment & Supply Hunting =================
       {
-        name: 'landing', scene: 1, dur: 5.5, clock: [hm(15, 30), hm(15, 31)], ease: 'linear', range: WIDE_RANGE, far: 5000,
+        name: 'landing', scene: 1, dur: 5.5, clock: [hm(15, 30), hm(15, 31)], ease: 'linear', range: WIDE_RANGE, far: 5000, lb: 0,
         cam: path([[139, 980, 1180], [139, 940, 1120]], [[139, 0, 470], [139, 0, 450]], 45),
         panels: [{ kind: 'landing', from: 0.1, to: 5.4 }],
         cues: [[2.0, 'tap']],
@@ -626,9 +633,9 @@ export class PaintballFilm {
       },
       {
         name: 'loot-aanya', scene: 1, dur: 3.2, clock: [hm(15, 32), hm(15, 32.2)], dof: 'aanya',
-        actors: { aanya: { path: RUN_N, gait: 'run', speed: 5.4, delay: -3.4, face: [62, -16], act: (t, mv) => (mv ? 'carry' : t < 1.6 ? 'reach' : 'ready') } },
+        actors: { aanya: { path: RUN_N, gait: 'run', speed: 5.4, delay: -5.6, face: [62, -16], act: (t, mv) => (mv ? 'carry' : t < 1.6 ? 'reach' : 'ready') } },
         crates: [{ p: CRATE_N, yaw: 0.9, items: ['paintbomb', 'mask2'], open: [0.5, 1.0], take: [[1.7], [2.4]] }],
-        cam: path([[64.6, 1.1, -13.2], [64.9, 1.3, -13.6]], [[62.2, 0.7, -16], [62.2, 0.8, -16]], 44),
+        cam: path([[60.0, 1.25, -12.6], [60.3, 1.35, -12.9]], [[62.6, 0.8, -15.5], [62.6, 0.85, -15.5]], 44),
         hud: { pov: 'aanya', mode: 'loot', crate: { title: '📦 Supply crate', items: [['paintbomb', 1], ['mask2', 1]], from: 1.0, take: [1.7, 2.4], to: 3.1 } },
         ev: [pick(1.7, 'aanya', 'paintbomb', 1), pick(2.4, 'aanya', 'mask2', 1)],
         cues: [[1.7, 'ding'], [2.4, 'ding']],
@@ -657,15 +664,15 @@ export class PaintballFilm {
       {
         name: 'customise', scene: 2, dur: 7, clock: [hm(16, 0), hm(16, 1)], dof: 'advait', ease: 'inOut',
         actors: { advait: { at: [101.5, -17], face: [104, -9], act: (t) => (t > 4.4 ? 'inspect' : 'ready') } },
-        cam: orbit([101.5, -17], [3.4, 2.6], 0.2, 1.1, 1.55, 1.5, 1.25, 38),
+        cam: offsetOrbit([101.5, -17], [3.6, 2.8], 0.2, 1.1, 1.5, 1.25, 1.1, 38),
         panels: [{ kind: 'customise', from: 0.3, to: 6.9 }],
         caption: { kicker: 'STEP 2', title: 'GEAR UP', at: 0.3, hold: 2.2, style: 'punch' },
         cues: [[0.3, 'hit'], [1.4, 'tick'], [2.4, 'tick'], [3.4, 'tick'], [4.4, 'tick']],
       },
       {
         name: 'blasters', scene: 2, dur: 7, clock: [hm(16, 1), hm(16, 2)], ease: 'inOut',
-        shelf: ['standard', 'rapid', 'burst', 'spread', 'precision', 'launcher'].map((id, k) => ({ id, p: [95.5 + k * 1.6, 1.45, -17.6 + Math.abs(k - 2.5) * 0.25], yaw: 0.6 + k * 0.5, scale: 2.4 })),
-        cam: path([[94.6, 1.7, -14.2], [99.6, 1.6, -13.6], [104.6, 1.7, -14.2]], [[96.3, 1.4, -17.6], [99.5, 1.4, -17.6], [103.2, 1.4, -17.6]], 34),
+        shelf: ['standard', 'rapid', 'burst', 'spread', 'precision', 'launcher'].map((id, k) => ({ id, p: [96 + k * 1.6, 1.45, -6 - Math.abs(k - 2.5) * 0.25], yaw: 0.6 + k * 0.5, scale: 2.4 })),
+        cam: path([[95.2, 1.7, -10.2], [99.6, 1.6, -10.6], [104.2, 1.7, -10.2]], [[97.6, 1.4, -6], [100.4, 1.4, -6], [103.6, 1.4, -6]], 36),
         panels: [{ kind: 'blasters', from: 0.2, to: 6.9 }],
         hots: [{ id: 'blasters', from: 0.6, to: 6.8, screen: [0.5, 0.2], label: 'The six blasters', info: 'blasters' }],
         cues: [[0.3, 'switch'], [2.3, 'switch'], [4.6, 'switch']],
@@ -676,7 +683,7 @@ export class PaintballFilm {
           advait: { at: [100.6, -17.5], face: [101.8, -10], act: (t) => (t < 3.4 ? 'inspect' : 'ready') },
           aanya: { at: [102.4, -17.2], face: [101.4, -10], act: (t) => (t > 1.6 && t < 4.2 ? 'look+ready' : 'ready') },
         },
-        cam: path([[99.4, 1.5, -13.4], [100.8, 1.55, -13.9]], [[101.6, 1.35, -17.6], [101.6, 1.4, -17.4]], [40, 36]),
+        cam: (c) => { const pos = V(99.4 + c.e * 1.2, 1.55, -12.8 - c.e * 0.4); const tg = V(101.5, 1.35, -17.4); const d = tg.clone().sub(pos).setY(0).normalize(); return { pos, look: tg.addScaledVector(V(-d.z, 0, d.x), 1.5), fov: 40 - c.e * 4 }; },
         panels: [{ kind: 'loadout', from: 0.3, to: 5.9 }],
         lines: [[3.2, 'aanya', 'Paint bomb ready. You?', 1.5], [4.6, 'advait', 'Burst marker. Let’s go.', 1.3]],
       },
@@ -692,8 +699,8 @@ export class PaintballFilm {
       {
         name: 'countdown', scene: 3, dur: 5, clock: [hm(16, 11), hm(16, 11.2)], dof: 'advait', mark: 'countdown',
         actors: {
-          advait: { at: [78.3, -1.6], face: [104, 2], act: 'crouch+ready' },
-          aanya: { at: [77.6, -5.0], face: [104, -2], act: 'crouch+ready' },
+          advait: { at: [83.6, -2.2], face: [104, 2], act: 'crouch+ready' },
+          aanya: { at: [83.2, -6.4], face: [104, -2], act: 'crouch+ready' },
         },
         cam: (c) => { const m = P('advait'); return { pos: V(m.x - 2.4 + c.e * 0.6, m.y + 1.15, m.z + 1.7 - c.e * 0.3), look: V(m.x + 6, m.y + 0.9, m.z - 2.2), fov: 40 - c.e * 6 }; },
         hud: { pov: 'advait', mode: 'countdown', mt: [-3.2, 0] },
@@ -702,12 +709,12 @@ export class PaintballFilm {
       {
         name: 'pullback', scene: 3, dur: 7, clock: [hm(16, 11.2), hm(16, 11.6)], ease: 'inOut', mark: 'start',
         actors: {
-          advait: { path: [[78.3, -1.6], [86, -12], [91.4, -18.9]], gait: 'run', speed: 5.4, delay: 0.2 },
-          aanya: { path: [[77.6, -5.0], [81.2, -9.6]], gait: 'run', speed: 5.4, delay: 0.4 },
-          kabir: { path: [[104.6, 24.5], [101.2, 15.4]], gait: 'run', speed: 5, delay: 1.0 },
-          tara: { path: [[113.6, 23.4], [112.4, 13.6]], gait: 'run', speed: 5, delay: 1.2 },
+          advait: { path: [[83.6, -2.2], [87, -12], [91.4, -18.9]], gait: 'run', speed: 5.4, delay: 0.2 },
+          aanya: { path: [[83.2, -6.4], [81.2, -9.6]], gait: 'run', speed: 5.4, delay: 0.4 },
+          kabir: { path: [[104.6, 24.5], [99, 8]], gait: 'run', speed: 5, delay: 1.0 },
+          tara: { path: [[113.6, 23.4], [110, 6]], gait: 'run', speed: 5, delay: 1.2 },
         },
-        cam: path([[75.2, 1.6, 0.6], [66, 14, 14], [56, 46, 46]], [[86, 1.3, -6], [100, 0, 0], [104, 0, -2]], [42, 46]),
+        cam: path([[81, 1.6, -1.2], [86, 10, 6], [92, 42, 40]], [[90, 1.2, -3], [104, 0, -2], [106, 0, -4]], [42, 46]),
         hud: { pov: 'advait', mode: 'full', mt: [0, 7], fadeIn: [1.2, 2.6] },
         lb: (lt) => 1 - smooth(1.0, 2.2, lt),
         cues: [[0.1, 'whoosh']],
@@ -716,12 +723,12 @@ export class PaintballFilm {
       {
         name: 'contact', scene: 4, dur: 4.5, clock: [hm(16, 14), hm(16, 14.2)], dof: 'advait', lb: 0,
         actors: {
-          advait: { at: [91.4, -18.9], face: [101.2, 15.4], act: (t) => (t > 0.6 ? 'aim' : 'crouch+ready') },
+          advait: { at: [91.4, -18.9], face: [99, 8], act: (t) => (t > 0.6 ? 'aim' : 'crouch+ready') },
           aanya: { at: [81.2, -9.6], face: [101, 15], act: 'crouch+aim' },
-          kabir: { at: [101.2, 15.4], face: [91.4, -18.9], act: (t) => (t > 1.4 && t < 2.6 ? 'aim' : 'crouch+aim') },
-          tara: { at: [112.4, 13.6], face: [91.4, -18.9], act: 'aim' },
+          kabir: { at: [99, 8], face: [91.4, -18.9], act: (t) => (t > 1.4 && t < 2.6 ? 'aim' : 'crouch+aim') },
+          tara: { at: [110, 6], face: [91.4, -18.9], act: 'aim' },
         },
-        cam: ots('advait', () => P('kabir').clone().setY(P('kabir').y + 1.0), { back: 2.2, side: 0.8, up: 1.65, fov: 32 }),
+        cam: ots('advait', () => P('kabir').clone().setY(P('kabir').y + 1.0), { back: 1.8, side: 0.7, up: 1.7, fov: 22 }),
         fire: [
           ...volley('advait', 0.8, 3, 0.55, { actor: 'kabir' }, { dur: 0.5, kind: 'burst', burst: 3 }),
           ...volley('tara', 1.6, 4, 0.3, wall(92.4, 1.2, -19.6, [0.6, 0, 0.8]), { dur: 0.6, jitter: 0.5 }),
@@ -734,11 +741,11 @@ export class PaintballFilm {
       {
         name: 'aanya-down', scene: 4, dur: 4.5, clock: [hm(16, 14.3), hm(16, 14.5)], dof: 'aanya', lb: 0,
         actors: {
-          aanya: { path: [[81.2, -9.6], [86.2, -6.4]], gait: 'run', speed: 5, delay: 0.3, face: [101.2, 15.4], act: (t, mv) => (t > 2.6 ? 'down' : mv ? 'carry' : 'aim') },
-          kabir: { at: [101.2, 15.4], face: () => P('aanya'), act: 'aim' },
-          advait: { at: [91.4, -18.9], face: [101.2, 15.4], act: 'crouch+aim' },
+          aanya: { path: [[81.2, -9.6], [86.2, -6.4]], gait: 'run', speed: 5, delay: 0.3, face: [99, 8], act: (t, mv) => (t > 2.6 ? 'down' : mv ? 'carry' : 'aim') },
+          kabir: { at: [99, 8], face: () => P('aanya'), act: 'aim' },
+          advait: { at: [91.4, -18.9], face: [99, 8], act: 'crouch+aim' },
         },
-        cam: (c) => { const a = P('aanya'); return { pos: V(a.x - 4.2 + c.e * 1.2, 1.5, a.z + 5.5), look: V(a.x + 1, a.y + 0.9, a.z - 0.5), fov: 40 }; },
+        cam: (c) => { const a = P('aanya'); return { pos: V(a.x - 2.6 + c.e * 0.5, 1.7, a.z - 3.6), look: P('kabir').clone().setY(1.0), fov: 40 }; },
         fire: [...volley('kabir', 1.1, 5, 0.32, { actor: 'aanya' }, { dur: 0.42 })],
         ev: [{ t: 1.5, type: 'paint', who: 'aanya', v: 34 }, { t: 2.0, type: 'paint', who: 'aanya', v: 68 }, tag(2.6, 'kabir', 'aanya')],
         hud: { pov: 'advait', mode: 'full', mt: [41, 45.5] },
@@ -760,12 +767,12 @@ export class PaintballFilm {
       {
         name: 'slowmo', scene: 4, dur: 5.5, clock: [hm(16, 15), hm(16, 15.2)], lb: 0.6, warp: slowmo(1.0, 4.0, 0.32), slowBurst: 0.5,
         actors: {
-          advait: { at: [86.8, -7.9], face: [101.2, 15.4], act: 'aim' },
-          aanya: { at: [86.2, -6.4], face: [112.4, 13.6], act: 'aim' },
-          kabir: { path: [[101.2, 15.4], [98.8, 9.6]], gait: 'run', speed: 3.6, face: [86.8, -7.9], act: (t, mv) => (t > 1.6 ? 'handsup' : mv ? 'carry' : 'aim') },
-          tara: { path: [[112.4, 13.6], [108.6, 6.4]], gait: 'run', speed: 3.6, delay: 0.3, face: [86.2, -6.4], act: (t) => (t > 2.4 ? 'handsup' : 'aim') },
+          advait: { at: [86.8, -7.9], face: [99, 8], act: 'aim' },
+          aanya: { at: [86.2, -6.4], face: [110, 6], act: 'aim' },
+          kabir: { path: [[99, 8], [97.6, 3.5]], gait: 'run', speed: 3.6, face: [86.8, -7.9], act: (t, mv) => (t > 1.6 ? 'handsup' : mv ? 'carry' : 'aim') },
+          tara: { path: [[110, 6], [107, 1.6]], gait: 'run', speed: 3.6, delay: 0.3, face: [86.2, -6.4], act: (t) => (t > 2.4 ? 'handsup' : 'aim') },
         },
-        cam: (c) => ({ pos: V(95.6 + c.e * 1.4, 0.9, 12.2 - c.e * 1.2), look: V(98.4, 1.3, 5.6), fov: 40 }),
+        cam: (c) => ({ pos: V(100.5 + c.e * 1.2, 1.0, 12.5 - c.e), look: V(93, 1.4, -4), fov: 40 }),
         fire: [
           ...volley('advait', 0.3, 2, 0.55, { actor: 'kabir' }, { dur: 1.4, kind: 'burst', burst: 3 }),
           ...volley('aanya', 1.7, 3, 0.45, { actor: 'tara' }, { dur: 1.6 }),
@@ -776,9 +783,9 @@ export class PaintballFilm {
       },
       {
         name: 'pile', scene: 4, dur: 3.6, clock: [hm(16, 15.3), hm(16, 15.4)], dof: 'advait', lb: 0,
-        actors: { advait: { path: [[92.6, -1.6], [98.6, 8.8]], gait: 'run', speed: 5.6, delay: -0.6, face: [99.6, 9.8], act: (t, mv) => (mv ? 'carry' : t < 2.6 ? 'reach' : 'ready') } },
-        crates: [{ p: [99.6, 0, 9.8], kind: 'pile', items: ['blaster:standard', 'blaster:spread', 'ammo:spread', 'vest1'], take: [[2.2, 3]] }],
-        cam: path([[101.2, 1.4, 12.2], [101.6, 1.5, 12.4]], [[99.2, 0.5, 9.4], [99.1, 0.6, 9.3]], 44),
+        actors: { advait: { path: [[89, -5], [97.4, 2.3]], gait: 'run', speed: 5.6, delay: -0.6, face: [98.2, 3.2], act: (t, mv) => (mv ? 'carry' : t < 2.6 ? 'reach' : 'ready') } },
+        crates: [{ p: [98.2, 0, 3.2], kind: 'pile', items: ['blaster:standard', 'blaster:spread', 'ammo:spread', 'vest1'], take: [[2.2, 3]] }],
+        cam: path([[99.8, 1.4, 5.6], [100.2, 1.5, 5.8]], [[97.8, 0.5, 2.8], [97.7, 0.6, 2.7]], 44),
         hud: { pov: 'advait', mode: 'full', mt: [60, 63.6], crate: { title: '🎒 Dropped supplies', items: [['blaster:standard', 1], ['blaster:spread', 1], ['ammo:spread', 16], ['vest1', 1]], from: 1.0, take: [null, null, null, 2.2], to: 3.5 } },
         ev: [pick(2.2, 'advait', 'vest1', 1)],
         cues: [[2.2, 'ding']],
@@ -801,8 +808,8 @@ export class PaintballFilm {
       {
         name: 'announce', scene: 5, dur: 4.2, clock: [hm(16, 40), hm(16, 40.3)], dof: 'advait', lb: 0, mark: 'drop',
         actors: {
-          advait: { at: [91.8, -18.6], face: [AD.x, AD.z], act: (t) => (t > 1.2 && t < 2.6 ? 'point' : 'ready') },
-          aanya: { at: [93.4, -17.4], face: [AD.x, AD.z], act: 'look+ready' },
+          advait: { at: [101, -15.5], face: [AD.x, AD.z], act: (t) => (t > 1.2 && t < 2.6 ? 'point' : 'ready') },
+          aanya: { at: [103.2, -14.8], face: [AD.x, AD.z], act: 'look+ready' },
         },
         airdrop: { fall: 0 },
         cam: (c) => { const m = P('advait'); return { pos: V(m.x - 1.4, m.y + 1.5, m.z - 2.8), look: V(AD.x, 18 + c.e * 14, AD.z), fov: 50 }; },
@@ -814,7 +821,7 @@ export class PaintballFilm {
       },
       {
         name: 'bigmap', scene: 5, dur: 3.4, clock: [hm(16, 40.3), hm(16, 40.5)], lb: 0,
-        actors: { advait: { at: [91.8, -18.6], face: [AD.x, AD.z], act: 'ready' }, aanya: { at: [93.4, -17.4], face: [AD.x, AD.z], act: 'ready' } },
+        actors: { advait: { at: [101, -15.5], face: [AD.x, AD.z], act: 'ready' }, aanya: { at: [103.2, -14.8], face: [AD.x, AD.z], act: 'ready' } },
         airdrop: { fall: 0 },
         cam: (c) => { const m = P('advait'); return { pos: V(m.x - 1.2, m.y + 2.1, m.z - 3.4), look: V(m.x + 4, m.y + 0.8, m.z + 8), fov: 50 }; },
         hud: { pov: 'advait', mode: 'full', mt: [160, 163.4], bigmap: true },
@@ -825,12 +832,12 @@ export class PaintballFilm {
         airdrop: { fall: (lt) => (lt >= 5.3 ? 1 : 0.55 + 0.449 * smooth(0, 5.3, lt)) },
         crates: [{ p: [AD.x, 0, AD.z], kind: 'drop', items: [], from: 5.3 }],
         actors: {
-          advait: { path: [[92.6, -15.6], [101.2, 6.4]], gait: 'run', speed: 5.6, delay: 1.4 },
-          aanya: { path: [[94.6, -15.2], [104.6, 5.8]], gait: 'run', speed: 5.6, delay: 1.6 },
+          advait: { path: [[101, -15.5], [101.2, 6.4]], gait: 'run', speed: 5.6, delay: 1.4 },
+          aanya: { path: [[103.2, -14.8], [104.6, 5.8]], gait: 'run', speed: 5.6, delay: 1.6 },
           ishaan: { path: [[66, 21], [96.4, 19.6]], gait: 'run', speed: 5.6, delay: 0.2 },
           sana: { path: [[64, 17.4], [95.2, 15.2]], gait: 'run', speed: 5.6, delay: 0.4 },
         },
-        cam: path([[136, 2.2, 30], [134, 3.6, 26]], [[106, 9, 14], [104, 3, 16]], [46, 50]),
+        cam: path([[127, 1.9, 7], [125.5, 2.6, 5]], [[104, 16, 15], [104, 2.5, 16]], [50, 50]),
         ev: [{ t: 5.3, type: 'note', who: 'advait', text: '📦 The special supply drop has landed!' }],
         hud: { pov: 'advait', mode: 'full', mt: [194.6, 200.2] },
         cues: [[0.2, 'drone'], [5.3, 'thud'], [5.4, 'jingle']],
@@ -861,7 +868,7 @@ export class PaintballFilm {
         airdrop: { fall: 1 },
         crates: [{ p: [AD.x, 0, AD.z], kind: 'drop', items: rollAirdrop(() => 0.2).map(([id]) => id), open: [0.4, 1.0], take: [[2.0], [2.8], [3.6]] }],
         actors: { advait: { at: [AD.x - 0.4, AD.z - 1.5], face: [AD.x, AD.z], act: (t) => (t < 1.0 || (t > 1.9 && t < 2.2) || (t > 2.7 && t < 3.0) || (t > 3.5 && t < 3.8) || (t > 4.3 && t < 4.6) ? 'reach' : 'ready') }, aanya: { at: [AD.x + 1.8, AD.z - 1.2], face: [AD.x + 0.4, AD.z], act: 'look+ready' } },
-        cam: path([[AD.x - 2.6, 1.6, AD.z - 3.2], [AD.x - 2.3, 1.7, AD.z - 3.0]], [[AD.x, 0.8, AD.z], [AD.x, 0.9, AD.z]], 44),
+        cam: path([[AD.x - 3.8, 2.5, AD.z - 4.4], [AD.x - 3.4, 2.6, AD.z - 4.0]], [[AD.x + 0.3, 0.7, AD.z], [AD.x + 0.3, 0.8, AD.z]], 44),
         hud: { pov: 'advait', mode: 'full', mt: [209, 214.4], crate: { title: '📦 Special supply drop', items: rollAirdrop(() => 0.2), from: 1.0, take: [2.0, 2.8, 3.6, null, 4.4, null], to: 5.3 } },
         ev: [{ t: 1.6, type: 'switch', who: 'advait', slot: 0 }, pick(2.0, 'advait', 'blaster:precision', 1), pick(2.8, 'advait', 'ammo:precision', 35), pick(3.6, 'advait', 'vest3', 1), pick(4.4, 'advait', 'shield', 1), pick(4.6, 'aanya', 'paintbomb', 2)],
         cues: [[0.4, 'crate'], [2.0, 'ding'], [2.8, 'ding'], [3.6, 'ding'], [4.4, 'ding']],
@@ -872,7 +879,7 @@ export class PaintballFilm {
           rohan: { path: [[40, 120], [62, 70]], gait: 'run', speed: 5.6 },
           neha: { path: [[44, 124], [66, 74]], gait: 'run', speed: 5.6, delay: 0.3 },
         },
-        cam: path([[-140, 260, 380], [-60, 200, 300]], [[90, 0, 60], [100, 0, 40]], 46),
+        cam: path([[300, 430, 760], [240, 380, 660]], [[90, 0, 20], [100, 0, 0]], 46),
         hud: { pov: 'advait', mode: 'full', mt: [232, 237.4] },
         cues: [[0.2, 'zone']],
         caption: { kicker: 'THE PAINT ZONE', title: 'STAY INSIDE THE WHITE CIRCLE', at: 0.4, hold: 4.2, style: 'tag' },
@@ -907,13 +914,13 @@ export class PaintballFilm {
       {
         name: 'bomb', scene: 6, dur: 5.2, clock: [hm(17, 31.3), hm(17, 31.6)], lb: 0.6, warp: slowmo(2.9, 4.4, 0.35),
         actors: {
-          aanya: { path: [[92.6, -18.9], [103.6, 4.6]], gait: 'run', speed: 5.8, face: [113.2, 21.6], act: (t, mv) => (mv ? 'carry' : t < 1.7 ? 'windup' : t < 2.3 ? 'throw' : 'aim') },
+          aanya: { path: [[92.6, -18.9], [103.6, 4.6]], gait: 'run', speed: 5.8, delay: -3, face: [113.2, 21.6], act: (t, mv) => (mv ? 'carry' : t < 1.7 ? 'windup' : t < 2.3 ? 'throw' : 'aim') },
           neha: { at: [113.2, 21.6], face: () => P('aanya'), act: (t) => (t > 3.6 ? 'down' : 'aim') },
           advait: { at: [116.0, -11.6], face: [104, 23], act: 'aim' },
         },
         bombs: [{ by: 'aanya', t: 1.7, to: [112.8, 0, 20.6], fuse: 2.0, air: 1.0 }],
         fire: [...volley('advait', 0.3, 2, 1.2, { actor: 'neha' }, { dur: 0.4, kind: 'precision' })],
-        cam: path([[100.4, 1.0, 8.8], [102.6, 1.4, 9.6]], [[110, 1.4, 18], [112.4, 1.0, 20.4]], [44, 40]),
+        cam: path([[96, 1.6, 0], [97.5, 1.5, 1.5]], [[108, 1.2, 13], [111.5, 1.0, 19]], [48, 42]), zone: { next: false },
         ev: [tag(3.7, 'aanya', 'neha', { assists: ['advait'] })],
         hud: { pov: 'advait', mode: 'full', mt: [522, 527.2] },
         cues: [[2.9, 'slow'], [4.4, 'unslow']],
@@ -1000,6 +1007,8 @@ export class PaintballFilm {
         hots: [{ id: 'create', from: 1.5, to: 6.8, screen: [0.36, 0.84], label: 'Create a room', game: 'create' }, { id: 'join2', from: 1.5, to: 6.8, screen: [0.64, 0.84], label: 'Join a room', game: 'join' }],
       },
     ];
+    // match clock and letterbox: HUD shots run the match clock and drop the letterbox
+    for (const q of shots) { if (q.hud?.mt) q.mt = q.hud.mt; if (q.hud && q.lb == null) q.lb = 0; }
     // title cards
     let at = 0; for (const s of shots) at += s.dur;
     this.titles.push({ t0: 0.8, t1: 10.6, title: 'WELCOME TO PLAY WITH BITSIANS', sub: 'BITS PILANI PAINTBALL ARENA', style: 'open' });

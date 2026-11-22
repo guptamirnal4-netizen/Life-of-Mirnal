@@ -37,11 +37,11 @@ export class Droplets {
     if (this.cache.has(b)) return this.cache.get(b);
     const r = seeded(b.seed || Math.round(b.t * 1000 + b.p[0] * 13));
     const n = V(...(b.n || [0, 1, 0]));
-    const size = b.size ?? 1; const count = Math.round(14 + size * 30);
+    const size = b.size ?? 1; const count = Math.round(12 + size * 22);
     const drops = [];
     for (let i = 0; i < count; i++) {
       const v = V(n.x + (r() - 0.5) * 2, Math.abs(n.y) + r() * 1.6, n.z + (r() - 0.5) * 2).normalize().multiplyScalar((2 + r() * 4) * Math.min(1.6, size));
-      drops.push({ v, s: 0.6 + r() * size * 0.9, life: 0.5 + r() * 0.5, col: b.cols[i % b.cols.length] });
+      drops.push({ v, s: 0.45 + r() * size * 0.55, life: 0.5 + r() * 0.5, col: b.cols[i % b.cols.length] });
     }
     this.cache.set(b, drops);
     return drops;
@@ -92,7 +92,7 @@ export function bombSplats(p, seed = 3) {
 // A glowing ribbon along the real campus boundary wall (the gameplay boundary of Campus Royale). draw(0..1)
 // reveals it along its length.
 export function boundaryRibbon(floorAt) {
-  const B = D.boundary; const H = 9;
+  const B = D.boundary; const H = 26;
   const pts = [...B, B[0]];
   const pos = []; const uv = []; const len = [0];
   for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
@@ -108,14 +108,15 @@ export function boundaryRibbon(floorAt) {
   const idx = [];
   for (let i = 0; i < verts.length - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { draw: { value: 1 }, glow: { value: 1 }, colA: { value: new THREE.Color('#ffd23d') }, colB: { value: new THREE.Color('#ff3d7f') } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'uniform float draw; uniform float glow; uniform vec3 colA; uniform vec3 colB; varying vec2 vUv; void main(){ if (vUv.x > draw) discard; float edge = smoothstep(draw, draw - 0.02, vUv.x); float a = (1.0 - vUv.y) * 0.75 + 0.15 * step(0.92, vUv.y); vec3 c = mix(colA, colB, vUv.y); gl_FragColor = vec4(c, a * glow * (0.5 + 0.5 * edge)); }',
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-  });
+  const cv = document.createElement('canvas'); cv.width = 4; cv.height = 64;
+  const g2 = cv.getContext('2d'); const gr = g2.createLinearGradient(0, 64, 0, 0);
+  gr.addColorStop(0, 'rgba(255,210,61,0.95)'); gr.addColorStop(0.5, 'rgba(255,61,127,0.55)'); gr.addColorStop(0.92, 'rgba(255,61,127,0.05)'); gr.addColorStop(0.95, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g2.fillStyle = gr; g2.fillRect(0, 0, 4, 64);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
   const mesh = new THREE.Mesh(geo, mat); mesh.name = 'film-boundary'; mesh.frustumCulled = false; mesh.renderOrder = 4;
-  return { mesh, set(draw, glow = 1) { mat.uniforms.draw.value = draw; mat.uniforms.glow.value = glow; mesh.visible = glow > 0.01 && draw > 0.001; } };
+  const n = idx.length;
+  return { mesh, set(draw, glow = 1) { geo.setDrawRange(0, Math.floor((n / 6) * Math.min(1, draw)) * 6); mat.opacity = glow; mesh.visible = glow > 0.01 && draw > 0.001; } };
 }
 
 // ---------- the real Campus Royale props, posed by time ----------
