@@ -1,19 +1,30 @@
-// The film's overlay and player: letterbox, titles, scene captions, dialogue captions with speaker names, the
-// story's game-style overlays (group chat, plan, character cards, equipment, the in-story lobby, team intros,
-// countdown, match HUD, scoreboard), clickable hotspots on 3D places, and the player controls (play/pause, scrub
-// bar with chapter markers, chapters, previous/next, captions, mute, voices, replay, exit). Sound effects are
-// synthesised with WebAudio (playful pops and splats, a whistle, beeps, cheers); dialogue can be spoken with the
-// Web Speech API. Everything is drawn from the film time, so it follows seeking.
+// The film's overlay and player. Overlays: letterbox, title cards, trailer captions, squad comms, the tactical map,
+// and copies of the real Campus Royale screens built with the live game's own CSS classes (css/paintball.css,
+// css/paintball-royale.css): the landing map, the in-match HUD (timer, squad scores, paint zone, players left,
+// minimap, feed, paint meter, blaster and paintballs, inventory, prompts, the crate panel, the big map), the
+// character customisation, the blaster cards with their real stat bars, and the results screen. Player controls:
+// play/pause, scrub bar with scene markers, the scenes list, previous/next, captions, mute, replay, exit; game
+// hotspots ("Create a room", "Join a room", "How crates work", "The six blasters"). Sound effects are synthesised
+// with WebAudio (soft paintball pops, splats, paint-bomb bursts, crate lids, pick-up dings, countdown beeps, risers
+// and hits; nothing that sounds like a firearm). Everything is drawn from the film time, so it follows seeking.
 import * as THREE from 'three';
-import { CAST, CAST_BY_ID, SPEAKER_COLOUR, teamColour } from './cast.js';
-import { EQUIPMENT, EQUIPMENT_BY_ID } from '../paintball/equipment.js';
-import { MEDC } from '../paintball/arena.js';
+import { CAST, CAST_BY_ID, SQUADS, SPEAKER_COLOUR, teamColour } from './cast.js';
+import { mapXform, drawBase, drawZone, drawArrow, miniXform, drawMiniBase } from './film-fx.js';
+import { MATCH, zoneState } from './paintball-film.js';
+import { EQUIPMENT, EQUIPMENT_BY_ID, PAINT_MAX } from '../paintball/equipment.js';
+import { ITEMS, SHIELD, SCAN, BOMB, PACK } from '../paintball/items.js';
+import { ROYALE, ZONE_PHASES, readSpots } from '../paintball/royale.js';
 import { TEAMS } from '../paintball/rules.js';
+import { CHARACTERS, OUTFIT_COLOURS, PANTS_COLOURS, MASK_COLOURS, ACCESSORIES } from '../paintball/looks.js';
+import { statBars, BLURB } from '../paintball/client/ui.js';
+import { BITS_CAMPUS } from '../../data/bits-campus.js';
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const fmt = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, '0')}`;
+const fmtTime = (s) => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }; // the game's (client/ui.js)
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const dirName = (dx, dz) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360 / 45) % 8];
 const KEY = 'pwb.film';
 const PREFS = 'pwb.film.prefs';
 const store = {
@@ -22,96 +33,115 @@ const store = {
 };
 // Where the viewer left the film (for "Resume the film" on the title screen), or null.
 export function savedFilmPosition() { const s = store.get(KEY); return s && s.t > 3 && (!s.d || s.t < s.d - 4) ? s : null; }
+const HINT = 'E open / pick up · G paint bomb · H clean · C shield · Z scan · M map · R reload · Q switch · Tab scores · T talk';
 
 const STYLE = `
-#film { position: fixed; inset: 0; z-index: 50; color: #fff; font-family: 'Avenir Next', 'Futura', 'Helvetica Neue', system-ui, sans-serif; overflow: hidden; pointer-events: none; -webkit-tap-highlight-color: transparent; }
+#film { position: fixed; inset: 0; z-index: 50; color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; pointer-events: none; -webkit-tap-highlight-color: transparent; }
 #film .stage { position: absolute; inset: 0; pointer-events: auto; cursor: pointer; }
 #film.capture .stage { display: none; }
-#film .lb { position: absolute; left: 0; right: 0; height: 8vh; background: #000; }
+#film .lb { position: absolute; left: 0; right: 0; height: 9vh; background: #000; z-index: 1; }
 #film .lb.top { top: 0; } #film .lb.bot { bottom: 0; }
-@media (max-aspect-ratio: 1/1) { #film .lb { height: 4vh; } }
-#film .fade { position: absolute; inset: 0; background: #000; opacity: 0; }
-#film .wipe { position: absolute; inset: -10% -60%; background: linear-gradient(100deg, transparent 0 30%, #ff3d7f 30% 42%, #ffd23d 42% 50%, #30d5ff 50% 62%, transparent 62%); transform: translateX(-120%); opacity: 0.95; }
-#film .title { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; text-shadow: 0 4px 30px rgba(0,0,0,0.55); opacity: 0; padding: 0 16px; }
-#film .title h1 { margin: 0; font-weight: 800; font-size: clamp(28px, 8.5vh, 96px); letter-spacing: 0.24em; padding-left: 0.24em; line-height: 1.1; }
-#film .title p { margin: 3vh 0 0; font-weight: 600; font-size: clamp(12px, 2.3vh, 22px); letter-spacing: 0.3em; text-transform: uppercase; text-shadow: 0 2px 14px rgba(0,0,0,0.8); }
-#film .cap { position: absolute; left: 5vw; top: 13vh; text-shadow: 0 2px 16px rgba(0,0,0,0.6); opacity: 0; }
-#film .cap .k { font-size: clamp(10px, 1.7vh, 16px); letter-spacing: 0.38em; text-transform: uppercase; font-weight: 700; color: #ffd23d; }
-#film .cap .n { font-size: clamp(20px, 4.4vh, 46px); font-weight: 800; letter-spacing: 0.03em; margin-top: 0.5vh; }
-#film .cap .rule { height: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #30d5ff, rgba(48,213,255,0)); margin-top: 1vh; border-radius: 2px; }
-#film .line { position: absolute; left: 50%; bottom: calc(8vh + 74px); transform: translateX(-50%); max-width: min(88vw, 900px); text-align: center; font-size: clamp(15px, 2.6vh, 26px); font-weight: 600; line-height: 1.35; background: rgba(10,12,24,0.62); padding: 0.45em 0.9em; border-radius: 12px; opacity: 0; backdrop-filter: blur(4px); }
-#film.capture .line { bottom: 11vh; }
-#film .line b { display: block; font-size: 0.68em; letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 0.15em; }
+@media (max-aspect-ratio: 1/1) { #film .lb { height: 5vh; } }
+#film .fade { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 4; }
+#film .flash { position: absolute; inset: 0; background: #fff; opacity: 0; z-index: 4; mix-blend-mode: screen; }
+#film .wipe { position: absolute; inset: -10% -60%; background: linear-gradient(100deg, transparent 0 30%, #ff3d7f 30% 40%, #ffd23d 40% 48%, #30d5ff 48% 58%, #7cff4f 58% 63%, transparent 63%); transform: translateX(-200%); opacity: 0.95; z-index: 4; }
+#film .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45)); opacity: 0; }
+#film .title { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; opacity: 0; padding: 0 16px; z-index: 3; }
+#film .title h1 { margin: 0; font-weight: 900; font-style: italic; font-size: clamp(28px, 10vh, 112px); letter-spacing: 0.04em; line-height: 0.95; text-transform: uppercase; text-shadow: 0 6px 0 rgba(0,0,0,0.35), 0 0 40px rgba(0,0,0,0.5); }
+#film .title h1 .w { display: block; font-size: 0.36em; letter-spacing: 0.5em; padding-left: 0.5em; font-style: normal; font-weight: 800; color: #ffd23d; margin-bottom: 0.3em; }
+#film .title h1 .g { background: linear-gradient(90deg, #ff3d7f, #ffd23d 35%, #7cff4f 60%, #30d5ff 85%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-stroke: 0; filter: drop-shadow(0 5px 0 rgba(0,0,0,0.4)); }
+#film .title .bar { height: 6px; width: min(560px, 70vw); margin: 2.2vh auto 0; border-radius: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #7cff4f, #30d5ff, #b26bff); transform-origin: left; }
+#film .title p { margin: 1.8vh 0 0; font-weight: 800; font-size: clamp(12px, 2.6vh, 26px); letter-spacing: 0.32em; padding-left: 0.32em; text-transform: uppercase; text-shadow: 0 2px 14px rgba(0,0,0,0.9); }
+#film .title.end p { letter-spacing: 0.08em; padding-left: 0; text-transform: none; font-size: clamp(14px, 3.2vh, 30px); }
+#film .cap { position: absolute; opacity: 0; z-index: 3; pointer-events: none; }
+#film .cap.punch { left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
+#film .cap.punch .k { display: inline-block; font-size: clamp(11px, 2vh, 18px); letter-spacing: 0.4em; padding: 0.2em 0.6em 0.2em 1em; font-weight: 900; color: #0b1020; background: #ffd23d; transform: skewX(-12deg); }
+#film .cap.punch .n { font-size: clamp(26px, 8.5vh, 92px); font-weight: 900; font-style: italic; letter-spacing: 0.02em; margin-top: 0.6vh; text-shadow: 0 5px 0 rgba(0,0,0,0.4), 0 0 30px rgba(0,0,0,0.4); -webkit-text-stroke: 1px rgba(0,0,0,0.25); }
+#film .cap.tag { left: 4vw; bottom: 24vh; }
+#film .cap.tag .k { font-size: clamp(10px, 1.7vh, 15px); letter-spacing: 0.32em; font-weight: 900; color: #ffd23d; text-shadow: 0 2px 8px rgba(0,0,0,0.9); }
+#film .cap.tag .n { font-size: clamp(18px, 4.6vh, 44px); font-weight: 900; font-style: italic; margin-top: 0.3vh; text-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 18px rgba(0,0,0,0.5); }
+#film .cap .rule { height: 5px; margin-top: 0.8vh; border-radius: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #30d5ff, rgba(48,213,255,0)); }
+#film .cap.plain { left: 5vw; top: 13vh; }
+#film .cap.plain .k { font-size: clamp(10px, 1.7vh, 15px); letter-spacing: 0.34em; font-weight: 800; color: #ffd23d; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+#film .cap.plain .n { font-size: clamp(18px, 4vh, 40px); font-weight: 900; text-shadow: 0 2px 16px rgba(0,0,0,0.7); }
+#film .line { position: absolute; left: 3vw; bottom: 22vh; max-width: min(70vw, 520px); font-size: clamp(13px, 2.2vh, 20px); font-weight: 700; line-height: 1.3; background: rgba(10,12,28,0.72); padding: 0.4em 0.8em 0.45em; border-radius: 10px; border-left: 4px solid #fff; opacity: 0; z-index: 3; }
+#film .line b { display: block; font-size: 0.66em; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 0.1em; }
+#film .line b::before { content: '🎙 '; }
 #film.nocc .line { display: none; }
-#film .hud { position: absolute; top: calc(8vh + 10px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; opacity: 0; font-weight: 800; }
-#film .hud .sc { min-width: 3.2em; padding: 0.25em 0.7em; border-radius: 999px; font-size: clamp(14px, 2.6vh, 26px); color: #101321; text-align: center; box-shadow: 0 3px 0 rgba(0,0,0,0.25); }
-#film .hud .sc small { font-size: 0.55em; letter-spacing: 0.15em; display: block; margin-top: -0.2em; }
-#film .hud .tm { font-size: clamp(18px, 3.6vh, 36px); background: rgba(10,12,24,0.75); padding: 0.15em 0.6em; border-radius: 12px; font-variant-numeric: tabular-nums; border: 2px solid rgba(255,255,255,0.25); }
-#film .hud .tm.low { color: #ff6b6b; border-color: #ff6b6b; }
-#film .feed { position: absolute; right: 2.5vw; top: calc(8vh + 12px); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-#film .feed div { background: rgba(10,12,24,0.7); border-radius: 8px; padding: 4px 10px; font-size: clamp(11px, 1.8vh, 17px); font-weight: 700; white-space: nowrap; }
-#film .feed i { font-style: normal; opacity: 0.7; margin: 0 6px; }
-#film .bang { position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%) scale(1); font-weight: 900; font-size: clamp(26px, 7vh, 72px); letter-spacing: 0.06em; opacity: 0; text-shadow: 0 4px 0 rgba(0,0,0,0.35), 0 0 30px rgba(255,255,255,0.3); white-space: nowrap; -webkit-text-stroke: 2px rgba(0,0,0,0.35); }
-#film .pnl { position: absolute; opacity: 0; }
-#film .glass { background: rgba(12,14,30,0.78); border: 1px solid rgba(255,255,255,0.16); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); backdrop-filter: blur(8px); }
-#film .chat { right: 4vw; top: 50%; transform: translateY(-50%); width: min(300px, 40vw); padding: 12px; border-radius: 26px; border: 3px solid #2d3436; background: rgba(245,246,250,0.96); color: #1e272e; }
-#film .chat h4 { margin: 0 0 8px; font-size: 13px; text-align: center; }
-#film .chat .m { margin: 5px 0; padding: 6px 10px; border-radius: 12px; background: #dfe6e9; font-size: 12.5px; max-width: 88%; }
-#film .chat .m b { display: block; font-size: 10.5px; }
-#film .chat .m.me { margin-left: auto; background: #c7f5d9; }
-#film .plan { left: 50%; top: 47%; transform: translate(-50%, -50%); width: min(620px, 86vw); padding: 14px 16px; }
-#film .plan h4, #film .lobby h4 { margin: 0 0 8px; font-size: clamp(13px, 2.1vh, 18px); letter-spacing: 0.12em; text-transform: uppercase; }
-#film .plan svg { width: 100%; height: auto; display: block; }
-#film .plan .row { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; margin-top: 8px; }
-#film .chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.12); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-#film .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-#film .cards { left: 50%; bottom: calc(8vh + 70px); transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; width: min(1100px, 94vw); }
-#film .card { width: 96px; padding: 8px; border-radius: 12px; background: rgba(12,14,30,0.8); border-top: 4px solid; font-size: 11px; transition: transform 0.3s, opacity 0.3s; }
-#film .card b { display: block; font-size: 14px; }
-#film .card.off { opacity: 0.25; transform: translateY(8px); }
-#film .equip { left: 3vw; top: 50%; transform: translateY(-50%); width: min(300px, 44vw); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-#film .eq { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; font-size: 12px; transition: background 0.25s, transform 0.25s; }
-#film .eq.on { background: rgba(255,255,255,0.16); transform: translateX(6px); }
-#film .eq .sw { width: 14px; height: 30px; border-radius: 5px; flex: none; }
-#film .eq b { display: block; font-size: 12.5px; }
-#film .eq small { opacity: 0.75; }
-#film .lobby { left: 50%; top: 48%; transform: translate(-50%, -50%); width: min(760px, 92vw); padding: 14px 16px; }
-#film .lobby .story { display: inline-block; background: #ffd23d; color: #1e272e; font-weight: 800; font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 6px; margin-bottom: 6px; }
-#film .lobby .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-#film .lobby .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-#film .lobby .team { border-radius: 12px; padding: 8px; background: rgba(255,255,255,0.06); border-top: 4px solid; }
-#film .lobby .p { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-#film .lobby .p .nm { font-weight: 700; min-width: 4.5em; }
-#film .lobby .p .rd { margin-left: auto; font-weight: 800; color: #7cff4f; opacity: 0; transform: scale(0.4); transition: all 0.25s; }
-#film .lobby .p .rd.on { opacity: 1; transform: scale(1); }
-#film .lobby .p .eqs { display: flex; gap: 4px; flex-wrap: wrap; }
-#film .lobby .foot { margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
-#film .lobby .go { background: #7cff4f; color: #102010; font-weight: 800; padding: 6px 14px; border-radius: 10px; }
-#film .teamcard { top: 50%; width: min(260px, 40vw); padding: 12px; transform: translateY(-50%); }
-#film .teamcard.l { left: 3vw; } #film .teamcard.r { right: 3vw; }
-#film .teamcard h4 { margin: 0 0 6px; font-size: clamp(16px, 3vh, 26px); font-weight: 900; letter-spacing: 0.1em; }
-#film .teamcard .p { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; padding: 3px 0; }
-#film .count { left: 50%; top: 27%; transform: translate(-50%, -50%); font-size: clamp(60px, 22vh, 220px); font-weight: 900; text-shadow: 0 6px 0 rgba(0,0,0,0.3); -webkit-text-stroke: 3px rgba(0,0,0,0.25); }
-#film .score { left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(560px, 90vw); padding: 14px 18px; text-align: center; }
-#film .score .win { font-size: clamp(24px, 5vh, 48px); font-weight: 900; letter-spacing: 0.08em; }
-#film .score .big { display: flex; justify-content: center; align-items: center; gap: 16px; font-size: clamp(30px, 6vh, 58px); font-weight: 900; margin: 6px 0 10px; }
-#film .score table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
-#film .score td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-#film .flash { inset: 0; background: #fff; }
-#film .hots { position: absolute; inset: 0; }
-#film .hot { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 6px; color: #fff; cursor: pointer; font: inherit; font-weight: 700; font-size: clamp(11px, 1.7vh, 15px); text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
-#film .hot .ring { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 4px solid #ff3d7f; box-shadow: 0 0 0 0 rgba(255,61,127,0.7); animation: pwbPulse 1.6s infinite; flex: none; }
-#film .hot span.l { background: rgba(10,12,24,0.68); padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
-@keyframes pwbPulse { 0% { box-shadow: 0 0 0 0 rgba(255,61,127,0.75); } 70% { box-shadow: 0 0 0 14px rgba(255,61,127,0); } 100% { box-shadow: 0 0 0 0 rgba(255,61,127,0); } }
-#film .info { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(440px, 92vw); max-height: 80vh; overflow: auto; padding: 18px; pointer-events: auto; z-index: 3; }
+#film .pnls > * { position: absolute; }
+#film .glass { background: rgba(12,14,30,0.82); border: 1px solid rgba(255,255,255,0.16); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
+/* the tactical map */
+#film .intel { left: 3vw; top: 50%; transform: translateY(-50%); display: flex; gap: 14px; align-items: stretch; }
+#film .intel .mapbox { position: relative; padding: 10px; border-radius: 14px; background: rgba(6,12,24,0.86); border: 2px solid rgba(48,213,255,0.55); box-shadow: 0 0 30px rgba(48,213,255,0.25); }
+#film .intel canvas { display: block; border-radius: 8px; }
+#film .intel .side { width: min(250px, 30vw); display: flex; flex-direction: column; gap: 8px; }
+#film .intel h4 { margin: 0; font-size: clamp(11px, 1.8vh, 15px); letter-spacing: 0.3em; color: #30d5ff; font-weight: 900; }
+#film .intel .big { font-size: clamp(18px, 3.8vh, 34px); font-weight: 900; font-style: italic; line-height: 1; }
+#film .intel .stat { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 9px; background: rgba(10,12,28,0.78); border-left: 4px solid var(--c, #30d5ff); font-weight: 700; font-size: clamp(11px, 1.7vh, 14px); }
+#film .intel .stat b { font-size: 1.15em; }
+#film .intel .stat.off { opacity: 0; transform: translateX(-10px); }
+#film .intel .stat { transition: opacity 0.3s, transform 0.3s; }
+/* match intro */
+#film .intro { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, 94vw); text-align: center; }
+#film .intro .mode { font-size: clamp(30px, 8vh, 78px); font-weight: 900; font-style: italic; letter-spacing: 0.02em; text-shadow: 0 5px 0 rgba(0,0,0,0.4); }
+#film .intro .chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 6px 0 12px; }
+#film .chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: rgba(10,12,28,0.78); border: 1px solid rgba(255,255,255,0.2); font-size: clamp(11px, 1.7vh, 14px); font-weight: 700; white-space: nowrap; }
+#film .intro .pb-teams { grid-template-columns: repeat(5, 1fr); text-align: left; }
+#film .intro .pb-team { background: rgba(10,12,28,0.82); font-size: 12.5px; transition: transform 0.35s, opacity 0.35s; }
+#film .intro .pb-team.off { opacity: 0; transform: translateY(14px); }
+#film .intro .pb-team b { display: block; font-size: 15px; margin-bottom: 3px; }
+#film .intro .pb-team small { opacity: 0.75; }
+/* customisation / blasters / loadout (lobby-style cards) */
+#film .side-card { right: 3vw; top: 50%; transform: translateY(-50%); width: min(470px, 46vw); max-height: 82vh; overflow: hidden; }
+#film .side-card.pb-card { padding: 14px 16px; }
+#film .side-card .pb-row button { padding: 5px 10px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; cursor: default; }
+#film .side-card .fake-input { font-size: 16px; padding: 8px 12px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08); margin-bottom: 8px; }
+#film .side-card .lbl { font-size: 12px; opacity: 0.8; margin: 8px 0 4px; }
+#film .side-card .pb-swatch { width: 24px; height: 24px; display: inline-block; border-radius: 50%; border-style: solid; transition: transform 0.2s; }
+#film .bl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#film .bl-grid .pb-eq { background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.18); font-size: 11.5px; transition: background 0.25s, border-color 0.25s; }
+#film .bl-detail { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.06); border-left: 5px solid var(--c); }
+#film .bl-detail b { font-size: 17px; }
+#film .kit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#film .kit .who { border-radius: 12px; padding: 8px 10px; background: rgba(255,255,255,0.06); border-top: 4px solid var(--team); }
+#film .kit .who b { font-size: 16px; }
+#film .kit .row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#film .kit .row span { background: rgba(10,12,28,0.65); border: 2px solid var(--c, rgba(255,255,255,0.25)); border-radius: 9px; padding: 2px 7px; font-weight: 800; font-size: 12px; white-space: nowrap; }
+#film .kit .row span.none { opacity: 0.45; }
+/* results */
+#film .results { inset: 0; display: grid; place-items: center; padding: 12px; background: linear-gradient(180deg, rgba(10,12,28,0.25), rgba(10,12,28,0.6)); }
+#film .results .pb-card { width: min(980px, 100%); transform-origin: center; }
+#film .results .pb-table tr { transition: opacity 0.3s; }
+#film .results .pb-podium div, #film .results .pb-team { transition: opacity 0.3s, transform 0.3s; }
+#film .win { left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
+#film .win .pb-winner { font-size: clamp(32px, 9vh, 88px); text-shadow: 0 6px 0 rgba(0,0,0,0.35); }
+#film .win .pb-sub { font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0,0,0,0.9); }
+/* the in-match HUD lives in #pb-hud (the game's own styles); the landing map in .pb-landing */
+#film #pb-hud { z-index: 2; transition: none; }
+#film #pb-hud .hidden { display: none; }
+#film #pb-hud .pb-crate-item.taking { background: #ffd23d; color: #0b1020; }
+#film #pb-hud .pb-crate { pointer-events: none; }
+#film #pb-hud .big.pop { animation: none; }
+#film .pb-landing { position: absolute; z-index: 2; }
+#film .pb-landmap { cursor: default; }
+#film .tap { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #ffd23d; pointer-events: none; }
+/* hotspots and the info panel */
+#film .hots { position: absolute; inset: 0; z-index: 3; }
+#film .hot { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; display: flex; align-items: center; gap: 8px; background: rgba(10,12,28,0.78); border: 2px solid #ffd23d; border-radius: 999px; padding: 6px 14px 6px 8px; color: #fff; cursor: pointer; font: inherit; font-weight: 800; font-size: clamp(12px, 1.9vh, 16px); white-space: nowrap; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+#film .hot.game { background: linear-gradient(90deg, #ff3d7f, #ff8a1f); border-color: #fff; }
+#film .hot .ring { width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 0 rgba(255,210,61,0.8); animation: pwbPulse 1.6s infinite; flex: none; }
+@keyframes pwbPulse { 0% { box-shadow: 0 0 0 0 rgba(255,210,61,0.8); } 70% { box-shadow: 0 0 0 12px rgba(255,210,61,0); } 100% { box-shadow: 0 0 0 0 rgba(255,210,61,0); } }
+#film .info { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(500px, 92vw); max-height: 80vh; overflow: auto; padding: 18px; pointer-events: auto; z-index: 6; }
 #film .info h3 { margin: 0 0 8px; font-size: 20px; }
-#film .info p { margin: 0 0 12px; line-height: 1.45; font-size: 14.5px; opacity: 0.92; }
-#film .info .msg { background: rgba(255,210,61,0.16); border-left: 3px solid #ffd23d; padding: 8px 10px; border-radius: 6px; font-size: 13.5px; }
+#film .info p { margin: 0 0 10px; line-height: 1.45; font-size: 14.5px; opacity: 0.92; }
+#film .info ul { margin: 0 0 12px; padding-left: 18px; font-size: 13.5px; line-height: 1.45; }
+#film .info .msg { background: rgba(255,210,61,0.16); border-left: 3px solid #ffd23d; padding: 8px 10px; border-radius: 6px; font-size: 13.5px; margin-bottom: 10px; }
 #film .btns { display: flex; gap: 8px; flex-wrap: wrap; }
 #film button.fb { pointer-events: auto; font: inherit; font-weight: 700; font-size: 14px; color: #fff; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); border-radius: 10px; padding: 9px 14px; cursor: pointer; }
-#film button.fb.primary { background: #ff3d7f; border-color: #ff3d7f; }
+#film button.fb.primary { background: linear-gradient(90deg, #ff3d7f, #ff8a1f); border-color: transparent; }
 #film button.fb:hover { filter: brightness(1.15); }
-#film .ctl { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 16px max(10px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,0.75)); pointer-events: auto; transition: opacity 0.35s; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+/* the player controls */
+#film .ctl { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 16px max(10px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,0.8)); pointer-events: auto; transition: opacity 0.35s; display: flex; flex-direction: column; gap: 6px; z-index: 5; }
 #film.capture .ctl, #film.capture .hots, #film.capture .bigplay { display: none; }
 #film.idle .ctl { opacity: 0; pointer-events: none; }
 #film.idle { cursor: none; }
@@ -120,7 +150,7 @@ const STYLE = `
 #film .bar .fill { position: absolute; left: 0; top: 9px; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #30d5ff); }
 #film .bar .knob { position: absolute; top: 4px; width: 15px; height: 15px; margin-left: -7px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
 #film .bar .mk { position: absolute; top: 5px; width: 3px; height: 13px; margin-left: -1px; background: rgba(255,255,255,0.85); border-radius: 2px; }
-#film .bar .tip { position: absolute; bottom: 24px; transform: translateX(-50%); background: rgba(10,12,24,0.9); padding: 3px 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; display: none; }
+#film .bar .tip { position: absolute; bottom: 24px; transform: translateX(-50%); background: rgba(10,12,28,0.9); padding: 3px 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; display: none; }
 #film .bar:hover .tip { display: block; }
 #film .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 #film .row .sp { flex: 1; }
@@ -129,15 +159,29 @@ const STYLE = `
 #film .ic { pointer-events: auto; background: rgba(255,255,255,0.1); border: 0; color: #fff; font: inherit; font-size: 16px; min-width: 40px; height: 38px; border-radius: 10px; cursor: pointer; padding: 0 10px; }
 #film .ic:hover { background: rgba(255,255,255,0.22); }
 #film .ic.off { opacity: 0.5; text-decoration: line-through; }
-#film .chapters { position: absolute; right: 16px; bottom: 110px; width: min(340px, 92vw); padding: 8px; pointer-events: auto; z-index: 3; }
+#film .chapters { position: absolute; right: 16px; bottom: 110px; width: min(360px, 92vw); padding: 8px; pointer-events: auto; z-index: 6; }
 #film .chapters button { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; background: none; border: 0; color: #fff; font: inherit; font-size: 14px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
 #film .chapters button:hover, #film .chapters button.on { background: rgba(255,255,255,0.14); }
-#film .bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 84px; height: 84px; border-radius: 50%; background: rgba(10,12,24,0.6); display: grid; place-items: center; font-size: 34px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+#film .bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 84px; height: 84px; border-radius: 50%; background: rgba(10,12,28,0.6); display: grid; place-items: center; font-size: 34px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 5; }
 #film.paused .bigplay { opacity: 1; }
 #film .hidden { display: none !important; }
-@media (max-width: 640px) { #film .ch, #film .hide-s { display: none !important; } #film .ic { min-width: 36px; padding: 0 7px; } #film .equip { width: 56vw; } #film .eq { font-size: 10.5px; padding: 4px; } #film .chat { width: 52vw; } #film .card { width: 74px; padding: 6px; font-size: 10px; } #film .card b { font-size: 12px; } }
-@media (max-width: 640px) { #film .lobby .p .eqs { display: none; } #film .lobby .p { font-size: 12px; } #film .line { font-size: clamp(13px, 4vw, 20px); } }
-@media (max-height: 460px) { #film .lobby, #film .plan, #film .score { transform: translate(-50%, -50%) scale(0.6); top: 44%; } #film .plan svg { max-height: 46vh; } #film .cards { transform: translateX(-50%) scale(0.8); bottom: 64px; } #film .line { bottom: 100px; font-size: 14px; } #film .equip, #film .chat, #film .teamcard { transform: translateY(-50%) scale(0.75); } #film .chapters { bottom: 70px; max-height: 70vh; overflow: auto; } }
+@media (max-width: 640px) {
+  #film .ch, #film .hide-s { display: none !important; } #film .ic { min-width: 36px; padding: 0 7px; }
+  #film .side-card { left: 3vw; right: 3vw; width: auto; top: auto; bottom: 12vh; transform: none; max-height: 52vh; font-size: 12px; }
+  #film .bl-grid { grid-template-columns: repeat(2, 1fr); }
+  #film .bl-grid .pb-eq span.bl { display: none; }
+  #film .intel { left: 3vw; right: 3vw; top: 12vh; transform: none; flex-direction: column; align-items: center; }
+  #film .intel .side { width: 100%; flex-direction: row; flex-wrap: wrap; } #film .intel .side .stat { flex: 1 1 45%; }
+  #film .intro .pb-teams { grid-template-columns: repeat(2, 1fr); } #film .intro .pb-team:last-child { grid-column: span 2; }
+  #film .line { bottom: 26vh; }
+}
+@media (max-height: 460px) {
+  #film .side-card { transform: translateY(-50%) scale(0.72); transform-origin: right center; max-height: 120vh; }
+  #film .intel { transform: translateY(-50%) scale(0.8); transform-origin: left center; }
+  #film .intro { transform: translate(-50%, -50%) scale(0.7); }
+  #film .chapters { bottom: 70px; max-height: 70vh; overflow: auto; }
+  #film .cap.tag { bottom: 30vh; } #film .line { bottom: 30vh; font-size: 13px; }
+}
 `;
 
 // ---------- sound ----------
@@ -153,84 +197,109 @@ class FilmAudio {
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noise.getChannelData(0); let s = 1;
     for (let i = 0; i < len; i++) { s = (s * 16807) % 2147483647; d[i] = (s / 2147483647) * 2 - 1; }
-    // campus ambience: a soft breeze (filtered noise, slowly swelling)
+    // ambience: a soft breeze over the campus (filtered noise, slowly swelling)
     const src = this.ctx.createBufferSource(); src.buffer = this.noise; src.loop = true;
     const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420;
-    const g = this.ctx.createGain(); g.gain.value = 0.05;
-    const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.08; const lg = this.ctx.createGain(); lg.gain.value = 0.025; lfo.connect(lg).connect(g.gain); lfo.start();
+    const g = this.ctx.createGain(); g.gain.value = 0.04;
+    const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.08; const lg = this.ctx.createGain(); lg.gain.value = 0.02; lfo.connect(lg).connect(g.gain); lfo.start();
     src.connect(f).connect(g).connect(this.out); src.start();
-    this.amb = g;
     return this.ctx;
   }
   resume() { this.ensure(); this.ctx?.resume?.().catch(() => {}); this.setMuted(this.ui.muted); }
-  suspend() { this.ctx?.suspend?.().catch(() => {}); }
-  setMuted(m) { if (this.out) this.out.gain.value = m ? 0 : 0.8; if (m) this.stopVoices(); }
+  setMuted(m) { if (this.out) this.out.gain.value = m ? 0 : 0.8; }
   env(g, t, a, peak, dcy) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + dcy); }
-  noiseHit(t, { freq = 1200, q = 1, peak = 0.4, dcy = 0.12, type = 'bandpass' } = {}) {
-    const c = this.ctx; const s = c.createBufferSource(); s.buffer = this.noise; s.playbackRate.value = 0.8 + Math.random() * 0.4;
-    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
-    const g = c.createGain(); this.env(g, t, 0.004, peak, dcy);
-    s.connect(f).connect(g).connect(this.out); s.start(t, Math.random()); s.stop(t + dcy + 0.05);
+  noiseHit(t, { freq = 1200, f1 = null, q = 1, peak = 0.4, a = 0.004, dcy = 0.12, type = 'bandpass' } = {}) {
+    const c = this.ctx; const s = c.createBufferSource(); s.buffer = this.noise;
+    const f = c.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + a + dcy); f.Q.value = q;
+    const g = c.createGain(); this.env(g, t, a, peak, dcy);
+    s.connect(f).connect(g).connect(this.out); s.start(t, (t * 0.37) % 1.5); s.stop(t + a + dcy + 0.05);
   }
-  tone(t, { f0 = 600, f1 = f0, peak = 0.2, dur = 0.1, type = 'sine', vib = 0 } = {}) {
-    const c = this.ctx; const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    if (vib) { const l = c.createOscillator(); l.frequency.value = 28; const lg = c.createGain(); lg.gain.value = vib; l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + dur); }
-    const g = c.createGain(); this.env(g, t, 0.006, peak, dur);
-    o.connect(g).connect(this.out); o.start(t); o.stop(t + dur + 0.05);
+  tone(t, { f0 = 600, f1 = f0, peak = 0.2, a = 0.006, dur = 0.1, type = 'sine', vib = 0 } = {}) {
+    const c = this.ctx; const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + a + dur);
+    if (vib) { const l = c.createOscillator(); l.frequency.value = 6; const lg = c.createGain(); lg.gain.value = vib; l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + a + dur); }
+    const g = c.createGain(); this.env(g, t, a, peak, dur);
+    o.connect(g).connect(this.out); o.start(t); o.stop(t + a + dur + 0.05);
   }
-  play(kind) {
+  play(kind, p) {
     if (!this.ensure() || this.ui.muted || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime + 0.01;
+    const notes = (list, gap, o = {}) => list.forEach((f, i) => this.tone(t + i * gap, { f0: f, peak: 0.12, dur: 0.14, type: 'triangle', ...o }));
     switch (kind) {
-      case 'pop': this.tone(t, { f0: 520, f1: 180, peak: 0.16, dur: 0.07, type: 'triangle' }); this.noiseHit(t, { freq: 2600, q: 2, peak: 0.12, dcy: 0.04 }); break; // a toy "thup"
-      case 'thump': this.tone(t, { f0: 160, f1: 60, peak: 0.35, dur: 0.22 }); this.noiseHit(t, { freq: 500, peak: 0.15, dcy: 0.12 }); break;
-      case 'splat': this.noiseHit(t, { freq: 900, q: 0.8, peak: 0.32, dcy: 0.14, type: 'lowpass' }); this.tone(t, { f0: 240, f1: 120, peak: 0.12, dur: 0.08 }); break;
-      case 'splash': this.noiseHit(t, { freq: 700, q: 0.6, peak: 0.5, dcy: 0.45, type: 'lowpass' }); this.tone(t, { f0: 180, f1: 70, peak: 0.25, dur: 0.3 }); break;
-      case 'whistle': this.tone(t, { f0: 2350, f1: 2300, peak: 0.16, dur: 0.75, vib: 70 }); break;
-      case 'beep': this.tone(t, { f0: 880, peak: 0.18, dur: 0.18, type: 'square' }); break;
-      case 'tick': this.tone(t, { f0: 1400, peak: 0.08, dur: 0.05, type: 'square' }); break;
-      case 'clap': this.noiseHit(t, { freq: 1500, q: 1.2, peak: 0.5, dcy: 0.09 }); break;
-      case 'shutter': this.noiseHit(t, { freq: 3000, q: 3, peak: 0.25, dcy: 0.05 }); this.noiseHit(t + 0.07, { freq: 2400, q: 3, peak: 0.2, dcy: 0.05 }); break;
-      case 'cheer': for (let i = 0; i < 6; i++) this.noiseHit(t + i * 0.12, { freq: 900 + i * 140, q: 0.7, peak: 0.12, dcy: 0.6 }); break;
+      case 'pop': { const k = { rapid: 1.25, burst: 1.1, spread: 0.8, precision: 0.7, launcher: 0.6 }[p] || 1; this.tone(t, { f0: 520 * k, f1: 140 * k, peak: 0.18, dur: 0.09 }); this.noiseHit(t, { freq: 2400, q: 2, peak: 0.08, dcy: 0.03 }); break; } // a soft toy "thup"
+      case 'thump': this.tone(t, { f0: 160, f1: 60, peak: 0.3, dur: 0.22 }); break;
+      case 'splat': this.noiseHit(t, { freq: 1600, f1: 220, q: 0.7, peak: 0.3, dcy: 0.16, type: 'lowpass' }); break;
+      case 'splash': this.noiseHit(t, { freq: 900, f1: 160, q: 0.6, peak: 0.5, dcy: 0.45, type: 'lowpass' }); this.tone(t, { f0: 180, f1: 70, peak: 0.25, dur: 0.3 }); break;
+      case 'burst': this.tone(t, { f0: 120, f1: 45, peak: 0.45, dur: 0.4 }); this.noiseHit(t, { freq: 1800, f1: 200, q: 0.5, peak: 0.55, dcy: 0.6, type: 'lowpass' }); for (let i = 0; i < 6; i++) this.noiseHit(t + 0.08 + i * 0.05, { freq: 1400 - i * 120, q: 1, peak: 0.12, dcy: 0.1, type: 'lowpass' }); break;
+      case 'toss': this.noiseHit(t, { freq: 600, f1: 2200, q: 1.5, peak: 0.12, a: 0.15, dcy: 0.25 }); break;
+      case 'crate': this.tone(t, { f0: 150, f1: 90, peak: 0.25, dur: 0.12, type: 'triangle' }); this.tone(t + 0.12, { f0: 420, f1: 300, peak: 0.06, a: 0.1, dur: 0.35, type: 'sawtooth' }); this.noiseHit(t + 0.5, { freq: 300, peak: 0.2, dcy: 0.1, type: 'lowpass' }); break;
+      case 'ding': for (const [f, d] of [[1046, 0], [1568, 0.06]]) this.tone(t + d, { f0: f, peak: 0.16, dur: 0.16, type: 'triangle' }); break; // the game's pick-up ding
+      case 'switch': this.noiseHit(t, { freq: 3000, q: 4, peak: 0.12, dcy: 0.03 }); this.noiseHit(t + 0.08, { freq: 2200, q: 4, peak: 0.12, dcy: 0.03 }); break;
+      case 'tap': case 'blip': this.tone(t, { f0: kind === 'tap' ? 1320 : 1760, peak: 0.08, dur: 0.07, type: 'square' }); break;
+      case 'scan': this.tone(t, { f0: 300, f1: 2400, peak: 0.07, a: 0.4, dur: 0.8, type: 'sine' }); break;
+      case 'map': this.noiseHit(t, { freq: 2500, f1: 900, q: 1, peak: 0.1, dcy: 0.2 }); break;
+      case 'braam': for (const [f, d] of [[55, 0], [55.4, 0], [82.4, 0.02], [110, 0.03]]) this.tone(t + d, { f0: f, f1: f * 0.98, peak: 0.16, a: 0.25, dur: 2.6, type: 'sawtooth' }); this.noiseHit(t, { freq: 200, peak: 0.2, a: 0.02, dcy: 1.2, type: 'lowpass' }); break;
+      case 'hit': this.tone(t, { f0: 90, f1: 40, peak: 0.5, dur: 0.5 }); this.noiseHit(t, { freq: 3000, f1: 400, q: 0.5, peak: 0.3, dcy: 0.3, type: 'lowpass' }); break;
+      case 'whoosh': this.noiseHit(t, { freq: 400, f1: 2800, q: 1.2, peak: 0.22, a: 0.35, dcy: 0.45 }); break;
+      case 'dive': this.noiseHit(t, { freq: 3000, f1: 300, q: 1, peak: 0.25, a: 0.5, dcy: 1.6 }); break;
+      case 'land': case 'thud': this.tone(t, { f0: 110, f1: 40, peak: 0.5, dur: 0.35 }); this.noiseHit(t, { freq: 400, peak: 0.3, dcy: 0.2, type: 'lowpass' }); break;
+      case 'count': this.tone(t, { f0: 440, peak: 0.25, dur: 0.15 }); break; // the game's countdown beep
+      case 'go': this.tone(t, { f0: 880, peak: 0.28, dur: 0.4 }); notes([523, 659, 784, 1046], 0.07, { type: 'square', peak: 0.08 }); this.play('hit'); break;
+      case 'alarm': [0, 0.35, 0.7].forEach((d) => { this.tone(t + d, { f0: 988, peak: 0.12, dur: 0.14, type: 'triangle' }); this.tone(t + d + 0.15, { f0: 740, peak: 0.12, dur: 0.14, type: 'triangle' }); }); break;
+      case 'drone': this.tone(t, { f0: 220, f1: 200, peak: 0.08, a: 1.2, dur: 4, type: 'triangle', vib: 3 }); break;
+      case 'jingle': notes([523, 659, 784, 1046], 0.09, { type: 'square', peak: 0.1 }); break; // the game's tag jingle
+      case 'slow': this.tone(t, { f0: 400, f1: 60, peak: 0.2, a: 0.05, dur: 0.9, type: 'sawtooth' }); this.noiseHit(t, { freq: 1200, f1: 200, peak: 0.15, dcy: 0.9, type: 'lowpass' }); break;
+      case 'unslow': this.noiseHit(t, { freq: 200, f1: 2600, peak: 0.15, a: 0.3, dcy: 0.2 }); break;
+      case 'zone': this.tone(t, { f0: 70, f1: 90, peak: 0.25, a: 1.4, dur: 3, type: 'sawtooth' }); break;
+      case 'heartbeat': this.tone(t, { f0: 70, f1: 45, peak: 0.35, dur: 0.12 }); this.tone(t + 0.22, { f0: 62, f1: 42, peak: 0.25, dur: 0.12 }); break;
+      case 'shield': this.tone(t, { f0: 400, f1: 1600, peak: 0.12, a: 0.25, dur: 0.6, type: 'sine', vib: 30 }); notes([784, 988, 1175], 0.06, { peak: 0.06 }); break;
+      case 'shieldHit': this.tone(t, { f0: 2093, f1: 1800, peak: 0.12, dur: 0.25, type: 'sine' }); this.noiseHit(t, { freq: 4000, q: 3, peak: 0.08, dcy: 0.05 }); break;
+      case 'scrub': for (let i = 0; i < 12; i++) this.noiseHit(t + i * 0.33, { freq: 2800, q: 2, peak: 0.06, a: 0.05, dcy: 0.18 }); break;
+      case 'revive': notes([392, 523, 659, 784], 0.08, { peak: 0.1 }); break;
+      case 'final': this.play('hit'); notes([523, 659, 784, 1046, 1318], 0.08, { type: 'square', peak: 0.1 }); break;
+      case 'win': notes([523, 523, 784, 1046], 0.16, { type: 'square', peak: 0.1, dur: 0.2 }); this.play('braam'); break;
+      case 'cheer': for (let i = 0; i < 8; i++) this.noiseHit(t + i * 0.1, { freq: 900 + i * 120, q: 0.7, peak: 0.1, dcy: 0.6 }); break;
       default: break;
     }
   }
-  speak(line) {
-    if (!this.ui.voices || this.ui.muted || !window.speechSynthesis) return;
-    try {
-      const u = new SpeechSynthesisUtterance(line.text.replace(/\(.*?\)\s*/g, ''));
-      const c = CAST_BY_ID[line.who];
-      u.rate = 1.05; u.pitch = c?.gender === 'f' ? 1.25 : 0.9; u.volume = 0.9;
-      const vs = speechSynthesis.getVoices().filter((v) => /^en/.test(v.lang));
-      const pick = vs.filter((v) => /India|en-IN/i.test(v.lang + v.name));
-      const list = pick.length ? pick : vs;
-      if (list.length) u.voice = list[(CAST.findIndex((x) => x.id === line.who) + 1) % list.length];
-      speechSynthesis.speak(u);
-    } catch { /* no speech */ }
-  }
-  stopVoices() { try { window.speechSynthesis?.cancel(); } catch { /* */ } }
-  dispose() { this.stopVoices(); this.ctx?.close?.().catch(() => {}); }
+  dispose() { this.ctx?.close?.().catch(() => {}); }
 }
+
+// ---------- game info for the hotspots ----------
+const INFO = {
+  crates: () => ({
+    title: '📦 How crates work',
+    body: `<p>In Campus Royale everyone lands with a ${EQUIPMENT_BY_ID[ROYALE.start.blaster].short} paintball blaster and ${ROYALE.start.hopper} paintballs. Everything else is in supply crates at verified supply spots across the campus, indoors and out.</p>
+      <ul><li>Walk up and press <b>E</b>: the lid opens (everyone sees it open) and the crate panel lists what is inside.</li>
+      <li>Take an item with <b>1–9</b> (or E for the first). The server owns every item, so two players can never take the same one.</li>
+      <li>Crates hold 2–4 things: paintball blasters (with a full hopper), paintball packs, paint refill packs, paint bombs, colour-smoke bombs, cleaning wipes and kits, masks and padded vests (levels 1–3), a paint shield or a paint-scan pulse.</li>
+      <li>Nothing respawns during a match. Out players drop what they carried as a pile. One special supply drop lands mid-match (announced ${ROYALE.airdrop.warn} s ahead) with better gear.</li></ul>`,
+  }),
+  blasters: () => ({
+    title: '🎯 The six paintball blasters',
+    body: `<ul>${EQUIPMENT.map((e) => `<li><b style="color:${e.colour}">${esc(e.name)}</b>: ${esc(BLURB[e.id])} ${e.tag}${e.pellets > 1 ? ` ×${e.pellets}` : ''} paint per hit, ${e.range} m range, hopper ${e.magazine}, reload ${e.reload} s.</li>`).join('')}</ul><p>You carry two (switch with Q). A precision paint hit (on the mask) counts extra.</p>`,
+  }),
+};
 
 export class FilmUI {
   constructor(film, { capture = false } = {}) {
     this.film = film; this.capture = capture;
     const prefs = store.get(PREFS) || {};
-    this.muted = !!prefs.muted; this.cc = prefs.cc !== false; this.voices = !!prefs.voices;
+    this.muted = !!prefs.muted; this.cc = prefs.cc !== false;
     this.audio = new FilmAudio(this);
     this.styleEl = document.createElement('style'); this.styleEl.textContent = STYLE; document.head.append(this.styleEl);
     const el = document.createElement('div'); el.id = 'film'; el.className = capture ? 'capture' : '';
     el.innerHTML = `
-      <div class="stage"></div><div class="lb top"></div><div class="lb bot"></div>
+      <div class="stage"></div>
+      <div class="vig"></div>
       <div class="pnls"></div>
-      <div class="hud"><div class="sc pk"></div><div class="tm"></div><div class="sc cy"></div></div><div class="feed"></div><div class="bang"></div>
       <div class="cap"><div class="k"></div><div class="n"></div><div class="rule"></div></div>
-      <div class="title"><h1></h1><p></p></div>
+      <div class="title"><h1></h1><div class="bar"></div><p></p></div>
       <div class="line"><b></b><span></span></div>
+      <div class="lb top"></div><div class="lb bot"></div>
       <div class="hots"></div>
-      <div class="wipe"></div><div class="fade"></div>
+      <div class="wipe"></div><div class="flash"></div><div class="fade"></div>
       <div class="bigplay">▶</div>
-      <div class="info glass hidden" role="dialog" aria-label="Place info"></div>
+      <div class="info glass hidden" role="dialog" aria-label="About the game"></div>
       <div class="chapters glass hidden" role="menu" aria-label="Scenes"></div>
       <div class="ctl">
         <div class="bar" aria-label="Film progress" role="slider" tabindex="0"><div class="tr"></div><div class="fill"></div><div class="knob"></div><div class="tip"></div></div>
@@ -241,7 +310,6 @@ export class FilmUI {
           <span class="tm"></span><span class="ch"></span><span class="sp"></span>
           <button class="ic" data-k="chapters" title="Scenes" aria-label="Scenes">☰<span class="hide-s"> Scenes</span></button>
           <button class="ic" data-k="cc" title="Captions (C)" aria-label="Captions">CC</button>
-          <button class="ic hide-s" data-k="voices" title="Speak the dialogue" aria-label="Spoken dialogue">🗣</button>
           <button class="ic" data-k="mute" title="Mute (M)" aria-label="Mute">🔊</button>
           <button class="ic" data-k="replay" title="Replay from the start" aria-label="Replay">↺</button>
           <button class="ic" data-k="exit" title="Back to the title (Esc)" aria-label="Exit the film">✕</button>
@@ -250,24 +318,44 @@ export class FilmUI {
     document.body.append(el);
     this.el = el;
     const q = (s) => el.querySelector(s);
-    this.ui = { stage: q('.stage'), pnls: q('.pnls'), hud: q('.hud'), pk: q('.hud .pk'), cy: q('.hud .cy'), tm: q('.hud .tm'), feed: q('.feed'), bang: q('.bang'), cap: q('.cap'), k: q('.cap .k'), n: q('.cap .n'), rule: q('.cap .rule'), title: q('.title'), h1: q('.title h1'), sub: q('.title p'), line: q('.line'), who: q('.line b'), text: q('.line span'), hots: q('.hots'), wipe: q('.wipe'), fade: q('.fade'), info: q('.info'), chapters: q('.chapters'), bar: q('.bar'), fill: q('.bar .fill'), knob: q('.bar .knob'), tip: q('.bar .tip'), time: q('.row .tm'), ch: q('.row .ch'), btn: Object.fromEntries([...el.querySelectorAll('.ic')].map((b) => [b.dataset.k, b])) };
+    this.ui = { stage: q('.stage'), vig: q('.vig'), pnls: q('.pnls'), cap: q('.cap'), k: q('.cap .k'), n: q('.cap .n'), rule: q('.cap .rule'), title: q('.title'), h1: q('.title h1'), tbar: q('.title .bar'), sub: q('.title p'), line: q('.line'), who: q('.line b'), text: q('.line span'), lbt: q('.lb.top'), lbb: q('.lb.bot'), hots: q('.hots'), wipe: q('.wipe'), flash: q('.flash'), fade: q('.fade'), info: q('.info'), chapters: q('.chapters'), bar: q('.bar'), fill: q('.bar .fill'), knob: q('.bar .knob'), tip: q('.bar .tip'), time: q('.row .tm'), ch: q('.row .ch'), btn: Object.fromEntries([...el.querySelectorAll('.ic')].map((b) => [b.dataset.k, b])) };
+    this.buildHud();
     this.panelEls = new Map();
     this.hotEls = new Map();
     this.lastSave = 0;
-    // chapter markers
+    // scene markers
     for (const c of film.chapters) {
       if (c.index === 0) continue;
       const m = document.createElement('div'); m.className = 'mk'; m.style.left = `${(c.t0 / film.duration) * 100}%`; m.title = c.title; this.ui.bar.append(m);
     }
+    // hit markers and big messages for the HUD's player, from the match events
+    this.hitTimes = [];
+    for (const s of film.shots) for (const f of s.fire || []) if (f.hit?.actor && s.hud) this.hitTimes.push({ t: s.t0 + f.t + f.dur, by: f.by, who: f.hit.actor, precision: f.kind === 'precision' && f.hit.head, shield: !!f.hit.shield });
     if (!capture) this.bind();
     this.sync();
+  }
+
+  // The in-match HUD: the same elements and classes as js/paintball/client/index.js buildHud() + royale.js hudParts().
+  buildHud() {
+    const d = (cls, tag = 'div') => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+    const H = { root: d(''), splatter: d('splatter'), top: d('top'), teams: d('teamscores'), timer: d('timer'), my: d('myscore'), feed: d('feed'), map: d('minimap round', 'canvas'), voice: d('voice'), paint: d('paint'), paintLabel: d('label'), meterBox: d('meter'), meter: d('', 'i'), ammo: d('ammo'), name: d('name'), count: d('count'), reloadBox: d('reload'), other: d('other'), cross: d('cross'), hit: d('hitmark'), big: d('big'), msg: d('center-msg'), hint: d('hint'), inv: d('pb-inv'), zone: d('pb-zoneinfo'), left: d('pb-left'), drop: d('pb-dropinfo'), prompt: d('pb-prompt'), channel: d('pb-channel'), chanBar: d('', 'i'), big2: d('pb-bigmap hidden', 'canvas'), crate: d('pb-crate') };
+    H.root.id = 'pb-hud'; H.root.className = 'royale inv-open';
+    H.map.width = 170; H.map.height = 170;
+    H.voice.innerHTML = '<div class="me">🎤 Voice off</div>';
+    H.top.append(H.teams, H.timer); H.meterBox.append(H.meter); H.paint.append(H.paintLabel, H.meterBox); H.reloadBox.append(d('', 'i'));
+    H.ammo.append(H.name, H.count, H.reloadBox, H.other); H.channel.append(H.chanBar);
+    H.hint.textContent = HINT;
+    H.root.append(H.splatter, H.top, H.my, H.feed, H.map, H.voice, H.paint, H.ammo, H.cross, H.hit, H.big, H.msg, H.hint, H.inv, H.zone, H.left, H.drop, H.prompt, H.channel, H.big2, H.crate);
+    H.root.style.opacity = '0';
+    this.el.querySelector('.pnls').before(H.root);
+    this.hud = H;
   }
 
   bind() {
     const ui = this.ui; const f = this.film;
     const act = {
       play: () => f.toggle(), prev: () => this.chapter(-1), next: () => this.chapter(1), chapters: () => this.toggleChapters(),
-      cc: () => this.setCC(!this.cc), mute: () => this.setMute(!this.muted), voices: () => this.setVoices(!this.voices),
+      cc: () => this.setCC(!this.cc), mute: () => this.setMute(!this.muted),
       replay: () => { f.seek(0); f.play(); }, exit: () => f.finish(),
     };
     for (const [k, b] of Object.entries(ui.btn)) b.addEventListener('click', (e) => { e.stopPropagation(); b.blur(); act[k](); this.poke(); });
@@ -290,6 +378,8 @@ export class FilmUI {
     this.onMove = () => this.poke();
     this.el.addEventListener('pointermove', this.onMove);
     window.addEventListener('pointermove', this.onMove);
+    this.onResize = () => { this.sig = {}; };
+    window.addEventListener('resize', this.onResize);
     this.poke();
   }
 
@@ -312,7 +402,7 @@ export class FilmUI {
         else if (!this.ui.chapters.classList.contains('hidden')) this.toggleChapters(false);
         else f.finish();
         break;
-      default: if (/^Digit[1-7]$/.test(e.code)) { const c = f.chapters[Number(e.code.slice(5)) - 1]; if (c) f.seek(c.t0 + 0.01); }
+      default: if (/^Digit[1-8]$/.test(e.code)) { const c = f.chapters[Number(e.code.slice(5)) - 1]; if (c) f.seek(c.t0 + 0.01); }
     }
   }
 
@@ -343,9 +433,8 @@ export class FilmUI {
   }
 
   setCC(on) { this.cc = on; this.savePrefs(); this.sync(); }
-  setVoices(on) { this.voices = on; if (!on) this.audio.stopVoices(); this.savePrefs(); this.sync(); }
   setMute(on) { this.muted = on; this.audio.setMuted(on); this.film.setMuted(on); this.savePrefs(); this.sync(); }
-  savePrefs() { store.set(PREFS, { muted: this.muted, cc: this.cc, voices: this.voices }); }
+  savePrefs() { store.set(PREFS, { muted: this.muted, cc: this.cc }); }
 
   // Remember where the viewer is (resume from the title screen). t = 0 forgets it.
   remember(t = this.film.t) { if (this.capture) return; store.set(KEY, t > 0 ? { t: Math.round(t * 100) / 100, d: this.film.duration, at: Date.now() } : null); }
@@ -359,54 +448,73 @@ export class FilmUI {
     b.play.setAttribute('aria-label', f.paused ? 'Play' : 'Pause');
     b.mute.textContent = this.muted ? '🔇' : '🔊';
     b.cc.classList.toggle('off', !this.cc);
-    b.voices.classList.toggle('off', !this.voices);
     if (f.paused) this.el.classList.remove('idle');
   }
 
-  // Sound cues and spoken lines crossed between t0 and t1 (normal playback only, not jumps).
+  // Sound cues crossed between t0 and t1 (normal playback only, not jumps).
   fire(t0, t1) {
     if (this.capture || t1 <= t0 || t1 - t0 > 0.5) return;
-    for (const c of this.film.cues) if (c.t >= t0 && c.t < t1) this.audio.play(c.kind);
-    for (const l of this.film.lines) if (l.t0 >= t0 && l.t0 < t1) this.audio.speak(l);
+    for (const c of this.film.cues) if (c.t >= t0 && c.t < t1) this.audio.play(c.kind, c.p);
+    for (const g of this.hitTimes) if (g.t >= t0 && g.t < t1 && g.shield) this.audio.play('shieldHit');
+    for (const e of this.film.events) if (e.t >= t0 && e.t < t1 && e.type === 'tag') this.audio.play('jingle');
     if (t1 - this.lastSave > 3 || t1 < this.lastSave) { this.lastSave = t1; this.remember(t1); }
   }
 
   // ---------- per frame ----------
   update(t) {
     const f = this.film; const ui = this.ui; const D = f.duration;
-    // fades: in from black, out to black, short dips at scene changes; a paint wipe into the match
-    let black = 1 - smooth(0, 1.6, t);
-    black = Math.max(black, smooth(D - 1.6, D - 0.1, t));
-    for (const d of f.dips) if (d !== f.chapters[4].t0) black = Math.max(black, smooth(d - 0.5, d, t) * (1 - smooth(d, d + 0.55, t)));
+    const s = f.shots[f.shotAt(t)]; const lt = t - s.t0;
+    // fades: in from black, out to black, short dips at scene changes, a paint wipe into the match, white flashes
+    let black = 1 - smooth(0, 1.4, t);
+    black = Math.max(black, smooth(D - 1.4, D - 0.05, t));
+    for (const d of f.dips) if (d !== f.chapters[3].t0) black = Math.max(black, smooth(d - 0.35, d, t) * (1 - smooth(d, d + 0.4, t)));
     ui.fade.style.opacity = black.toFixed(3);
-    const w = f.chapters[4].t0; const wu = (t - (w - 0.45)) / 0.9;
+    const w = f.chapters[3].t0; const wu = (t - (w - 0.45)) / 0.9;
     ui.wipe.style.transform = wu > 0 && wu < 1 ? `translateX(${(-120 + wu * 240).toFixed(1)}%)` : 'translateX(-200%)';
+    let flash = 0;
+    for (const m of ['countdown', 'start', 'end']) { const x = f.marks[m]; if (x != null) flash = Math.max(flash, (m === 'start' ? 0 : 1) * (1 - smooth(x, x + 0.5, t)) * (t >= x ? 0.55 : 0)); }
+    const go = (f.marks.countdown ?? -9) + 3.3; flash = Math.max(flash, t >= go ? 0.5 * (1 - smooth(go, go + 0.5, t)) : 0);
+    ui.flash.style.opacity = flash.toFixed(3);
+    // letterbox: per shot (0 in gameplay with the HUD, 1 in the cinematic shots)
+    const lbv = typeof s.lb === 'function' ? s.lb(lt) : s.lb ?? 1;
+    const prev = f.shots[f.shotAt(t) - 1]; const pv = prev ? (typeof prev.lb === 'function' ? prev.lb(prev.dur) : prev.lb ?? 1) : lbv;
+    const lb = pv + (lbv - pv) * smooth(0, 0.35, lt);
+    ui.lbt.style.transform = ui.lbb.style.transform = `scaleY(${lb.toFixed(3)})`; ui.lbt.style.transformOrigin = 'top'; ui.lbb.style.transformOrigin = 'bottom';
+    ui.vig.style.opacity = (0.4 + 0.6 * lb).toFixed(2);
     // title cards
     const card = f.titles.find((c) => t >= c.t0 && t < c.t1);
     if (card) {
-      const a = smooth(card.t0, card.t0 + 1.4, t) * (1 - smooth(card.t1 - 1.2, card.t1, t));
+      const a = smooth(card.t0, card.t0 + 0.9, t) * (1 - smooth(card.t1 - 0.8, card.t1, t));
       ui.title.style.opacity = a.toFixed(3);
-      if (ui.sub.textContent !== card.sub) { ui.h1.textContent = card.title; ui.sub.textContent = card.sub; }
-      const sp = 0.24 + 0.08 * (1 - smooth(card.t0, card.t1, t));
-      ui.h1.style.letterSpacing = `${sp.toFixed(3)}em`; ui.h1.style.paddingLeft = `${sp.toFixed(3)}em`;
+      ui.title.className = `title ${card.style || ''}`;
+      if (ui.title.dataset.k !== card.title) {
+        ui.title.dataset.k = card.title;
+        ui.h1.innerHTML = card.style === 'open' ? `<span class="w">${esc(card.title.replace(/ PLAY WITH BITSIANS$/, ''))}</span><span class="g">PLAY WITH BITSIANS</span>` : card.style === 'end' ? `<span class="g">${esc(card.title)}</span>` : esc(card.title);
+        ui.sub.textContent = card.sub;
+      }
+      const k = smooth(card.t0, card.t0 + 1.2, t);
+      ui.h1.style.transform = `scale(${(1.12 - 0.12 * k).toFixed(3)})`;
+      ui.tbar.style.transform = `scaleX(${smooth(card.t0 + 0.4, card.t0 + 1.6, t).toFixed(3)})`;
     } else ui.title.style.opacity = '0';
-    // scene / place captions
+    // trailer captions
     const cap = f.captions.find((c) => t >= c.t0 - 0.01 && t < c.t1);
     if (cap) {
-      const a = smooth(cap.t0, cap.t0 + 0.8, t) * (1 - smooth(cap.t1 - 0.7, cap.t1, t));
+      const a = smooth(cap.t0, cap.t0 + 0.25, t) * (1 - smooth(cap.t1 - 0.4, cap.t1, t));
       ui.cap.style.opacity = a.toFixed(3);
-      ui.cap.style.transform = `translateX(${((1 - smooth(cap.t0, cap.t0 + 1, t)) * -24).toFixed(1)}px)`;
-      ui.rule.style.width = `${(smooth(cap.t0 + 0.2, cap.t0 + 1.2, t) * 100).toFixed(1)}%`;
-      ui.k.textContent = cap.kicker || ''; ui.n.textContent = cap.title;
+      const st = cap.style || 'plain';
+      if (ui.cap.className !== `cap ${st}`) ui.cap.className = `cap ${st}`;
+      const pop = 1 - smooth(cap.t0, cap.t0 + 0.3, t);
+      ui.cap.style.transform = st === 'punch' ? `translate(-50%, -50%) scale(${(1 + pop * 0.35).toFixed(3)}) skewX(-6deg)` : `translateX(${(pop * -30).toFixed(1)}px)`;
+      ui.rule.style.width = `${(smooth(cap.t0 + 0.1, cap.t0 + 0.8, t) * 100).toFixed(1)}%`;
+      if (ui.n.textContent !== cap.title) { ui.k.textContent = cap.kicker || ''; ui.n.textContent = cap.title; }
     } else ui.cap.style.opacity = '0';
-    // dialogue
+    // squad comms
     const line = [...f.lines].reverse().find((l) => t >= l.t0 && t < l.t1);
     if (line) {
-      ui.line.style.opacity = (smooth(line.t0, line.t0 + 0.2, t) * (1 - smooth(line.t1 - 0.25, line.t1, t))).toFixed(3);
-      const name = line.who === 'all' ? 'Everyone' : CAST_BY_ID[line.who]?.name || line.who;
-      if (ui.text.textContent !== line.text) { ui.who.textContent = name; ui.who.style.color = SPEAKER_COLOUR(line.who); ui.text.textContent = line.text; }
+      ui.line.style.opacity = (smooth(line.t0, line.t0 + 0.15, t) * (1 - smooth(line.t1 - 0.2, line.t1, t))).toFixed(3);
+      if (ui.text.textContent !== line.text) { ui.who.textContent = CAST_BY_ID[line.who]?.name || line.who; ui.who.style.color = SPEAKER_COLOUR(line.who); ui.line.style.borderLeftColor = SPEAKER_COLOUR(line.who); ui.text.textContent = line.text; }
     } else ui.line.style.opacity = '0';
-    this.updateHud(t);
+    this.updateHud(t, s, lt);
     this.updatePanels(t);
     if (!this.capture) this.updateHots(t);
     // the player bar
@@ -421,186 +529,353 @@ export class FilmUI {
     }
   }
 
-  updateHud(t) {
-    const f = this.film; const ui = this.ui;
-    const s = f.shots[f.shotAt(t)];
-    const on = !!s.hud;
-    ui.hud.style.opacity = on ? '1' : '0';
-    ui.feed.style.opacity = on ? '1' : '0';
-    if (!on) { ui.bang.style.opacity = '0'; return; }
-    const [p, c] = f.score(t);
-    const left = f.matchClock(t);
-    ui.tm.textContent = fmt(Math.ceil(left));
-    ui.tm.classList.toggle('low', left <= 15);
-    ui.pk.innerHTML = `${p}<small>PINK</small>`; ui.pk.style.background = TEAMS[0].colour;
-    ui.cy.innerHTML = `${c}<small>CYAN</small>`; ui.cy.style.background = TEAMS[1].colour;
-    const recent = f.tags.filter((g) => g.t <= t && t - g.t < 5).slice(-3);
-    const key = recent.map((g) => g.t).join();
-    if (ui.feed.dataset.k !== key) {
-      ui.feed.dataset.k = key;
-      ui.feed.innerHTML = recent.map((g) => { const a = CAST_BY_ID[g.by]; const b = CAST_BY_ID[g.who]; return `<div><span style="color:${teamColour(a)}">${a.name}</span><i>${g.how === 'precision' ? '🎯' : g.how === 'splash' ? '💥' : '🎨'}</i><span style="color:${teamColour(b)}">${b.name}</span></div>`; }).join('');
+  setText(el, v) { if (el.textContent !== v) el.textContent = v; }
+  setHtml(el, v) { if (el.dataset.h !== v) { el.dataset.h = v; el.innerHTML = v; } }
+
+  // ---------- the HUD (a copy of the live game's, driven by the film's match state) ----------
+  updateHud(t, s, lt) {
+    const f = this.film; const H = this.hud; const cfg = s.hud;
+    if (!cfg) { H.root.style.opacity = '0'; return; }
+    const fade = cfg.fadeIn ? smooth(cfg.fadeIn[0], cfg.fadeIn[1], lt) : smooth(0, 0.2, lt) + (f.shots[f.shotAt(t) - 1]?.hud ? 1 : 0);
+    H.root.style.opacity = Math.min(1, fade).toFixed(3);
+    const mode = cfg.mode || 'full';
+    const pov = cfg.pov || 'advait'; const me = f.stateAt(pov, t); const inv = me.inv;
+    const n = f.by[pov];
+    const pos = n?.group.visible ? n.pos : (this.lastPos ||= new THREE.Vector3(MATCH.landing.x, 0, MATCH.landing.z));
+    if (n?.group.visible) this.lastPos = n.pos.clone();
+    const yaw = n?.group.visible ? n.group.rotation.y : 0;
+    const mt = f.matchTime(t);
+    const playing = mode !== 'loot' && mode !== 'countdown' && mt != null && mt >= 0;
+    const show = (el, on) => el.classList.toggle('hidden', !on);
+    const full = mode === 'full' || mode === 'scope';
+    for (const el of [H.top, H.my, H.map, H.voice, H.left, H.hint]) show(el, full || mode === 'countdown');
+    show(H.zone, full || mode === 'countdown');
+    for (const el of [H.paint, H.ammo, H.inv, H.cross]) show(el, mode !== 'feed');
+    show(H.feed, true);
+    H.root.classList.toggle('zoom', mode === 'scope');
+    // top: squad scores and the timer (the time until the zone's next step)
+    const Z = zoneState(mt ?? 0);
+    this.setText(H.timer, mode === 'countdown' ? 'GET READY' : fmtTime(Math.max(0, Z.ends - (mt ?? 0))));
+    const ts = f.teamScores(t);
+    this.setHtml(H.teams, ts.map((v, k) => `<span class="tscore" style="--team:${TEAMS[k].colour}">${TEAMS[k].name} ${v}</span>`).join(''));
+    const score = me.tags * 100 + me.assists * 40;
+    this.setText(H.my, `⭐ ${score}  ·  🎨 ${me.tags} tags  ·  🤝 ${me.assists}  ·  📦 ${me.supplies}`);
+    const st = f.standing(t);
+    this.setText(H.left, `👥 ${st.players} left · ${st.squads} squads · ${MATCH.mode} · Campus Royale`);
+    // paint zone line (royale.js updateHud)
+    const left = Math.max(0, Z.ends - (mt ?? 0)); const dOut = Math.hypot(pos.x - Z.x, pos.z - Z.z) - Z.r;
+    let zt = !playing ? 'Paint zone: the whole campus' : Z.shrinking ? `🎨 Paint zone closing · ${fmtTime(left)}` : Z.r > 0.5 ? `🎨 Paint zone shrinks in ${fmtTime(left)}` : '🎨 Paint zone closed';
+    if (dOut > 0 && playing) zt += ` · OUTSIDE: ${Math.round(dOut)} m to safety (+${Z.dps}/s paint)`;
+    else if (!Z.shrinking && left < 20 && playing && Z.r > 0.5) zt += ' · get inside the white circle!';
+    this.setText(H.zone, zt); H.zone.classList.toggle('warn', dOut > 0 && playing);
+    // the special supply drop
+    const A = MATCH.airdrop; const ann = ROYALE.airdrop.at - ROYALE.airdrop.warn;
+    const dist = Math.round(Math.hypot(A.x - pos.x, A.z - pos.z)); const dn = dirName(A.x - pos.x, A.z - pos.z);
+    const dt = playing && mt >= ROYALE.airdrop.at ? `📦 Supply drop landed ${dist} m ${dn}` : playing && mt >= ann ? `📦 Supply drop in ${fmtTime(ROYALE.airdrop.at - mt)} · ${dist} m ${dn}` : '';
+    this.setText(H.drop, dt); H.drop.style.display = dt && full ? '' : 'none';
+    // feed: tags, outs, clean-offs, notes from the last 6 s
+    const feed = f.feed.filter((e) => e.t <= t && t - e.t < 6 && (!e.only || e.only === pov)).slice(-6);
+    this.setHtml(H.feed, feed.map((e) => `<div class="${e.mine?.includes(pov) ? 'mine' : ''}">${esc(e.text)}</div>`).join(''));
+    // paint meter, blaster, paintballs, inventory
+    H.meter.style.width = `${(me.paint / PAINT_MAX) * 100}%`;
+    this.setText(H.paintLabel, `Paint ${Math.round(me.paint)} / ${PAINT_MAX}`);
+    const b = inv.slot ? inv.secondary : inv.primary;
+    const e = EQUIPMENT_BY_ID[b] || { name: 'No paintball blaster: open a supply crate', short: '—', colour: '#bbb' };
+    const o = EQUIPMENT_BY_ID[inv.slot ? inv.primary : inv.secondary] || { short: 'empty' };
+    this.setText(H.name, e.name); H.name.style.color = e.colour;
+    this.setHtml(H.count, `${inv.hopper[inv.slot]}<small> / ${inv.ammo[b] || 0} paintballs remaining</small>`);
+    H.reloadBox.style.visibility = 'hidden';
+    this.setText(H.other, `Q: ${o.short} (${inv.hopper[inv.slot ? 0 : 1]})`);
+    this.setHtml(H.inv, invHtml(inv));
+    // center message, prompt, channel
+    let msg = '';
+    if (me.down) msg = `🎨 Fully painted! A squadmate can clean you off (E) · ${ROYALE.down} s`;
+    else if (me.shieldUntil > t) msg = `🛡️ Paint shield up · ${Math.ceil(me.shieldUntil - t)} s (no firing from inside)`;
+    this.setText(H.msg, msg); H.msg.style.display = msg ? '' : 'none';
+    const pr = (cfg.prompt || []).find(([a, z]) => lt >= a && lt < z);
+    this.setText(H.prompt, pr ? pr[2] : ''); H.prompt.style.display = pr ? '' : 'none';
+    const ch = cfg.channel;
+    const on = ch && lt >= ch[0] && lt < ch[1];
+    H.channel.style.display = on ? '' : 'none';
+    if (on) { H.chanBar.style.width = `${(100 * (lt - ch[0])) / (ch[1] - ch[0])}%`; H.channel.dataset.label = ch[2]; }
+    // big messages: the countdown, TAG! +100, ASSIST +40
+    let big = ''; let bc = '#fff'; let bs = 1;
+    if (mode === 'countdown') {
+      if (lt >= 0.3 && lt < 3.3) { big = String(3 - Math.floor(lt - 0.3)); bc = '#ffd23d'; bs = 1.4 - 0.4 * smooth(0, 0.25, (lt - 0.3) % 1); } else if (lt >= 3.3) { big = 'PAINTBALL MATCH STARTED!'; bc = '#7cff4f'; bs = 1.25 - 0.25 * smooth(3.3, 3.6, lt); }
+    } else {
+      const tg = f.events.filter((ev) => ev.type === 'tag' && ev.t <= t && t - ev.t < 1.1 && (ev.by === pov || ev.assists?.includes(pov))).at(-1);
+      if (tg) { big = tg.by === pov ? 'TAG! +100' : 'ASSIST +40'; bc = tg.by === pov ? '#7cff4f' : '#30d5ff'; bs = 1.3 - 0.3 * smooth(tg.t, tg.t + 0.2, t); }
     }
-    const last = [...f.tags].reverse().find((g) => g.t <= t && t - g.t < 1.6);
-    if (last) {
-      const u = (t - last.t) / 1.6;
-      ui.bang.textContent = { precision: 'PRECISION PAINT HIT!', splash: 'SPLASH TAG!', final: 'FINAL TAG!' }[last.how] || 'TAGGED!';
-      ui.bang.style.color = teamColour(CAST_BY_ID[last.by]);
-      ui.bang.style.opacity = (smooth(0, 0.08, u) * (1 - smooth(0.7, 1, u))).toFixed(3);
-      ui.bang.style.transform = `translate(-50%, -50%) scale(${(1.35 - 0.35 * smooth(0, 0.15, u)).toFixed(3)}) rotate(-4deg)`;
-    } else ui.bang.style.opacity = '0';
+    this.setText(H.big, big); H.big.style.color = bc; H.big.style.transform = `translate(-50%, -50%) scale(${bs.toFixed(3)})`;
+    if (mode === 'countdown' && lt >= 3.3) H.big.style.fontSize = 'clamp(22px, 5.4vw, 60px)'; else H.big.style.fontSize = '';
+    // hit markers
+    const hm = this.hitTimes.filter((g) => g.by === pov && t >= g.t && t - g.t < 0.35).at(-1);
+    if (hm) { this.setText(H.hit, hm.shield ? '🛡' : '✕'); H.hit.className = `hitmark${hm.precision ? ' precision' : ''}`; const u = (t - hm.t) / 0.35; H.hit.style.opacity = (1 - u).toFixed(2); H.hit.style.transform = `scale(${(1.4 - 0.5 * u).toFixed(2)})`; } else H.hit.style.opacity = '0';
+    // the crate panel
+    this.crate(cfg.crate, lt);
+    // minimap and big map
+    if (!H.map.classList.contains('hidden')) this.drawMini(H.map, t, pos, yaw, pov, playing ? Z : null, mt);
+    const bigOn = !!cfg.bigmap && lt > 0.3;
+    H.big2.classList.toggle('hidden', !bigOn);
+    if (bigOn) this.drawBig(H.big2, t, pos, yaw, pov, Z, mt);
   }
 
-  // ---------- story overlays ----------
+  crate(c, lt) {
+    const el = this.hud.crate;
+    const on = c && lt >= c.from && lt < c.to;
+    el.style.display = on ? '' : 'none';
+    if (!on) return;
+    const left = c.items.map((it, i) => ({ it, i })).filter(({ i }) => !(c.take[i] != null && lt >= c.take[i]));
+    const taking = c.items.findIndex((_, i) => c.take[i] != null && lt >= c.take[i] - 0.3 && lt < c.take[i]);
+    const html = `<b>${esc(c.title)}</b>${left.length ? left.map(({ it: [id, n], i }, k) => { const it = ITEMS[id]; return `<button class="pb-crate-item${i === taking ? ' taking' : ''}" data-pb-item="${id}"><span class="k">${k + 1}</span><span class="dot" style="background:${it.colour}"></span>${esc(`${it.icon} ${it.name}${n > 1 ? ` ×${n}` : ''}`)}</button>`; }).join('') : '<div class="pb-note">Empty.</div>'}<div class="pb-note">Press 1–9 (or E for the first) to take an item.</div>`;
+    this.setHtml(el, html);
+  }
+
+  // The minimap (royale.js drawMini): a north-up crop 90 m round the player, the zone, the drop, the squadmate.
+  drawMini(cv, t, pos, yaw, pov, Z, mt) {
+    const g = cv.getContext('2d');
+    drawMiniBase(g, cv, pos);
+    const w = miniXform(cv, pos);
+    if (Z) drawZone(g, w, Z);
+    this.mapMarks(g, w, t, pov, mt, 3);
+    drawArrow(g, w.X(pos.x), w.Z(pos.z), yaw);
+  }
+  drawBig(cv, t, pos, yaw, pov, Z, mt) {
+    const W = Math.min(innerWidth - 40, 720); const Hh = innerHeight - 90; const scale = Math.min(W / 1100, Hh / 1790);
+    const cw = Math.round(1100 * scale); const ch = Math.round(1790 * scale);
+    if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+    const g = cv.getContext('2d'); const w = mapXform(cv);
+    g.fillStyle = '#0b1020'; g.fillRect(0, 0, cv.width, cv.height);
+    drawBase(g, w); drawZone(g, w, Z);
+    this.mapMarks(g, w, t, pov, mt, 4, true);
+    drawArrow(g, w.X(pos.x), w.Z(pos.z), yaw);
+  }
+  mapMarks(g, w, t, pov, mt, radius, labels = false) {
+    const f = this.film; const A = MATCH.airdrop;
+    if (mt != null && mt >= ROYALE.airdrop.at - ROYALE.airdrop.warn) { g.fillStyle = '#ffd23d'; g.strokeStyle = '#ff3d7f'; g.lineWidth = 2; g.beginPath(); g.rect(w.X(A.x) - 5, w.Z(A.z) - 5, 10, 10); g.fill(); g.stroke(); if (labels) { g.fillStyle = '#fff'; g.font = '700 12px system-ui'; g.fillText('📦 supply drop', w.X(A.x) + 8, w.Z(A.z) + 4); } }
+    const team = CAST_BY_ID[pov].team;
+    for (const c of CAST) {
+      if (c.id === pov || c.team !== team) continue;
+      const n = f.by[c.id]; if (!n.group.visible || f.stateAt(c.id, t).out) continue;
+      g.fillStyle = teamColour(c); g.beginPath(); g.arc(w.X(n.pos.x), w.Z(n.pos.z), radius, 0, Math.PI * 2); g.fill();
+    }
+  }
+
+  // ---------- overlays ----------
   updatePanels(t) {
     const f = this.film;
     for (const p of f.panels) {
       const on = t >= p.t0 && t < p.t1;
       let el = this.panelEls.get(p);
-      if (!on) { if (el) el.style.opacity = '0'; continue; }
+      if (!on) { if (el) el.style.display = 'none'; continue; }
       if (!el) { el = document.createElement('div'); this.ui.pnls.append(el); this.panelEls.set(p, el); }
+      el.style.display = '';
       const lt = t - p.t0;
-      const a = p.kind === 'flash' ? 1 - smooth(0, 0.6, lt) : smooth(0, 0.35, lt) * (1 - smooth(p.t1 - p.t0 - 0.35, p.t1 - p.t0, lt));
+      const a = smooth(0, 0.3, lt) * (1 - smooth(p.t1 - p.t0 - 0.3, p.t1 - p.t0, lt));
       el.style.opacity = a.toFixed(3);
       const html = this[`panel_${p.kind}`]?.(lt, el, p, t);
-      if (html != null && el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+      if (html != null && el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; this.after?.(el, p); this.after = null; }
+      this[`draw_${p.kind}`]?.(lt, el, p, t);
     }
   }
 
-  panel_chat(lt, el) {
-    el.className = 'pnl chat';
-    const M = [[0.2, 'vikram', '🎨 created “Med-C Paintball · Sat 4 PM”'], [1.3, 'sana', 'I’ll referee + host! Bring water 💧'], [2.5, 'aanya', 'PINK TEAM 💗💗'], [3.6, 'rohan', 'Cyan > Pink 😎'], [4.7, 'ishaan', '+3 from Gandhi Bhawan coming to watch'], [5.9, 'neha', 'Masks? Paintballs?'], [7.1, 'sana', 'Sorted: masks + 1,200 washable paintballs 🎯']];
-    const shown = M.filter((m) => lt >= m[0]);
-    return `<h4>📱 BITSians · Paintball 🎨</h4>${shown.map(([, who, text]) => `<div class="m${who === 'vikram' ? ' me' : ''}"><b style="color:${who === 'vikram' ? '#16a085' : '#2d3436'}">${CAST_BY_ID[who].name}</b>${esc(text)}</div>`).join('')}`;
+  // Scene 1: the tactical map, drawn from the campus outline and the verified landing / supply registries.
+  panel_tactical(lt, el) {
+    el.className = 'intel';
+    const S = this.film.spots && readSpots(this.film.spots);
+    const areas = S ? supplyAreas(S) : [];
+    this.intelAreas = areas;
+    const step = (k) => lt > 2.6 + k * 0.55;
+    return `<div class="mapbox"><canvas></canvas></div><div class="side">
+      <h4>ARENA INTEL</h4><div class="big">BITS PILANI<br>WHOLE CAMPUS</div>
+      <div class="stat" style="--c:#ffffff"><span>Campus boundary</span><b>${Math.round(perimeter() / 10) / 100} km</b></div>
+      <div class="stat${lt > 1.6 ? '' : ' off'}" style="--c:#f5f6fa"><span>🪂 Landing spots</span><b>${S ? S.drops.length : '…'}</b></div>
+      <div class="stat${lt > 2.2 ? '' : ' off'}" style="--c:#30d5ff"><span>📦 Supply spots</span><b>${S ? S.supplies.length : '…'}</b></div>
+      ${areas.slice(0, 4).map((a, k) => `<div class="stat${step(k) ? '' : ' off'}" style="--c:#ffd23d"><span>${esc(a.name)}</span><b>${a.n}</b></div>`).join('')}
+      <div class="stat${lt > 5.2 ? '' : ' off'}" style="--c:#ff3d7f"><span>🎨 Paint zone</span><b>${ZONE_PHASES.length} phases</b></div></div>`;
+  }
+  draw_tactical(lt, el) {
+    const cv = el.querySelector('canvas'); if (!cv) return;
+    const Hh = Math.max(220, Math.min(innerHeight * 0.68, 640)); const k = Hh / 1820;
+    const cw = Math.round(1130 * k); const chh = Math.round(Hh);
+    if (cv.width !== cw || cv.height !== chh) { cv.width = cw; cv.height = chh; cv.style.width = `${cw}px`; cv.style.height = `${chh}px`; }
+    const g = cv.getContext('2d'); const w = mapXform(cv, 4);
+    g.fillStyle = '#06101c'; g.fillRect(0, 0, cv.width, cv.height);
+    g.globalAlpha = smooth(0, 1.2, lt); drawBase(g, w); g.globalAlpha = 1;
+    // a cyan tactical grid
+    g.strokeStyle = 'rgba(48,213,255,0.16)'; g.lineWidth = 1;
+    for (let x = -400; x <= 700; x += 100) { g.beginPath(); g.moveTo(w.X(x), 0); g.lineTo(w.X(x), cv.height); g.stroke(); }
+    for (let z = -400; z <= 1400; z += 100) { g.beginPath(); g.moveTo(0, w.Z(z)); g.lineTo(cv.width, w.Z(z)); g.stroke(); }
+    // the boundary, tracing itself
+    const pts = boundaryPts();
+    const upto = smooth(0.2, 2.2, lt) * pts.total;
+    g.strokeStyle = '#ffd23d'; g.lineWidth = 3; g.shadowColor = '#ffd23d'; g.shadowBlur = 8; g.beginPath();
+    let d = 0;
+    for (let i = 0; i < pts.p.length; i++) {
+      const [x, z] = pts.p[i];
+      if (i === 0) { g.moveTo(w.X(x), w.Z(z)); continue; }
+      const [x0, z0] = pts.p[i - 1]; const L = Math.hypot(x - x0, z - z0);
+      if (d + L <= upto) { g.lineTo(w.X(x), w.Z(z)); d += L; } else { const u = (upto - d) / L; g.lineTo(w.X(x0 + (x - x0) * u), w.Z(z0 + (z - z0) * u)); break; }
+    }
+    g.stroke(); g.shadowBlur = 0;
+    const S = this.film.spots && readSpots(this.film.spots);
+    if (S) {
+      g.fillStyle = `rgba(255,255,255,${(0.6 * smooth(1.4, 2.2, lt)).toFixed(2)})`;
+      for (const q of S.drops) g.fillRect(w.X(q.x) - 0.75, w.Z(q.z) - 0.75, 1.5, 1.5);
+      const sa = smooth(2.0, 2.8, lt);
+      for (const [i, q] of S.supplies.entries()) {
+        const ping = ((lt * 1.3 + i * 0.137) % 1);
+        g.fillStyle = `rgba(48,213,255,${(0.9 * sa).toFixed(2)})`; g.fillRect(w.X(q.x) - 1.5, w.Z(q.z) - 1.5, 3, 3);
+        if (i % 9 === 0 && lt > 2.2) { g.strokeStyle = `rgba(48,213,255,${(0.6 * (1 - ping)).toFixed(2)})`; g.lineWidth = 1; g.beginPath(); g.arc(w.X(q.x), w.Z(q.z), 2 + ping * 8, 0, Math.PI * 2); g.stroke(); }
+      }
+      // the supply areas (the densest clusters of supply spots)
+      (this.intelAreas || []).slice(0, 4).forEach((a, k) => {
+        const u = smooth(2.6 + k * 0.55, 3.1 + k * 0.55, lt); if (u <= 0) return;
+        g.strokeStyle = '#ffd23d'; g.lineWidth = 2; g.setLineDash([4, 3]); g.beginPath(); g.arc(w.X(a.x), w.Z(a.z), (6 + a.r * w.k) * (0.6 + 0.4 * u), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      });
+    }
+    // key locations
+    const labels = [['Clock Tower', -6, -60], ['Rotunda', 0, 0], ['M Lawns', 107, 0], ['NAB', 30, 90], ['Library', 205, -238], ['Krishna Bhawan', 120, 110], ['Gymkhana', 303, 387], ['Med-C Ground', 395, 640], ['Saraswati Mandir', 104, 676]];
+    labels.forEach(([name, x, z], k) => {
+      const u = smooth(4.0 + k * 0.18, 4.4 + k * 0.18, lt); if (u <= 0) return;
+      g.globalAlpha = u; g.fillStyle = '#ff3d7f'; g.beginPath(); g.arc(w.X(x), w.Z(z), 3.5, 0, Math.PI * 2); g.fill();
+      g.font = `800 ${Math.max(9, Math.round(cv.height / 52))}px system-ui`; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(name, w.X(x) + 6, w.Z(z) + 4); g.fillStyle = '#fff'; g.fillText(name, w.X(x) + 6, w.Z(z) + 4); g.globalAlpha = 1;
+    });
+    // a scan line sweeping down
+    const sy = ((lt * 0.35) % 1) * cv.height;
+    const gr = g.createLinearGradient(0, sy - 40, 0, sy); gr.addColorStop(0, 'rgba(48,213,255,0)'); gr.addColorStop(1, 'rgba(48,213,255,0.35)');
+    g.fillStyle = gr; g.fillRect(0, sy - 40, cv.width, 40);
   }
 
-  panel_plan(lt, el) {
-    el.className = 'pnl plan glass';
-    const b = MEDC.bounds; const W = b.maxX - b.minX; const H = b.maxZ - b.minZ; const S = 8;
-    const x = (v) => ((v - b.minX) * S).toFixed(1); const z = (v) => ((v - b.minZ) * S).toFixed(1);
-    const step = Math.floor(lt / 1.2);
-    const solids = MEDC.solids.map((o, k) => (o.kind === 'cyl'
-      ? `<circle cx="${x(o.x)}" cy="${z(o.z)}" r="${o.r * S}" fill="${['#ff3d7f', '#30d5ff', '#ffd23d', '#7cff4f', '#b26bff', '#ff8a1f'][k % 6]}"/>`
-      : `<rect x="${x(o.minX)}" y="${z(o.minZ)}" width="${((o.maxX - o.minX) * S).toFixed(1)}" height="${((o.maxZ - o.minZ) * S).toFixed(1)}" rx="4" fill="${['#ff3d7f', '#30d5ff', '#ffd23d', '#7cff4f', '#b26bff', '#ff8a1f'][k % 6]}"/>`)).join('');
-    const sp = MEDC.spawns['2'].map((s) => `<circle cx="${x(s.x)}" cy="${z(s.z)}" r="7" fill="none" stroke="${TEAMS[s.group].colour}" stroke-width="3"/>`).join('');
-    const arrows = step >= 3 ? `<path d="M ${x(MEDC.bounds.minX + 4)} ${z(MEDC.centre.z + 8)} Q ${x(MEDC.centre.x - 14)} ${z(MEDC.centre.z + 14)} ${x(MEDC.centre.x - 6)} ${z(MEDC.centre.z + 11)}" stroke="#ff3d7f" stroke-width="4" fill="none" stroke-dasharray="10 7"/><path d="M ${x(MEDC.bounds.maxX - 4)} ${z(MEDC.centre.z - 8)} Q ${x(MEDC.centre.x + 14)} ${z(MEDC.centre.z - 14)} ${x(MEDC.centre.x + 6)} ${z(MEDC.centre.z - 11)}" stroke="#30d5ff" stroke-width="4" fill="none" stroke-dasharray="10 7"/>` : '';
-    const team = (k) => CAST.filter((c) => c.team === k).map((c) => `<span class="chip"><span class="dot" style="background:${TEAMS[k].colour}"></span>${c.name}</span>`).join('');
-    return `<h4>📋 The plan · Med-C Ground</h4>
-      <svg viewBox="-8 -8 ${W * S + 16} ${H * S + 16}"><rect x="-6" y="-6" width="${W * S + 12}" height="${H * S + 12}" rx="10" fill="#3f8f45" stroke="#f5f6fa" stroke-width="3"/>${solids}${step >= 1 ? sp : ''}${arrows}
-      <text x="12" y="${H * S - 10}" fill="#fff" font-size="20" font-weight="700">PINK ⟵</text><text x="${W * S - 100}" y="${H * S - 10}" fill="#fff" font-size="20" font-weight="700">⟶ CYAN</text></svg>
-      <div class="row"><span class="chip">🗓 Sat · 4:00 PM</span><span class="chip">📍 Med-C Ground</span><span class="chip">⚔️ 4v4 Team Match</span><span class="chip">⏱ 3 min</span><span class="chip">🦺 Ref: Sana</span></div>
-      ${step >= 2 ? `<div class="row">${team(0)}</div><div class="row">${team(1)}</div>` : ''}`;
+  // Scene 2: the landing map (royale.js showLanding / updateLanding).
+  panel_landing(lt, el) {
+    el.className = 'pb-landing'; el.dataset.pb = 'landing';
+    const picked = lt > 2.0;
+    const left = Math.max(0, Math.ceil(ROYALE.landing - 9 - lt));
+    return `<h2>🪂 Pick your landing spot</h2><div class="pb-landinfo">Landing in ${left} s · ${picked ? `your spot: ${MATCH.landing.name}` : 'no spot picked yet'}</div><div style="position:relative"><canvas class="pb-landmap" data-pb="landing-map"></canvas><div class="tap" style="display:none"></div></div><div class="pb-note">Click (or tap) anywhere on campus: you land on the nearest verified spot. Squads land together on the pick of whoever chose last. No pick? You are placed far from everyone.</div>`;
+  }
+  draw_landing(lt, el) {
+    const cv = el.querySelector('canvas'); if (!cv) return;
+    const W = Math.min(innerWidth - 32, 900); const Hh = Math.min(innerHeight - 170, 1000);
+    const scale = Math.max(0.1, Math.min(W / 1100, Hh / 1790));
+    const cw = Math.round(1100 * scale); const ch = Math.round(1790 * scale);
+    if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+    const g = cv.getContext('2d'); const w = mapXform(cv);
+    g.fillStyle = '#0b1020'; g.fillRect(0, 0, cv.width, cv.height);
+    drawBase(g, w); drawZone(g, w, zoneState(0));
+    const S = this.film.spots && readSpots(this.film.spots);
+    if (S) { g.fillStyle = 'rgba(255,255,255,0.55)'; for (const d of S.drops) g.fillRect(w.X(d.x) - 1, w.Z(d.z) - 1, 2, 2); }
+    const tap = el.querySelector('.tap');
+    const L = MATCH.landing;
+    if (lt > 2.0) {
+      g.fillStyle = TEAMS[0].colour; g.beginPath(); g.arc(w.X(L.x), w.Z(L.z), 7, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#fff'; g.font = '700 12px system-ui'; g.fillText(`You · ${L.name}`, w.X(L.x) + 9, w.Z(L.z) + 4);
+      if (lt > 3.0) g.fillText(`Aanya · ${L.name}`, w.X(L.x) + 9, w.Z(L.z) + 18);
+    }
+    const u = (lt - 1.6) / 0.8;
+    if (tap && u > 0 && u < 1) { tap.style.display = ''; tap.style.left = `${w.X(L.x) + 1}px`; tap.style.top = `${w.Z(L.z) + 1}px`; tap.style.transform = `scale(${(1 + u * 2.5).toFixed(2)})`; tap.style.opacity = (1 - u).toFixed(2); } else if (tap) tap.style.display = 'none';
   }
 
-  panel_cards(lt, el) {
-    el.className = 'pnl cards';
-    const players = CAST.filter((c) => c.team != null);
-    return CAST.map((c) => {
-      const k = players.indexOf(c); const on = c.team == null ? lt > 9 : lt > 1.2 + k * 1.25 - 0.8;
-      const what = c.team == null ? c.role : `${TEAMS[c.team].name} · ${EQUIPMENT_BY_ID[c.loadout[0]].short}`;
-      return `<div class="card${on ? '' : ' off'}" style="border-color:${teamColour(c)}"><b>${c.name}</b>${esc(what)}</div>`;
-    }).join('');
+  // Scene 3: character customisation (the lobby's "Your character" column, looks.js choices).
+  panel_customise(lt, el) {
+    el.className = 'pb-card side-card';
+    const c = CAST_BY_ID.advait;
+    const k = Math.min(Math.floor(lt / 0.35), c.character + 6);
+    const charSel = lt < 1.4 ? k % CHARACTERS.length : c.character;
+    const sel = (at, v, d) => (lt > at ? v : d);
+    const sw = (list, cur) => `<div class="pb-swatches">${list.map((x) => `<span class="pb-swatch${x === cur ? ' sel' : ''}" style="background:${x}"></span>`).join('')}</div>`;
+    return `<h3 style="margin-top:0">YOUR CHARACTER</h3><div class="fake-input">${esc(c.name)}</div>
+      <div class="pb-row">${CHARACTERS.map((x, i) => `<button class="${i === charSel ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
+      <div class="lbl">Outfit</div>${sw(OUTFIT_COLOURS, sel(2.2, c.outfit, OUTFIT_COLOURS[0]))}
+      <div class="lbl">Trousers</div>${sw(PANTS_COLOURS, sel(2.9, c.pants, PANTS_COLOURS[0]))}
+      <div class="lbl">Paintball mask (your team colour shows in team matches)</div>${sw(MASK_COLOURS, sel(3.6, teamColour(c), MASK_COLOURS[2]))}
+      <div class="pb-row" style="margin-top:8px">${ACCESSORIES.map((a) => `<button class="${a.id === sel(4.3, c.accessory, 'none') ? 'on' : ''}">${esc(a.name)}</button>`).join('')}</div>
+      <div class="lbl" style="margin-top:10px">Squad: <b style="color:${teamColour(c)}">Team ${TEAMS[c.team].name}</b> · with Aanya</div>`;
   }
 
-  panel_equip(lt, el) {
-    el.className = 'pnl equip glass';
-    const players = CAST.filter((c) => c.team != null);
-    const cur = players[Math.min(7, Math.floor((lt + 0.1) / 1.25))];
-    return `<h4 style="margin:2px 4px 4px;font-size:13px;letter-spacing:.12em">🎯 SIX BLASTER CATEGORIES</h4>${EQUIPMENT.map((e) => {
-      const who = players.filter((c) => c.loadout[0] === e.id).map((c) => c.name).join(', ');
-      return `<div class="eq${cur.loadout[0] === e.id ? ' on' : ''}"><span class="sw" style="background:${e.colour}"></span><span><b>${e.name}</b><small>range ${e.range} m · ${e.pellets > 1 ? `${e.pellets} paintballs a pull` : `${e.rate}/s`}${who ? ` · ${who}` : ''}</small></span></div>`;
-    }).join('')}`;
+  // Scene 3: the six blasters, with the lobby's equipment cards and the real stat bars.
+  panel_blasters(lt, el) {
+    el.className = 'pb-card side-card';
+    const order = ['standard', 'burst', 'precision'];
+    const cur = EQUIPMENT_BY_ID[order[Math.min(2, Math.floor(lt / 2.3))]];
+    return `<h3 style="margin-top:0">PAINTBALL EQUIPMENT · SIX BLASTERS</h3>
+      <div class="bl-grid">${EQUIPMENT.map((e) => `<div class="pb-eq${e.id === cur.id ? ' sel' : ''}"><b><span class="dot" style="background:${e.colour}"></span>${esc(e.short)}</b><span class="bl">${esc(BLURB[e.id])}</span></div>`).join('')}</div>
+      <div class="bl-detail" style="--c:${cur.colour}"><b style="color:${cur.colour}">${esc(cur.name)}</b>${statBars(cur).outerHTML}<div class="pb-note" style="margin-top:6px">Paintball pack in a crate: ×${PACK[cur.id]} · carry up to ${cur.total}</div></div>`;
   }
 
-  panel_lobby(lt, el) {
-    el.className = 'pnl lobby glass';
-    const team = (k) => {
-      const list = CAST.filter((c) => c.team === k);
-      return `<div class="team" style="border-color:${TEAMS[k].colour}"><b style="color:${TEAMS[k].colour}">${TEAMS[k].name.toUpperCase()}</b>${list.map((c, i) => {
-        const ready = lt > 1.2 + (k * 4 + i) * 0.75;
-        return `<div class="p"><span class="dot" style="background:${TEAMS[k].colour};width:14px;height:14px"></span><span class="nm">${c.name}</span><span class="eqs">${c.loadout.map((id) => `<span class="chip"><span class="dot" style="background:${EQUIPMENT_BY_ID[id].colour}"></span>${EQUIPMENT_BY_ID[id].short}</span>`).join('')}</span><span class="rd${ready ? ' on' : ''}">✓ READY</span></div>`;
-      }).join('')}</div>`;
-    };
-    const all = lt > 1.2 + 8 * 0.75;
-    return `<span class="story">🎬 IN THE STORY · a scene from the film, not a live session</span>
-      <h4>Lobby · Med-C Paintball</h4>
-      <div class="meta"><span class="chip">⚔️ 4v4 Team Match</span><span class="chip">📍 Med-C Ground</span><span class="chip">⏱ 3:00</span><span class="chip">👑 Host: Sana (referee)</span><span class="chip">🎙 Vikram (commentary)</span></div>
-      <div class="teams">${team(0)}${team(1)}</div>
-      <div class="foot"><span>${all ? 'Everyone is ready.' : 'Waiting for players to tick Ready…'}</span><span class="go"${all ? '' : ' style="opacity:.35"'}>${all ? '▶ STARTING AT MED-C' : 'START'}</span></div>`;
+  // Scene 3: the Pink squad's kit (inventory with quantities, as in the HUD's inventory bar).
+  panel_loadout(lt, el, p, t) {
+    el.className = 'pb-card side-card';
+    const who = (id) => { const st = this.film.stateAt(id, t); return `<div class="who" style="--team:${teamColour(id)}"><b>${CAST_BY_ID[id].name}</b> <span class="pb-note">${esc(CAST_BY_ID[id].role)}</span><div class="row">${invSpans(st.inv)}</div><div class="pb-note" style="margin-top:6px">${st.supplies} supplies collected</div></div>`; };
+    return `<h3 style="margin-top:0">🎒 SQUAD LOADOUT · TEAM PINK</h3><div class="kit">${who('advait')}${who('aanya')}</div>
+      <div class="pb-note" style="margin-top:8px">Two blaster slots (Q switches) · 💣 paint bombs (G, ${BOMB.fuse} s fuse) · 🛡️ paint shield (C, ${SHIELD.time} s) · 📡 paint scan (Z, ${SCAN.radius} m) · 🥽 mask and 🦺 vest levels 1–3</div>`;
   }
 
-  panel_teams(lt, el, p) {
-    if (!el.dataset.init) { el.dataset.init = 1; el.className = 'pnl'; el.style.inset = '0'; }
-    const card = (k, at) => {
-      const a = smooth(at, at + 0.4, lt);
-      return `<div class="teamcard glass ${k ? 'r' : 'l'}" style="position:absolute;opacity:${a.toFixed(2)};border-top:5px solid ${TEAMS[k].colour}"><h4 style="color:${TEAMS[k].colour}">${TEAMS[k].name.toUpperCase()} TEAM</h4>${CAST.filter((c) => c.team === k).map((c) => `<div class="p"><b>${c.name}</b><span class="chip"><span class="dot" style="background:${EQUIPMENT_BY_ID[c.loadout[0]].colour}"></span>${EQUIPMENT_BY_ID[c.loadout[0]].short}</span></div>`).join('')}</div>`;
-    };
-    return `<div style="position:absolute;left:50%;top:calc(8vh + 12px);transform:translateX(-50%);font-weight:900;letter-spacing:.14em;font-size:clamp(14px,2.6vh,24px);text-shadow:0 2px 12px rgba(0,0,0,.6);white-space:nowrap">4v4 TEAM MATCH · MED-C GROUND</div>${card(0, 0.1)}${card(1, 4)}`;
+  // Scene 4: the match intro: mode, arena, players, squads, starting equipment.
+  panel_intro(lt) {
+    const squad = (q, k) => `<div class="pb-team${lt > 1.0 + k * 0.35 ? '' : ' off'}" style="--team:${q.colour}"><b style="color:${q.colour}">Team ${q.name}</b>${q.members.map((id) => esc(CAST_BY_ID[id].name)).join(' · ')}<br><small>🎯 ${EQUIPMENT_BY_ID[ROYALE.start.blaster].short} blaster · ${ROYALE.start.hopper} paintballs</small></div>`;
+    return `<div class="intro"><div class="pb-note" style="letter-spacing:.3em;font-weight:800;opacity:.9">PLAY WITH BITSIANS · MULTIPLAYER PAINTBALL</div><div class="mode">CAMPUS ROYALE</div>
+      <div class="chips"><span class="chip">🗺️ Arena: Whole Campus · BITS Pilani</span><span class="chip">⚔️ ${MATCH.mode}</span><span class="chip">👥 ${CAST.length} players · ${SQUADS.length} squads</span><span class="chip">🎨 Last squad standing</span></div>
+      <div class="pb-teams">${SQUADS.map(squad).join('')}</div></div>`;
   }
 
-  panel_countdown(lt, el) {
-    el.className = 'pnl count';
-    const n = lt < 0.2 ? '' : lt < 1.4 ? '3' : lt < 2.6 ? '2' : lt < 3.8 ? '1' : 'START!';
-    const k = n === 'START!' ? lt - 3.8 : (lt - 0.2) % 1.2;
-    el.style.transform = `translate(-50%, -50%) scale(${(1.5 - 0.5 * smooth(0, 0.25, k)).toFixed(3)})`;
-    el.style.color = { 3: '#ff3d7f', 2: '#ffd23d', 1: '#30d5ff', 'START!': '#7cff4f' }[n] || '#fff';
-    if (n === 'START!') el.style.fontSize = 'clamp(48px, 15vh, 160px)';
-    else el.style.fontSize = '';
-    return n;
-  }
+  panel_win(lt, el) { el.className = 'win'; return `<div class="pb-winner">🏆 ${esc(this.film.results.winner)} wins!</div><div class="pb-sub">Campus Royale · last squad standing</div>`; }
 
-  panel_score(lt, el, p, t) {
-    el.className = 'pnl score glass';
-    const f = this.film; const [a, b] = f.score(t);
-    const rows = CAST.filter((c) => c.team != null).map((c) => ({ c, tags: f.tags.filter((g) => g.by === c.id).length, out: f.tags.filter((g) => g.who === c.id).length }))
-      .sort((x, y) => y.tags - x.tags || x.c.team - y.c.team);
-    return `<div class="win" style="color:${TEAMS[0].colour}">🏆 PINK WINS!</div>
-      <div class="big"><span style="color:${TEAMS[0].colour}">${a}</span><span style="opacity:.6;font-size:.5em">PINK · CYAN</span><span style="color:${TEAMS[1].colour}">${b}</span></div>
-      <table><tr style="opacity:.7"><td>Player</td><td>Team</td><td>Tags</td><td>Tagged</td><td>Score</td></tr>${rows.map((r, k) => `<tr style="opacity:${smooth(0.6 + k * 0.25, 0.9 + k * 0.25, lt).toFixed(2)}"><td><b>${r.c.name}</b></td><td style="color:${teamColour(r.c)}">${TEAMS[r.c.team].name}</td><td>${r.tags}</td><td>${r.out}</td><td>${r.tags * 100 + (r.c.team === 0 ? 50 : 0)}</td></tr>`).join('')}</table>`;
+  // Scene 8: the results screen (index.js renderResults, with royale.js's columns).
+  panel_results(lt, el) {
+    el.className = 'results'; el.dataset.pb = 'results';
+    const R = this.film.results; const me = R.rankings.find((r) => r.id === 'advait');
+    const row = (r, i) => `<tr class="${r.id === 'advait' ? 'me' : ''}" style="opacity:${smooth(2.2 + i * 0.22, 2.5 + i * 0.22, lt).toFixed(2)}"><td>${r.place}</td><td><span class="tdot" style="background:${TEAMS[r.team].colour}"></span>${esc(r.nickname)}${r.id === 'advait' ? ' 👑' : ''}</td><td>${TEAMS[r.team].name}</td><td class="n">${r.score}</td><td class="n">${r.tags}</td><td class="n">${r.assists}</td><td class="n">${r.timesTagged}</td><td class="n">${r.supplies}</td><td class="n">#${r.placement}</td><td class="n">${fmtTime(r.survived)}</td></tr>`;
+    const used = ['standard', 'burst', 'precision'].map((id) => EQUIPMENT_BY_ID[id].short).join(', ');
+    return `<div class="pb-card pb-stack"><h1>Play with BITSians · results</h1>
+      <div class="pb-winner">🏆 ${esc(R.winner)} wins!</div>
+      <div class="pb-sub" data-pb="royale-result">🪂 Campus Royale · you placed #${me.placement} of ${R.teams.length} squads · survived ${fmtTime(me.survived)} · ${me.supplies} supplies collected</div>
+      <div class="pb-sub">That’s you! 🎉</div>
+      <div class="pb-podium"><div><span class="pb-note">WINNER</span><b>${esc(R.winner)}</b></div><div><span class="pb-note">RUNNER-UP</span><b>${esc(R.runnerUp)}</b></div><div><span class="pb-note">MVP</span><b>⭐ ${esc(R.mvpName)}</b></div></div>
+      <div class="pb-teams">${R.teams.map((q, k) => `<div class="pb-team" style="--team:${q.colour};opacity:${smooth(1.2 + k * 0.15, 1.5 + k * 0.15, lt).toFixed(2)}"><b>#${q.place} ${esc(q.name)}</b><div>${q.score} points · ${q.tags} tags</div></div>`).join('')}</div>
+      <table class="pb-table" data-pb="scoreboard"><tr><th>#</th><th>Player</th><th>Team</th><th class="n">Score</th><th class="n">Tags</th><th class="n">Assists</th><th class="n">Times tagged</th><th class="n">Supplies</th><th class="n">Placed</th><th class="n">Survived</th></tr>${R.rankings.map(row).join('')}</table>
+      <div class="pb-note">Paintball equipment used: ${used}. Results stay in this room until it closes; nothing is saved anywhere.</div></div>`;
   }
-
-  panel_flash(lt, el) { el.className = 'pnl flash'; return ''; }
+  draw_results(lt, el) {
+    const card = el.querySelector('.pb-card'); if (!card) return;
+    if (!el.querySelector('.pb-confetti') && !this.capture) el.prepend(confettiEl());
+    const k = Math.min(1, (innerHeight - 24) / Math.max(1, card.scrollHeight), (innerWidth - 24) / Math.max(1, card.scrollWidth));
+    card.style.transform = `scale(${(k * (0.96 + 0.04 * smooth(0, 0.4, lt))).toFixed(3)})`;
+  }
 
   // ---------- hotspots ----------
   updateHots(t) {
-    const f = this.film; const cam = f.camera; const w = innerWidth; const h = innerHeight;
-    const v = new THREE.Vector3();
-    cam.updateMatrixWorld();
+    const f = this.film; const w = innerWidth; const h = innerHeight;
     for (const hs of f.hots) {
       let el = this.hotEls.get(hs);
       const on = t >= hs.t0 && t < hs.t1 && this.ui.info.classList.contains('hidden');
-      let x; let y; let vis = on;
-      if (on) {
-        if (hs.screen) { x = hs.screen[0] * w; y = hs.screen[1] * h; } else {
-          v.set(...hs.at).project(cam);
-          x = (v.x * 0.5 + 0.5) * w; y = (-v.y * 0.5 + 0.5) * h;
-          vis = v.z < 1 && x > 20 && x < w - 20 && y > h * 0.09 && y < h - 120;
-        }
-      }
-      if (!vis) { if (el) el.style.display = 'none'; continue; }
+      if (!on) { if (el) el.style.display = 'none'; continue; }
       if (!el) {
-        el = document.createElement('button'); el.className = 'hot'; el.dataset.id = hs.id; el.setAttribute('aria-label', `About ${hs.label}`);
-        el.innerHTML = `<span class="ring"></span><span class="l">${esc(hs.label)}</span>`;
-        el.addEventListener('click', (e) => { e.stopPropagation(); this.openInfo(hs); });
+        el = document.createElement('button'); el.className = `hot${hs.game ? ' game' : ''}`; el.dataset.id = hs.id; el.setAttribute('aria-label', hs.label);
+        el.innerHTML = `<span class="ring"></span><span class="l">${hs.game ? '🎮 ' : 'ⓘ '}${esc(hs.label)}</span>`;
+        el.addEventListener('click', (e) => { e.stopPropagation(); this.openHot(hs); });
         this.ui.hots.append(el); this.hotEls.set(hs, el);
       }
       el.style.display = '';
-      el.style.left = `${x.toFixed(0)}px`; el.style.top = `${y.toFixed(0)}px`;
+      el.style.left = `${(hs.screen[0] * w).toFixed(0)}px`; el.style.top = `${(hs.screen[1] * h).toFixed(0)}px`;
     }
   }
 
-  openInfo(hs) {
+  openHot(hs) {
     const f = this.film; const ui = this.ui;
+    if (hs.game) {
+      // "Create a room" / "Join a room": end the film and open the multiplayer paintball game
+      const ok = f.hooks?.paintball?.({});
+      if (ok) return;
+    }
     this.resumeAfterInfo = !f.paused;
     f.pause();
     ui.info.classList.remove('hidden');
-    ui.info.innerHTML = `<h3>${hs.lobby ? '🎮' : hs.roam ? '🗺️' : '📍'} ${esc(hs.title)}</h3><p>${esc(hs.text)}</p><div class="msg hidden"></div><div class="btns"></div>`;
-    const btns = ui.info.querySelector('.btns'); const msg = ui.info.querySelector('.msg');
+    const info = hs.info ? INFO[hs.info]() : { title: `🎮 ${hs.label}`, body: '<p>Play with BITSians runs private paintball rooms for friends: create one and share its 5-letter code, or join with a code.</p>' };
+    ui.info.innerHTML = `<h3>${info.title}</h3>${info.body}${hs.game ? '<div class="msg">The multiplayer game is not available in this build.</div>' : ''}<div class="btns"></div>`;
+    const btns = ui.info.querySelector('.btns');
     const btn = (label, cls, fn) => { const b = document.createElement('button'); b.className = `fb ${cls}`; b.textContent = label; b.addEventListener('click', (e) => { e.stopPropagation(); fn(); }); btns.append(b); return b; };
-    if (hs.place || hs.roam) btn(hs.roam ? '🗺️ Open Campus Free Roam' : '🗺️ Explore this place', 'primary', () => f.hooks?.explore?.(hs.place || null, f.t));
-    if (hs.lobby) btn('🎮 Open the lobby', 'primary', () => {
-      const ok = f.hooks?.lobby?.();
-      if (!ok) { msg.classList.remove('hidden'); msg.textContent = 'The live paintball lobby is not available in this version yet. The lobby above is the one from the story.'; }
-    });
+    if (!hs.game && f.hooks?.paintball) btn('🎮 Create a room', 'primary', () => f.hooks.paintball({}));
     btn('▶ Back to the film', '', () => this.closeInfo());
   }
 
@@ -612,7 +887,57 @@ export class FilmUI {
   dispose() {
     clearTimeout(this.idleTimer);
     if (this.onMove) window.removeEventListener('pointermove', this.onMove);
+    if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.audio.dispose();
     this.el.remove(); this.styleEl.remove();
   }
+}
+
+// ---------- helpers ----------
+// The HUD inventory bar (royale.js updateHud): blaster slots, throwables, cleaning, gadgets, gear.
+function invSpans(inv) {
+  const slot = (b, i) => { const e = EQUIPMENT_BY_ID[b]; return `<span class="slot${inv.slot === i && b ? ' sel' : ''}${b ? '' : ' empty'}" style="${e ? `--c:${e.colour}` : ''}">${e ? `${i + 1} ${e.short} ${inv.hopper[i]}/${inv.ammo[b] || 0}` : `${i + 1} empty`}</span>`; };
+  const cnt = (icon, n, key) => `<span class="cnt${n ? '' : ' none'}">${icon}${n}${key ? `<small>${key}</small>` : ''}</span>`;
+  return slot(inv.primary, 0) + slot(inv.secondary, 1) + cnt('💣', inv.paintbomb, 'G') + cnt('☁️', inv.smoke, 'B') + cnt('🧻', inv.wipes, 'H') + cnt('🧴', inv.kit, 'H') + cnt('🛡️', inv.shield, 'C') + cnt('📡', inv.scan, 'Z') + `<span class="cnt${inv.gearMask ? '' : ' none'}">🥽L${inv.gearMask}</span><span class="cnt${inv.gearVest ? '' : ' none'}">🦺L${inv.gearVest}</span>`;
+}
+const invHtml = invSpans;
+
+let BPTS = null;
+function boundaryPts() {
+  if (BPTS) return BPTS;
+  const p = [...BITS_CAMPUS.boundary, BITS_CAMPUS.boundary[0]]; let total = 0;
+  for (let i = 1; i < p.length; i++) total += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+  BPTS = { p, total };
+  return BPTS;
+}
+const perimeter = () => boundaryPts().total;
+
+// the densest groups of supply spots, named like the registry (for the tactical map)
+let AREAS = null;
+function supplyAreas(S) {
+  if (AREAS) return AREAS;
+  const by = new Map();
+  for (const q of S.supplies) {
+    const key = q.name.replace(/^near /, '').replace(/ \((East|West) Wing\)/, '').replace(/^New Academic Block$/, 'NAB');
+    if (key === 'open campus') continue;
+    if (!by.has(key)) by.set(key, []);
+    by.get(key).push(q);
+  }
+  AREAS = [...by.entries()].map(([name, list]) => {
+    const x = list.reduce((a, q) => a + q.x, 0) / list.length; const z = list.reduce((a, q) => a + q.z, 0) / list.length;
+    const r = Math.max(...list.map((q) => Math.hypot(q.x - x, q.z - z)));
+    return { name, n: list.length, x, z, r: Math.min(r, 90) };
+  }).sort((a, b) => b.n - a.n);
+  return AREAS;
+}
+
+function confettiEl() {
+  const box = document.createElement('div'); box.className = 'pb-confetti';
+  const cols = ['#ff3d7f', '#30d5ff', '#ffd23d', '#7cff4f', '#b26bff', '#ff8a1f'];
+  for (let i = 0; i < 70; i++) {
+    const c = document.createElement('i'); const r = (k) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+    Object.assign(c.style, { left: `${r(1) * 100}%`, background: cols[i % cols.length], animationDuration: `${2.5 + r(2) * 3}s`, animationDelay: `${-r(3) * 5}s`, width: `${8 + r(4) * 12}px`, height: `${8 + r(5) * 12}px` });
+    box.append(c);
+  }
+  return box;
 }

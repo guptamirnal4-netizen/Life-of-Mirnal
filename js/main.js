@@ -1928,10 +1928,8 @@ function playFilm({ capture = false, at = 0, back = null } = {}) {
   film = new PaintballFilm({
     scene, camera, campus: bitsCampus, graphics, range: COLLEGE_RANGE,
     hooks: {
-      // "Explore this place": pause, open Campus Free Roam at the place, offer "Return to the film"
-      explore: (place, t) => { filmReturn = { t, back }; endFilm(back, { title: false }); openExplorer('college', { place, fromFilm: true }); },
-      // "Open the lobby": the multiplayer paintball game (wired by the paintball client when it is present)
-      lobby: () => { const open = window.__game?.openPaintball; if (typeof open !== 'function') return false; endFilm(back); open(); return true; },
+      // "Create a room" / "Join a room": end the film, then open the multiplayer paintball game
+      paintball: (opts = {}) => { const open = window.__game?.openPaintball; if (typeof open !== 'function') return false; endFilm(back); open(opts); return true; },
     },
   });
   film.back = back;
