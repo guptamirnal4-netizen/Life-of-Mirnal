@@ -50,7 +50,7 @@ const STYLE = `
 #film .title h1 { margin: 0; font-weight: 900; font-style: italic; font-size: clamp(28px, 10vh, 112px); letter-spacing: 0.04em; line-height: 0.95; text-transform: uppercase; text-shadow: 0 6px 0 rgba(0,0,0,0.35), 0 0 40px rgba(0,0,0,0.5); }
 #film .title h1 .w { display: block; font-size: 0.36em; letter-spacing: 0.5em; padding-left: 0.5em; font-style: normal; font-weight: 800; color: #ffd23d; margin-bottom: 0.3em; }
 #film .title h1 .g { background: linear-gradient(90deg, #ff3d7f, #ffd23d 35%, #7cff4f 60%, #30d5ff 85%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-stroke: 0; filter: drop-shadow(0 5px 0 rgba(0,0,0,0.4)); }
-#film .title .bar { height: 6px; width: min(560px, 70vw); margin: 2.2vh auto 0; border-radius: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #7cff4f, #30d5ff, #b26bff); transform-origin: left; }
+#film .title .tbar { height: 6px; width: min(560px, 70vw); margin: 2.2vh auto 0; border-radius: 3px; background: linear-gradient(90deg, #ff3d7f, #ffd23d, #7cff4f, #30d5ff, #b26bff); transform-origin: left; }
 #film .title p { margin: 1.8vh 0 0; font-weight: 800; font-size: clamp(12px, 2.6vh, 26px); letter-spacing: 0.32em; padding-left: 0.32em; text-transform: uppercase; text-shadow: 0 2px 14px rgba(0,0,0,0.9); }
 #film .title.end p { letter-spacing: 0.08em; padding-left: 0; text-transform: none; font-size: clamp(14px, 3.2vh, 30px); }
 #film .cap { position: absolute; opacity: 0; z-index: 3; pointer-events: none; }
@@ -298,7 +298,7 @@ export class FilmUI {
       <div class="vig"></div>
       <div class="pnls"></div>
       <div class="cap"><div class="k"></div><div class="n"></div><div class="rule"></div></div>
-      <div class="title"><h1></h1><div class="bar"></div><p></p></div>
+      <div class="title"><h1></h1><div class="tbar"></div><p></p></div>
       <div class="line"><b></b><span></span></div>
       <div class="lb top"></div><div class="lb bot"></div>
       <div class="hots"></div>
@@ -324,7 +324,7 @@ export class FilmUI {
     document.body.append(el);
     this.el = el;
     const q = (s) => el.querySelector(s);
-    this.ui = { stage: q('.stage'), vig: q('.vig'), pnls: q('.pnls'), cap: q('.cap'), k: q('.cap .k'), n: q('.cap .n'), rule: q('.cap .rule'), title: q('.title'), h1: q('.title h1'), tbar: q('.title .bar'), sub: q('.title p'), line: q('.line'), who: q('.line b'), text: q('.line span'), lbt: q('.lb.top'), lbb: q('.lb.bot'), hots: q('.hots'), wipe: q('.wipe'), flash: q('.flash'), fade: q('.fade'), info: q('.info'), chapters: q('.chapters'), bar: q('.bar'), fill: q('.bar .fill'), knob: q('.bar .knob'), tip: q('.bar .tip'), time: q('.row .tm'), ch: q('.row .ch'), btn: Object.fromEntries([...el.querySelectorAll('.ic')].map((b) => [b.dataset.k, b])) };
+    this.ui = { stage: q('.stage'), vig: q('.vig'), pnls: q('.pnls'), cap: q('.cap'), k: q('.cap .k'), n: q('.cap .n'), rule: q('.cap .rule'), title: q('.title'), h1: q('.title h1'), tbar: q('.title .tbar'), sub: q('.title p'), line: q('.line'), who: q('.line b'), text: q('.line span'), lbt: q('.lb.top'), lbb: q('.lb.bot'), hots: q('.hots'), wipe: q('.wipe'), flash: q('.flash'), fade: q('.fade'), info: q('.info'), chapters: q('.chapters'), bar: q('.bar'), fill: q('.bar .fill'), knob: q('.bar .knob'), tip: q('.bar .tip'), time: q('.row .tm'), ch: q('.row .ch'), btn: Object.fromEntries([...el.querySelectorAll('.ic')].map((b) => [b.dataset.k, b])) };
     this.buildHud();
     this.panelEls = new Map();
     this.hotEls = new Map();

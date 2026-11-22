@@ -96,27 +96,36 @@ Voice needs HTTPS (Vercel provides it) and works best in Chrome, whose speech re
 
 ## The film
 
-**Play with BITSians**, a 4-minute story played in the game's own engine on the real-scale BITS Pilani campus:
-**🎬 Watch the film** is the first action on the title screen (and in the pause menu); `?film` in the address plays it
-on load. Ten friends (Advait, Aanya, Kabir, Tara, Rohan, Ishaan, Neha, Arjun, Sana and Vikram) plan, prepare for and
-play a friendly paintball match.
+**Play with BITSians**, a 3½-minute cinematic opening in the style of a multiplayer battle-game trailer, played in
+the game's own engine on the real-scale BITS Pilani campus. A first visit's "Press to start" plays it; afterwards the
+portal's **WATCH THE INTRO** does (it picks up where you left it); `?film` plays it on load. It shows one Campus
+Royale match (2v2v2v2v2: Advait, Aanya, Rohan, Neha, Kabir, Tara, Ishaan, Sana, Arjun and Vikram in five squads) and
+only what the game really does.
 
-- **The story (7 scenes):** A Day at BITS Pilani (aerials, the Clock Tower → Saraswati Mandir axis over the sunken
-  Rotunda and NAB, friends meeting, the hostels) · The Idea (Krishna Bhawan courtyard, the group chat, the plan) ·
-  Preparing (masks, team colours, the six blaster categories, supplies, strategy, the story's lobby) · Entering the
-  Arena (the Med-C Ground arena, team intros, countdown) · The Match (game-style HUD, tags, a precision paint hit, a
-  splash) · Final Moments (the last tag, the scoreboard, congratulations) · Ending (a group photo and the campus at
-  golden hour).
-- **Player:** play/pause (Space or click), scrub bar with scene markers, previous/next scene (PageUp/PageDown),
-  a Scenes list, captions (C), mute (M), optional spoken dialogue, replay, Esc back to the title. Hotspots on places
-  open an info panel: "Explore this place" pauses the film and opens Campus Free Roam there, with "Return to the film"
-  to carry on at the same moment. The title screen offers "Resume the film" where you left it.
-- **How it is made:** every frame is a function of the film time (shot list, blocking, paintballs, overlays), so seeking
-  is exact: `js/cinematic/paintball-film.js` (shots), `cast.js` (the cast and their poses), `film-ui.js` (overlays,
-  controls, hotspots, sound effects). It uses the shared paintball models (`js/paintball/models.js`) and the Med-C
-  arena (`js/paintball/arena.js`), runs on its own cast and never touches the saved game.
-- **Music:** an original score synthesised by `dev/film-score.mjs` from the film's own timeline (no samples or
-  third-party audio), shipped as `audio/film-score.m4a`; in the game the picture follows the music's clock.
+- **The 8 scenes:** Arena Reveal (aerial sweep, the real campus boundary, a tactical map drawn from the landing and
+  supply registries, a low run to the M Lawns) · Deployment & Supply Hunting (the landing map, touchdown at a
+  registry landing spot, into the Main Building, supply crates with their opening lid, the crate panel and the
+  inventory) · Loadout & Preparation (character customisation, the six blasters with their real stats, the squad's
+  kit) · The Match Begins (mode, arena, squads and starting gear, 3-2-1, the full HUD) · First Encounters (tags,
+  a squad clean-off, slow motion, a dropped-supplies pile, the Rotunda) · Supply Drop & Arena Pressure (the
+  announcement, the big map, the drop falling, a paint-bomb fight, the drop's contents, the paint zone closing) ·
+  Final Showdown (the final zone, a paint bomb, a precision paint hit, the paint shield, the last tag) · Winner &
+  Results (the results screen, the champions, the closing title, then the portal).
+- **Player:** play/pause (Space or click), scrub bar with scene markers, previous/next scene (PageUp/PageDown, 1–8),
+  a Scenes list, captions (C), mute (M), replay, Esc/✕ back to the portal. Game hotspots: "How crates work" and "The
+  six blasters" open an info panel; "Create a room" ends the film and creates a room through the portal flow; "Join
+  a room" ends it and opens the portal's join sheet.
+- **How it is made:** every frame is a function of the film time, so seeking is exact: `js/cinematic/paintball-film.js`
+  (the match plan, shot list and the replayed game state: inventories with the real pick-up rules, tags, clean-offs,
+  round eliminations, scores and results with the server's formula), `cast.js` (players built like the game's
+  avatars, poses), `film-fx.js` (the real crate, drop, zone, shield and bomb models posed by time; seeded paint bursts;
+  the campus maps), `film-ui.js` (the HUD, crate panel, landing map, results and other overlays built with the live
+  game's CSS classes; controls, hotspots, sound effects). The zone is planned by the real `planZone()`; the landing
+  spot, supply spots, final zone and drop come from `js/paintball/data/royale-spots.json`; actor paths were checked
+  against the campus collision export.
+- **Music:** an original trailer score synthesised by `dev/film-score.mjs` from the film's own timeline and marks (no
+  samples or third-party audio), shipped as `audio/film-score.m4a`; in the game the picture follows the music's
+  clock, and the portal's volume settings apply.
 - **The video:** a copy of the rendered film is kept in `film/` (not in git or on the site, because of its size).
   `node dev/render-film.mjs out.mp4` (with `npm start` running; needs Chrome, ffmpeg and playwright-core) draws
   every frame at 1.5× on Ultra with depth of field and encodes 1080p30 H.264 with the score.
