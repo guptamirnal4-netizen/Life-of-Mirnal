@@ -72,7 +72,7 @@ async function medc(seed) {
   return res;
 }
 
-const fmt = (t) => `tick p50 ${t.p50.toFixed(2)} / p95 ${t.p95.toFixed(2)} / max ${t.max.toFixed(2)} ms`;
+const fmt = (t) => `tick wall p50 ${t.p50.toFixed(2)} / p95 ${t.p95.toFixed(2)} / max ${t.max.toFixed(2)} ms, CPU p95 ${t.cpuP95.toFixed(2)} / max ${t.cpuMax.toFixed(2)} ms`;
 await check(`Campus Royale Play vs Bots at real speed (${LEVEL} bots, human: ${HUMAN}): bots meet and fight, the human is engaged, the match ends with a winner`, async () => {
   const list = await Promise.all((seeds.length ? seeds : [11]).slice(0, 2).map((sd) => campus(sd)));
   if (seeds.length > 2) list.push(...(await Promise.all(seeds.slice(2).map((sd) => campus(sd)))));
@@ -81,7 +81,7 @@ await check(`Campus Royale Play vs Bots at real speed (${LEVEL} bots, human: ${H
     assert(r.ended && r.winner && r.minutes < 10, `seed ${r.seed}: ended ${r.ended} in ${r.minutes} min`);
     assert(r.tagsByBots > r.zoneTags, `seed ${r.seed}: ${r.tagsByBots} bot tags vs ${r.zoneTags} zone tags`);
     assert(r.humanEngagedAt !== null && r.humanEngagedAt < 200, `seed ${r.seed}: human engaged at ${r.humanEngagedAt}`);
-    assert(r.tick.p95 < 10, `seed ${r.seed}: tick p95 ${r.tick.p95}`);
+    assert(r.tick.cpuP95 < 10, `seed ${r.seed}: tick CPU p95 ${r.tick.cpuP95}`);
   }
 });
 

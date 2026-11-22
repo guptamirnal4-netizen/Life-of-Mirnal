@@ -81,7 +81,7 @@ export class PaintballRoom extends Room {
     this.bots = new BotManager(this);
     this.botSeq = 0;
     this.botNames = [...BOT_NAMES]; for (let i = this.botNames.length - 1; i > 0; i--) { const j = Math.floor(this.rand() * (i + 1)); [this.botNames[i], this.botNames[j]] = [this.botNames[j], this.botNames[i]]; }
-    this.tickMs = new Float32Array(1200); this.tickN = 0;
+    this.tickMs = new Float32Array(1200); this.tickCpu = new Float32Array(1200); this.tickN = 0;
     this.handlers = {};
     // Play vs Bots: a private room for its creator alone, filled with bots and started as soon as they join
     const pr = options.practice;
@@ -283,14 +283,15 @@ export class PaintballRoom extends Room {
 
   // tick time (ms) over the last minute: p50, p95, max
   tickStats() {
-    const n = Math.min(this.tickN, this.tickMs.length); const a = Array.from(this.tickMs.subarray(0, n)).sort((x, y) => x - y);
-    const q = (k) => (n ? a[Math.min(n - 1, Math.floor(k * n))] : 0);
-    return { n, p50: q(0.5), p95: q(0.95), max: n ? a[n - 1] : 0 };
+    const n = Math.min(this.tickN, this.tickMs.length);
+    const a = Array.from(this.tickMs.subarray(0, n)).sort((x, y) => x - y); const b = Array.from(this.tickCpu.subarray(0, n)).sort((x, y) => x - y);
+    const q = (L, k) => (n ? L[Math.min(n - 1, Math.floor(k * n))] : 0);
+    return { n, p50: q(a, 0.5), p95: q(a, 0.95), max: n ? a[n - 1] : 0, cpuP50: q(b, 0.5), cpuP95: q(b, 0.95), cpuMax: n ? b[n - 1] : 0 };
   }
   logTicks() {
     if (!PaintballRoom.log || !this.bots.size) return;
     const t = this.tickStats();
-    console.log(`[bots] room ${this.roomId} · ${this.bots.size} ${this.state.botLevel} bots · ${this.state.arena} · tick p50 ${t.p50.toFixed(2)} ms, p95 ${t.p95.toFixed(2)} ms, max ${t.max.toFixed(2)} ms · RSS ${Math.round(process.memoryUsage().rss / 1048576)} MB`);
+    console.log(`[bots] room ${this.roomId} · ${this.bots.size} ${this.state.botLevel} bots · ${this.state.arena} · tick p50 ${t.p50.toFixed(2)} ms, p95 ${t.p95.toFixed(2)} ms, max ${t.max.toFixed(2)} ms (CPU p95 ${t.cpuP95.toFixed(2)} ms) · RSS ${Math.round(process.memoryUsage().rss / 1048576)} MB`);
   }
 
   // ---------- joining, leaving, reconnecting ----------
@@ -512,8 +513,10 @@ export class PaintballRoom extends Room {
 
   // ---------- the simulation tick ----------
   tick(dt) {
-    const t0 = performance.now();
+    const t0 = performance.now(); const c0 = process.cpuUsage();
     this.step(dt);
+    const c1 = process.cpuUsage(c0);
+    this.tickCpu[this.tickN % this.tickCpu.length] = (c1.user + c1.system) / 1000; // CPU ms (other processes on the machine do not count)
     this.tickMs[this.tickN++ % this.tickMs.length] = performance.now() - t0;
   }
 

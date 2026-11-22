@@ -410,8 +410,12 @@ export class Brain {
   }
 
   setGoal(c, x, z, y, kind) {
-    const same = this.goal && this.goalKind === kind && Math.hypot(this.goal.x - x, this.goal.z - z) < (kind === 'approach' || kind === 'chase' ? 4 : 1.5);
-    if (same && (this.path || this.pathPending)) return;
+    const moving = kind === 'approach' || kind === 'chase' || kind === 'follow';
+    const off = this.goal && this.goalKind === kind ? Math.hypot(this.goal.x - x, this.goal.z - z) : Infinity;
+    if (off < (moving ? 4 : 1.5) && (this.path || this.pathPending)) return;
+    // a moving goal (someone chased or heard): re-plan at most every 1.5 s unless it jumped far
+    if (moving && off < 12 && this.path && c.now - (this.pathAt || 0) < 1.5) { this.goal.x = x; this.goal.z = z; return; }
+    this.pathAt = c.now;
     this.goal = { x, z, y: y ?? c.p.y }; this.goalKind = kind;
     this.path = null; this.idx = 0; this.cut = -1;
     c.requestPath(this);

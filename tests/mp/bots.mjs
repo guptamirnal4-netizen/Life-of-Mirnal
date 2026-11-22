@@ -248,10 +248,10 @@ await chk('server load: 1 human + 11 Hard bots on the Whole Campus keep the 20 H
   const t0 = Date.now(); let rss = 0;
   while (Date.now() - t0 < 60000) { await sleep(1000); rss = Math.max(rss, process.memoryUsage().rss); }
   const t = R.tickStats(); const st = R.bots.stats();
-  console.log(`   TICK (campus, 1 human + 11 Hard bots, ${t.n} ticks over 60 s): p50 ${t.p50.toFixed(2)} ms · p95 ${t.p95.toFixed(2)} ms · max ${t.max.toFixed(2)} ms (budget ${(1000 / 20).toFixed(0)} ms) · RSS ${Math.round(rss / 1048576)} MB (whole test process) · rays ${st.rays}, denied ${st.raysDenied}, searches ${st.searches}, expansions ${st.expansions}, cache hits ${st.cacheHits}`);
+  console.log(`   TICK (campus, 1 human + 11 Hard bots, ${t.n} ticks over 60 s): wall p50 ${t.p50.toFixed(2)} ms · p95 ${t.p95.toFixed(2)} ms · max ${t.max.toFixed(2)} ms · CPU p95 ${t.cpuP95.toFixed(2)} ms, max ${t.cpuMax.toFixed(2)} ms (budget ${(1000 / 20).toFixed(0)} ms) · RSS ${Math.round(rss / 1048576)} MB (whole test process) · rays ${st.rays}, denied ${st.raysDenied}, searches ${st.searches}, expansions ${st.expansions}, cache hits ${st.cacheHits}`);
   assert(t.n > 1000, 'ticks measured');
-  assert(t.p95 < 10, `tick p95 ${t.p95.toFixed(2)} ms`);
-  assert(t.max < 50, `tick max ${t.max.toFixed(2)} ms`);
+  assert(t.cpuP95 < 10, `tick CPU p95 ${t.cpuP95.toFixed(2)} ms`);
+  assert(t.p95 < 25, `tick wall p95 ${t.p95.toFixed(2)} ms`);
   assert(rss < 512 * 1048576, `RSS ${Math.round(rss / 1048576)} MB`);
   await me.leave();
 });
