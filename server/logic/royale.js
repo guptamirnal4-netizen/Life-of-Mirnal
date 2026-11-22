@@ -1,12 +1,12 @@
 // Campus Royale on the server: landing, supplies (pick up / drop / throw / use), the shrinking zone, squads'
 // clean-offs, eliminations without respawn, spectating and the end of the match. One instance per room
 // (server/PaintballRoom.js creates it); the room keeps doing movement, blasters and paintballs.
-import { PbLoot } from '../schema.js';
+import { PbLoot, PbCrate } from '../schema.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../../js/paintball/equipment.js';
 import { MODES_BY_ID, SCORE, ASSIST_WINDOW, MOVE } from '../../js/paintball/rules.js';
 import { CAMPUS } from '../../js/paintball/arena.js';
-import { ROYALE, ZONE_PHASES, planZone, zoneAt, readSpots, assignLandings, spawnLoot, pickFinal, nearestDrop } from '../../js/paintball/royale.js';
-import { ITEMS, pickupPlan, BOMB, SMOKE, KITS, CARRY, bombPaint, gearPaint, PACK } from '../../js/paintball/items.js';
+import { ROYALE, ZONE_PHASES, planZone, zoneAt, readSpots, assignLandings, spawnCrates, pickFinal, nearestDrop, pickAirdrop } from '../../js/paintball/royale.js';
+import { ITEMS, pickupPlan, BOMB, SMOKE, KITS, CARRY, SHIELD, SCAN, bombPaint, gearPaint, PACK, rollAirdrop } from '../../js/paintball/items.js';
 import { stepBomb, throwVelocity, BODY } from '../../js/paintball/sim.js';
 
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -44,24 +44,34 @@ export class RoyaleRules {
     if (b) { const C = p.slot ? p.carried1 : p.carried0; if ((p.ammo.get(b) || 0) !== C) p.ammo.set(b, C); }
     this.mirror(p);
   }
-  addLoot(item, n, x, y, z) {
-    const l = new PbLoot(); l.item = item; l.n = n; l.x = x; l.y = y; l.z = z;
-    const id = `L${++this.lootId}`;
-    this.s.loot.set(id, l);
+  // a crate with items [[itemId, n]]; returns its id
+  addCrate(kind, items, x, y, z) {
+    const c = new PbCrate(); c.kind = kind; c.x = x; c.y = y; c.z = z; c.opened = kind === 'pile';
+    for (const [item, n] of items) { const l = new PbLoot(); l.item = item; l.n = n; c.items.set(`I${++this.itemId}`, l); }
+    const id = `C${++this.lootId}`;
+    this.s.crates.set(id, c);
     return id;
+  }
+  // something dropped: onto the pile already at your feet, or a new pile
+  addLoot(item, n, x, y, z) {
+    for (const [id, c] of this.s.crates) {
+      if (c.kind === 'pile' && Math.hypot(c.x - x, c.z - z) < 0.8 && Math.abs(c.y - y) < 0.5) { const l = new PbLoot(); l.item = item; l.n = n; c.items.set(`I${++this.itemId}`, l); return id; }
+    }
+    return this.addCrate('pile', [[item, n]], x, y, z);
   }
 
   // ---------- match start: landing ----------
   start() {
     const s = this.s; const room = this.room;
     this.bombs.length = 0; this.zoneOverride = null; this._spots = null;
-    s.loot.clear(); this.lootId = 0;
+    s.crates.clear(); this.lootId = 0; this.itemId = 0;
+    Object.assign(s.airdrop, { x: 0, y: 0, z: 0, at: 0, announced: false, landed: false, crate: '' });
     s.geo = this.geo.hash;
     for (const id of room.joinOrder) {
       const p = s.players.get(id); if (!p) continue;
       const sim = room.sim.get(id);
       if (sim && !sim.loadout) sim.loadout = [p.primary, p.secondary]; // the lobby choice, back after the match
-      Object.assign(p, { alive: false, out: false, down: false, downUntil: 0, placement: 0, survived: 0, drop: -1, watching: '', channel: '', channelUntil: 0, paint: 0, paintbomb: 0, smoke: 0, wipes: 0, kit: 0, gearMask: 0, gearVest: 0, primary: ROYALE.start.blaster, secondary: '', slot: 0, equip: ROYALE.start.blaster, hopper0: ROYALE.start.hopper, hopper1: 0, reloadUntil: 0, switchUntil: 0 });
+      Object.assign(p, { supplies: 0, shield: 0, scan: 0, shieldUntil: 0, alive: false, out: false, down: false, downUntil: 0, placement: 0, survived: 0, drop: -1, watching: '', channel: '', channelUntil: 0, paint: 0, paintbomb: 0, smoke: 0, wipes: 0, kit: 0, gearMask: 0, gearVest: 0, primary: ROYALE.start.blaster, secondary: '', slot: 0, equip: ROYALE.start.blaster, hopper0: ROYALE.start.hopper, hopper1: 0, reloadUntil: 0, switchUntil: 0 });
       p.ammo.clear();
       this.mirror(p);
     }
@@ -109,7 +119,13 @@ export class RoyaleRules {
       p.alive = true; p.out = false;
       p.protectedUntil = s.now + room.timing.countdown + room.timing.protection;
     }
-    for (const l of spawnLoot(this.spots.supplies, room.rand)) this.addLoot(l.item, l.n, l.x, l.y, l.z);
+    for (const c of spawnCrates(this.spots.supplies, room.rand)) this.addCrate('crate', c.items, c.x, c.y, c.z);
+    // the special supply drop: where (inside the zone of its time) and when
+    const at = ROYALE.airdrop.at * room.timing.zoneScale;
+    const zAt = zoneAt(this.circles, at, ZONE_PHASES, room.timing.zoneScale);
+    const d = pickAirdrop(this.spots.drops, zAt.next.r > 0 ? zAt.next : zAt, room.rand);
+    Object.assign(s.airdrop, { x: d.x, y: d.y, z: d.z, at: 0, announced: false, landed: false, crate: '' });
+    this.airdropAt = at;
     s.phase = 'countdown';
     s.phaseEnds = s.now + room.timing.countdown;
     this.updateCounts();
@@ -136,8 +152,20 @@ export class RoyaleRules {
       }
     }
     this.flyBombs(dt);
+    this.airdropTick(t);
     this.updateCounts();
     this.checkEnd();
+  }
+
+  // the special supply drop: announced ROYALE.airdrop.warn s ahead (map, minimap, HUD countdown), then lands.
+  // now: a test helper (announce at once, land half a second later)
+  airdropTick(t, now = false) {
+    const A = this.s.airdrop; const room = this.room;
+    if (A.landed) return;
+    const warn = ROYALE.airdrop.warn * room.timing.zoneScale;
+    if (now) this.airdropAt = Math.min(this.airdropAt, t + 0.5);
+    if (!A.announced && t >= this.airdropAt - warn - (now ? 1 : 0)) { A.announced = true; A.at = this.s.playStart + this.airdropAt; room.broadcast('airdrop', { x: A.x, z: A.z, at: A.at }); }
+    if (t >= this.airdropAt) { A.landed = true; A.crate = this.addCrate('drop', rollAirdrop(room.rand), A.x, A.y, A.z); room.broadcast('airdrop', { x: A.x, z: A.z, landed: true, crate: A.crate }); }
   }
 
   applyZone(z) {
@@ -209,8 +237,10 @@ export class RoyaleRules {
     for (const k of ['paintbomb', 'smoke', 'wipes', 'kit']) if (p[k] > 0) items.push([k, p[k]]);
     if (p.gearMask) items.push([`mask${p.gearMask}`, 1]);
     if (p.gearVest) items.push([`vest${p.gearVest}`, 1]);
-    for (const [item, n] of items) this.addLoot(item, n, p.x, p.y, p.z);
-    Object.assign(p, { primary: '', secondary: '', equip: '', paintbomb: 0, smoke: 0, wipes: 0, kit: 0, gearMask: 0, gearVest: 0, hopper0: 0, hopper1: 0 });
+    if (p.shield) items.push(['shield', p.shield]);
+    if (p.scan) items.push(['scan', p.scan]);
+    if (items.length) this.addCrate('pile', items, p.x, p.y, p.z);
+    Object.assign(p, { shield: 0, scan: 0, primary: '', secondary: '', equip: '', paintbomb: 0, smoke: 0, wipes: 0, kit: 0, gearMask: 0, gearVest: 0, hopper0: 0, hopper1: 0 });
     p.ammo.clear(); this.mirror(p);
   }
 
@@ -267,33 +297,57 @@ export class RoyaleRules {
   }
 
   // ---------- supplies ----------
+  crateInReach(id, p, cid) {
+    const c = this.s.crates.get(typeof cid === 'string' ? cid : '');
+    if (!c) { this.sendErr(id, 'gone', 'That crate is gone.'); return null; }
+    if (Math.hypot(c.x - p.x, c.z - p.z) > ROYALE.pickRange || Math.abs(c.y - p.y) > ROYALE.pickRise) { this.sendErr(id, 'far', 'Too far away to reach that.'); return null; }
+    if (this.geo.blocked({ x: p.x, y: p.y + 1.2, z: p.z }, { x: c.x, y: c.y + 0.35, z: c.z })) { this.sendErr(id, 'sight', 'You cannot reach that from here.'); return null; }
+    return c;
+  }
+  canLoot(id, p) {
+    const s = this.s;
+    if (s.phase !== 'playing' && s.phase !== 'countdown') { this.sendErr(id, 'pick', 'Nothing to pick up right now.'); return false; }
+    if (!p.alive || p.out || p.down) { this.sendErr(id, 'pick', 'You cannot pick things up now.'); return false; }
+    return true;
+  }
+  // 'open' { id }: the crate opens for everyone (lid up); its contents are in the state
+  open(id, p, msg) {
+    if (!this.canLoot(id, p)) return;
+    const c = this.crateInReach(id, p, msg.id); if (!c) return;
+    c.opened = true;
+    this.room.sendTo(id, 'opened', { id: msg.id });
+  }
+  // 'pick' { id: crate, item: uid (optional: the first item) }
   pick(id, p, msg) {
     const s = this.s;
-    if (s.phase !== 'playing' && s.phase !== 'countdown') return this.sendErr(id, 'pick', 'Nothing to pick up right now.');
-    if (!p.alive || p.out || p.down) return this.sendErr(id, 'pick', 'You cannot pick things up now.');
-    const lid = typeof msg.id === 'string' ? msg.id : '';
-    const l = s.loot.get(lid);
+    if (!this.canLoot(id, p)) return;
+    const c = this.crateInReach(id, p, msg.id); if (!c) return;
+    c.opened = true;
+    const uid = typeof msg.item === 'string' ? msg.item : c.items.keys().next().value;
+    const l = uid && c.items.get(uid);
     if (!l) return this.sendErr(id, 'gone', 'Someone else got there first.');
-    if (Math.hypot(l.x - p.x, l.z - p.z) > ROYALE.pickRange || Math.abs(l.y - p.y) > ROYALE.pickRise) return this.sendErr(id, 'far', 'Too far away to pick that up.');
-    if (this.geo.blocked({ x: p.x, y: p.y + 1.2, z: p.z }, { x: l.x, y: l.y + 0.35, z: l.z })) return this.sendErr(id, 'sight', 'You cannot reach that from here.');
     const plan = pickupPlan(this.inv(p), l.item, l.n);
-    if (!plan.take) return this.sendErr(id, plan.reason === 'have-better' ? 'have-better' : 'full', plan.reason === 'have-better' ? 'Your gear is already as good or better.' : 'No room for that.');
-    const it = ITEMS[l.item];
-    for (const [item, n] of plan.drop) this.addLoot(item, n, p.x, p.y, p.z);
+    if (!plan.take) return this.sendErr(id, plan.reason === 'have-better' ? 'have-better' : plan.reason === 'no-blaster' ? 'no-blaster' : 'full', plan.reason === 'have-better' ? 'Your gear is already as good or better.' : plan.reason === 'no-blaster' ? 'Find a paintball blaster first.' : 'No room for that.');
+    const it = ITEMS[l.item]; const item = l.item;
     if (it.kind === 'blaster') {
       const e = EQUIPMENT_BY_ID[it.blaster];
       if (plan.slot === 0) { p.primary = e.id; p.hopper0 = e.magazine; } else { p.secondary = e.id; p.hopper1 = e.magazine; }
       if (plan.swap || p.slot === plan.slot || !p.equip) { p.slot = plan.slot; p.equip = e.id; p.reloadUntil = 0; p.switchUntil = s.now + e.cooldown; }
     } else if (it.kind === 'ammo') {
       p.ammo.set(it.blaster, (p.ammo.get(it.blaster) || 0) + plan.take);
-    } else if (it.kind === 'throw' || it.kind === 'kit') {
+    } else if (it.kind === 'refill') {
+      p.ammo.set(plan.blaster, (p.ammo.get(plan.blaster) || 0) + plan.add);
+    } else if (it.kind === 'throw' || it.kind === 'kit' || it.kind === 'gadget') {
       p[l.item] += plan.take;
     } else if (it.kind === 'gear') {
       if (it.slot === 'mask') p.gearMask = it.tier; else p.gearVest = it.tier;
     }
-    if (plan.take < l.n && it.kind !== 'blaster' && it.kind !== 'gear') l.n -= plan.take; else s.loot.delete(lid);
+    if (plan.take < l.n && (it.kind === 'ammo' || it.kind === 'throw' || it.kind === 'kit' || it.kind === 'gadget')) l.n -= plan.take; else c.items.delete(uid);
+    if (c.kind === 'pile' && c.items.size === 0) s.crates.delete(msg.id);
+    for (const [di, dn] of plan.drop) this.addLoot(di, dn, p.x, p.y, p.z);
+    p.supplies++;
     this.mirror(p);
-    this.room.sendTo(id, 'picked', { item: l.item, n: plan.take });
+    this.room.sendTo(id, 'picked', { item, n: plan.take, crate: msg.id });
   }
 
   drop(id, p, msg) {
@@ -358,10 +412,25 @@ export class RoyaleRules {
 
   // ---------- cleaning ----------
   use(id, p, msg) {
-    const s = this.s; const k = msg.kind === 'kit' ? 'kit' : 'wipes';
+    const s = this.s;
+    if (msg.kind === 'shield' || msg.kind === 'scan') return this.gadget(id, p, msg.kind);
+    const k = msg.kind === 'kit' ? 'kit' : 'wipes';
     if (s.phase !== 'playing' || !p.alive || p.out || p.down || p.channel || p[k] <= 0) return;
     if (p.paint <= 0) return this.sendErr(id, 'clean', 'You are already clean.');
     p.channel = k; p.channelUntil = s.now + KITS[k].time;
+  }
+  // paint shield (a bubble no paint gets through) and paint-scan pulse (opponents nearby, to you only)
+  gadget(id, p, k) {
+    const s = this.s;
+    if (s.phase !== 'playing' || !p.alive || p.out || p.down || p[k] <= 0) return;
+    p[k]--;
+    if (k === 'shield') { p.shieldUntil = s.now + SHIELD.time; p.channel = ''; this.room.broadcast('shield', { id, until: p.shieldUntil }); return; }
+    const seen = [];
+    for (const [qid, q] of s.players) {
+      if (qid === id || !q.alive || q.out || (this.teams() && q.team === p.team)) continue;
+      if (Math.hypot(q.x - p.x, q.z - p.z) <= SCAN.radius) seen.push({ id: qid, x: Math.round(q.x * 10) / 10, z: Math.round(q.z * 10) / 10 });
+    }
+    this.room.sendTo(id, 'scan', { until: s.now + SCAN.time, seen });
   }
   revive(id, p, msg) {
     const s = this.s; const t = s.players.get(msg.id);

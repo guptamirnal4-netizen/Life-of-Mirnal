@@ -159,7 +159,7 @@ export function finaliseRoyale(modeId, players, { winner = null } = {}) {
   }
   const pl = (p) => p.placement || 255;
   const rank = [...players].sort((a, b) => pl(a) - pl(b) || b.score - a.score || b.tags - a.tags || a.nickname.localeCompare(b.nickname));
-  const rankings = rank.map((p, i) => ({ id: p.id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags, assists: p.assists, timesTagged: p.timesTagged, place: i + 1, placement: p.placement || 0, survived: p.survived || 0 }));
+  const rankings = rank.map((p, i) => ({ id: p.id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags, assists: p.assists, timesTagged: p.timesTagged, place: i + 1, placement: p.placement || 0, survived: p.survived || 0, supplies: p.supplies || 0 }));
   const mvp = [...rankings].sort((a, b) => b.score - a.score || b.tags - a.tags)[0] || null;
   let teams = []; let win = null; let runner = null;
   if (mode.teams) {

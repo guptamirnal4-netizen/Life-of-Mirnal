@@ -33,7 +33,7 @@ export function summary() {
 
 export async function boot() { return startServer({ port: 0, test: true, quiet: true }); }
 
-const EVENTS = ['host', 'shot', 'impact', 'hit', 'painted', 'tag', 'ended', 'overtime', 'closed', 'error', 'rtc', 'landed', 'picked', 'bomb', 'boom', 'down', 'out', 'revived', 'test:loot'];
+const EVENTS = ['host', 'shot', 'impact', 'hit', 'painted', 'tag', 'ended', 'overtime', 'closed', 'error', 'rtc', 'landed', 'picked', 'bomb', 'boom', 'down', 'out', 'revived', 'test:loot', 'opened', 'shield', 'scan', 'airdrop'];
 // A connected player: the room, a log of every server event, and a pilot that sends inputs at INPUT_DT.
 export class Bot {
   constructor(room) {

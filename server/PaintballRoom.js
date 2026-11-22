@@ -118,6 +118,7 @@ export class PaintballRoom extends Room {
     // Campus Royale: landing spot, supplies, throws, cleaning, spectating (server-validated in logic/royale.js)
     const royale = (fn) => (client, p, msg) => (this.arena.royale ? fn.call(this.royale, client.sessionId, p, msg) : undefined);
     on('land', royale(this.royale.choose));
+    on('open', royale(this.royale.open));
     on('pick', royale(this.royale.pick));
     on('drop', royale(this.royale.drop));
     on('throw', royale(this.royale.throw));
@@ -138,11 +139,11 @@ export class PaintballRoom extends Room {
       on('test:loot', (client, p, msg) => {
         if (!this.arena.royale || typeof msg.item !== 'string') return;
         const x = Number.isFinite(msg.x) ? msg.x : p.x; const z = Number.isFinite(msg.z) ? msg.z : p.z;
-        client.send('test:loot', { id: this.royale.addLoot(msg.item, msg.n || 1, x, Number.isFinite(msg.y) ? msg.y : this.arena.geo.floorAt(x, z, p.y + 0.05), z), tag: msg.tag });
+        client.send('test:loot', { id: this.royale.addCrate('pile', [[msg.item, msg.n || 1]], x, Number.isFinite(msg.y) ? msg.y : this.arena.geo.floorAt(x, z, p.y + 0.05), z), tag: msg.tag });
       });
       on('test:give', (client, p, msg) => {
         if (!this.arena.royale) return;
-        for (const k of ['paintbomb', 'smoke', 'wipes', 'kit', 'gearMask', 'gearVest', 'hopper0', 'hopper1']) if (Number.isFinite(msg[k])) p[k] = msg[k];
+        for (const k of ['paintbomb', 'smoke', 'wipes', 'kit', 'shield', 'scan', 'gearMask', 'gearVest', 'hopper0', 'hopper1']) if (Number.isFinite(msg[k])) p[k] = msg[k];
         for (const k of ['primary', 'secondary']) if (typeof msg[k] === 'string') p[k] = msg[k];
         if (msg.ammo) for (const [k, v] of Object.entries(msg.ammo)) p.ammo.set(k, v);
         if (typeof msg.primary === 'string') { p.slot = 0; p.equip = msg.primary; p.switchUntil = 0; }
@@ -152,6 +153,7 @@ export class PaintballRoom extends Room {
         if (!this.arena.royale) return;
         this.royale.zoneOverride = msg.off ? null : { x: msg.x, z: msg.z, r: msg.r, next: { x: msg.x, z: msg.z, r: msg.r }, phase: 1, shrinking: false, ends: 999, dps: msg.dps ?? 10 };
       });
+      on('test:airdrop', () => { if (this.arena.royale && this.state.phase === 'playing') this.royale.airdropTick(this.state.now - this.state.playStart, true); });
       on('test:end', () => { if (this.arena.royale && this.state.phase === 'playing') this.state.phaseEnds = this.state.now; });
     }
     this.onMessage('*', () => {}); // unknown message types are ignored (not a disconnect)
@@ -282,7 +284,7 @@ export class PaintballRoom extends Room {
     const s = this.state;
     s.phase = 'lobby'; s.teamsLocked = false; s.phaseEnds = 0;
     for (const p of s.players.values()) { p.ready = false; p.alive = false; p.out = false; p.down = false; }
-    s.loot.clear(); this.royale.bombs.length = 0;
+    s.crates.clear(); this.royale.bombs.length = 0;
     for (const [id, p] of s.players) {
       const lo = this.sim.get(id)?.loadout; // Campus Royale borrowed the blaster slots: give the lobby choice back
       if (lo) { p.primary = lo[0]; p.secondary = lo[1]; this.sim.get(id).loadout = null; }
@@ -335,7 +337,7 @@ export class PaintballRoom extends Room {
   endRoyale(winner) {
     const s = this.state;
     this.projectiles.length = 0; this.royale.bombs.length = 0;
-    const list = [...s.players.entries()].map(([id, p]) => ({ id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags, assists: p.assists, timesTagged: p.timesTagged, connected: p.connected, placement: p.placement, survived: p.survived }));
+    const list = [...s.players.entries()].map(([id, p]) => ({ id, nickname: p.nickname, team: p.team, score: p.score, tags: p.tags, assists: p.assists, timesTagged: p.timesTagged, connected: p.connected, placement: p.placement, survived: p.survived, supplies: p.supplies }));
     const r = finaliseRoyale(s.mode, list, { winner });
     for (const q of list) s.players.get(q.id).score = q.score;
     const R = s.results;
@@ -446,7 +448,7 @@ export class PaintballRoom extends Room {
     const startReload = () => { if (!reloading && p[C] > 0 && p[H] < e.magazine) { p.reloadUntil = now + e.reload; sim.burstLeft = 0; } };
     if (sim.reloadWanted) { sim.reloadWanted = false; startReload(); }
     if (reloading || p.reloadUntil > 0) return;
-    const canFire = now >= p.protectedUntil && now >= p.switchUntil;
+    const canFire = now >= p.protectedUntil && now >= p.switchUntil && now >= p.shieldUntil;
     // the rest of a burst
     while (sim.burstLeft > 0 && now >= sim.nextBurst && canFire) {
       if (p[H] <= 0) { sim.burstLeft = 0; startReload(); break; }
@@ -551,6 +553,7 @@ export class PaintballRoom extends Room {
     if (sh && MODES_BY_ID[s.mode].teams && sh.team === t.team) return;
     if (this.arena.royale) {
       if (t.down) { this.sendTo(shooterId, 'hit', { t: targetId, a: 0, fin: true }); this.royale.eliminate(targetId, 'tag'); return; } // finished off
+      if (s.now < t.shieldUntil) { this.sendTo(shooterId, 'hit', { t: targetId, shield: true }); return; } // the paint shield
       amount = this.royale.gear(t, amount, precision);
       t.channel = ''; // being painted stops cleaning
     }

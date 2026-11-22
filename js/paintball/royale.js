@@ -9,12 +9,13 @@
 //              ROYALE.down seconds); the play zone shrinks in timed phases towards a random final spot; paint builds
 //              up outside it; the last player or squad standing wins.
 import { inPoly } from './geometry.js';
-import { rollLoot } from './items.js';
+import { rollCrate } from './items.js';
 
 export const ROYALE = {
   landing: 20, // s to pick a landing spot
   start: { blaster: 'standard', hopper: 10 }, // everyone lands with a weak start: a Standard blaster, 10 paintballs
-  lootShare: 0.7, // share of supply spots that get items each match
+  lootShare: 0.55, // share of supply spots that get a crate each match
+  airdrop: { at: 200, warn: 45 }, // s into play the special supply drop lands; announced this long before
   pickRange: 2.4, // m (horizontal) to pick something up
   pickRise: 1.8, // m up or down
   down: 20, // s a fully painted squad member waits for a teammate to clean them off
@@ -164,15 +165,22 @@ export function assignLandings(drops, groups, rand) {
   return out;
 }
 
-// Items for one match: a random share of the supply spots, each with rollLoot's items.
-// Returns [{ item, n, x, y, z, spot }].
-export function spawnLoot(supplies, rand, share = ROYALE.lootShare) {
+// Crates for one match: a random share of the supply spots, each with rollCrate's items.
+// Returns [{ items: [[item, n]], x, y, z, spot }].
+export function spawnCrates(supplies, rand, share = ROYALE.lootShare) {
   const out = [];
   for (const s of supplies) {
     if (rand() >= share) continue;
-    for (const [item, n] of rollLoot(rand)) out.push({ item, n, x: s.x, y: s.y, z: s.z, spot: s.id });
+    out.push({ items: rollCrate(rand), x: s.x, y: s.y, z: s.z, spot: s.id });
   }
   return out;
+}
+
+// Where the special supply drop lands: an outdoor landing spot well inside the given circle (the zone it lands in).
+export function pickAirdrop(drops, circle, rand) {
+  const c = drops.filter((d) => !d.indoor && Math.hypot(d.x - circle.x, d.z - circle.z) < circle.r * 0.6);
+  const pool = c.length ? c : drops.filter((d) => !d.indoor);
+  return pool[Math.floor(rand() * pool.length)];
 }
 
 // A random final zone centre from the registry.

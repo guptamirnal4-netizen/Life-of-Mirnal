@@ -66,12 +66,28 @@ export const PbPlayer = schema({
   survived: t.float32().default(0), // s from the start of play to elimination (or the end)
   drop: t.int16().default(-1), // chosen landing spot (drop registry id)
   watching: t.string().default(''), // spectating this player
+  shield: t.uint8().default(0), // paint shields carried
+  scan: t.uint8().default(0), // paint-scan pulses carried
+  shieldUntil: t.float32().default(0), // a paint shield is up until then: no paint lands (and no firing)
+  supplies: t.uint16().default(0), // supplies collected this match
 }, 'PbPlayer');
 
-// Something lying on the ground in Campus Royale: an item id (js/paintball/items.js), how many, where.
-export const PbLoot = schema({
-  item: t.string(), n: t.uint16().default(1), x: t.float32(), y: t.float32(), z: t.float32(),
-}, 'PbLoot');
+// One item inside a supply crate: an item id (js/paintball/items.js) and how many.
+export const PbLoot = schema({ item: t.string(), n: t.uint16().default(1) }, 'PbLoot');
+
+// A supply crate in Campus Royale (server-owned contents, keyed by a unique item uid so two players can never take
+// the same item): 'crate' (placed at a verified supply spot), 'drop' (the mid-match special supply drop), 'pile'
+// (what a player dropped or left behind; it disappears when empty). Opened crates show open to everyone.
+export const PbCrate = schema({
+  kind: t.string().default('crate'), x: t.float32(), y: t.float32(), z: t.float32(),
+  opened: t.boolean().default(false), items: t.map(PbLoot),
+}, 'PbCrate');
+
+// The special supply drop: where and when it lands (announced in advance), whether it has landed, its crate id.
+export const PbAirdrop = schema({
+  x: t.float32().default(0), y: t.float32().default(0), z: t.float32().default(0),
+  at: t.float32().default(0), announced: t.boolean().default(false), landed: t.boolean().default(false), crate: t.string().default(''),
+}, 'PbAirdrop');
 
 // The play zone: the current circle (shrinking towards next), the phase, when this stage ends, paint per second
 // outside.
@@ -85,7 +101,7 @@ export const PbZone = schema({
 export const PbRank = schema({
   id: t.string(), nickname: t.string(), team: t.int8().default(-1), place: t.uint8(),
   score: t.int32(), tags: t.uint16(), assists: t.uint16(), timesTagged: t.uint16(),
-  placement: t.uint8().default(0), survived: t.float32().default(0), // Campus Royale
+  placement: t.uint8().default(0), survived: t.float32().default(0), supplies: t.uint16().default(0), // Campus Royale
 }, 'PbRank');
 
 export const PbTeamResult = schema({
@@ -119,7 +135,8 @@ export const PbState = schema({
   results: t.ref(PbResults).default(() => new PbResults()),
   // Campus Royale
   geo: t.string().default(''), // hash of the campus collision export the server runs (the client checks it loaded the same)
-  loot: t.map(PbLoot),
+  crates: t.map(PbCrate),
+  airdrop: t.ref(PbAirdrop).default(() => new PbAirdrop()),
   zone: t.ref(PbZone).default(() => new PbZone()),
   standing: t.uint8().default(0), // players not yet eliminated
   groups: t.uint8().default(0), // players (free-for-all) or squads still standing

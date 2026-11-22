@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { decodeGeometry, hashBytes, encodeGeometry } from '../js/paintball/geometry.js';
 import { stepCampus, sweepArena } from '../js/paintball/sim.js';
-import { readSpots, validateSpot, SPOT_RULES, planZone, zoneAt, ZONE_PHASES, zoneLength, assignLandings, spawnLoot, pickFinal, ROYALE } from '../js/paintball/royale.js';
-import { pickupPlan, gearPaint, bombPaint, BOMB, ITEMS, AMMO_MAX, CARRY, rollLoot } from '../js/paintball/items.js';
+import { readSpots, validateSpot, SPOT_RULES, planZone, zoneAt, ZONE_PHASES, zoneLength, assignLandings, spawnCrates, pickFinal, pickAirdrop, ROYALE } from '../js/paintball/royale.js';
+import { pickupPlan, gearPaint, bombPaint, BOMB, ITEMS, AMMO_MAX, CARRY, rollLoot, rollAirdrop } from '../js/paintball/items.js';
 import { rng } from '../server/logic/match.js';
 import { loadCampus } from '../server/geo.js';
 import { CAMPUS } from '../js/paintball/arena.js';
@@ -152,13 +152,19 @@ test('landing: picks honoured (taken spot → nearest free), squads land togethe
   assert.ok(Math.hypot(c.x - d.x, c.z - d.z) > 200 && Math.hypot(c.x - pick.x, c.z - pick.z) > 200, 'auto-placed players not far apart');
 });
 
-test('loot: a random share of supply spots, items from the table, blasters with a pack', () => {
-  const a = spawnLoot(spots.supplies, rng(1)); const b = spawnLoot(spots.supplies, rng(2));
-  assert.ok(a.length > spots.supplies.length * 0.5 && a.length < spots.supplies.length * 1.4);
-  assert.notDeepEqual(a.map((x) => x.spot), b.map((x) => x.spot), 'loot not randomised per match');
-  for (const l of a) assert.ok(ITEMS[l.item], l.item);
+test('supply crates: a random share of supply spots, 2–4 items each from the table, blasters with a pack; the special supply drop', () => {
+  const a = spawnCrates(spots.supplies, rng(1)); const b = spawnCrates(spots.supplies, rng(2));
+  assert.ok(a.length > spots.supplies.length * 0.4 && a.length < spots.supplies.length * 0.7, `${a.length} crates`);
+  assert.notDeepEqual(a.map((x) => x.spot), b.map((x) => x.spot), 'crates not randomised per match');
+  const all = a.flatMap((c) => c.items);
+  for (const c of a) assert.ok(c.items.length >= 2 && c.items.length <= 4);
+  for (const [item] of all) assert.ok(ITEMS[item], item);
   for (let i = 0; i < 200; i++) { const r = rollLoot(rng(i)); if (r[0][0].startsWith('blaster:')) assert.ok(r[1][0].startsWith('ammo:')); }
-  const kinds = new Set(a.map((l) => ITEMS[l.item].kind)); for (const k of ['blaster', 'ammo', 'throw', 'kit', 'gear']) assert.ok(kinds.has(k), k);
+  const kinds = new Set(all.map(([item]) => ITEMS[item].kind)); for (const k of ['blaster', 'ammo', 'throw', 'kit', 'gear', 'refill', 'gadget']) assert.ok(kinds.has(k), k);
+  for (const it of Object.values(ITEMS)) for (const f of ['id', 'name', 'category', 'spawn', 'qty', 'pickup', 'respawn']) assert.ok(it[f] !== undefined, `${it.id} has no ${f}`);
+  const drop = rollAirdrop(rng(4)); assert.ok(drop.some(([i]) => i === 'shield') && drop.some(([i]) => /3$/.test(i)));
+  const circle = { x: 140, z: 500, r: 350 };
+  for (let i = 0; i < 20; i++) { const d = pickAirdrop(spots.drops, circle, rng(i)); assert.ok(!d.indoor && Math.hypot(d.x - circle.x, d.z - circle.z) < circle.r * 0.6); }
 });
 
 test('inventory limits: two blasters (a third swaps with the one in hand), paintball caps, bomb and kit caps, gear tiers', () => {
@@ -174,6 +180,9 @@ test('inventory limits: two blasters (a third swaps with the one in hand), paint
   assert.equal(pickupPlan(inv, 'vest1').reason, 'have-better');
   assert.deepEqual(pickupPlan(inv, 'vest3'), { take: 1, drop: [['vest2', 1]] });
   assert.deepEqual(pickupPlan(inv, 'mask1'), { take: 1, drop: [] });
+  assert.equal(pickupPlan(inv, 'shield').take, 1); inv.shield = 1; assert.equal(pickupPlan(inv, 'shield').reason, 'full');
+  inv.ammo.standard = 0; const rf = pickupPlan(inv, 'refill'); assert.equal(rf.blaster, 'standard'); assert.equal(rf.add, AMMO_MAX.standard / 2);
+  assert.equal(pickupPlan({ ...inv, primary: '', secondary: '' }, 'refill').reason, 'no-blaster');
 });
 
 test('protective gear reduces paint (not zone paint); paint bomb splash falls off with distance', () => {

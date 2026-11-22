@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import { SCORE } from '../../js/paintball/rules.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../../js/paintball/equipment.js';
 import { CAMPUS } from '../../js/paintball/arena.js';
-import { readSpots, ROYALE } from '../../js/paintball/royale.js';
+import { readSpots, ROYALE, validateSpot, SPOT_RULES } from '../../js/paintball/royale.js';
+const validateSpotOk = (c) => validateSpot(CAMPUS.geo, c.x, c.z, c.y, SPOT_RULES.drop).ok;
 import { BOMB, KITS, GEAR, CARRY, bombPaint } from '../../js/paintball/items.js';
 import { stepBomb, throwVelocity, INPUT_DT } from '../../js/paintball/sim.js';
 import { MOVE } from '../../js/paintball/rules.js';
@@ -49,12 +50,12 @@ async function walk(bot, pts, { ms = 20000, run = false } = {}) {
   await sleep(300);
   return { x: bot.me.x, y: bot.me.y, z: bot.me.z };
 }
-const lootNear = (bot, item, x, z) => [...bot.state.loot.entries()].find(([, l]) => l.item === item && Math.hypot(l.x - x, l.z - z) < 0.5);
+const lootNear = (bot, item, x, z) => [...bot.state.crates.entries()].find(([, c]) => [...c.items.values()].some((l) => l.item === item) && Math.hypot(c.x - x, c.z - z) < 0.8);
 async function putLoot(bot, item, x, z, n = 1, y) {
   const tag = Math.random().toString(36).slice(2);
   bot.send('test:loot', { item, x, z, n, y, tag });
   const ev = await until(() => bot.events('test:loot').find((e) => e.m.tag === tag), 3000, 'test loot');
-  await until(() => bot.state.loot.has(ev.m.id), 3000, 'loot synced');
+  await until(() => bot.state.crates.has(ev.m.id), 3000, 'loot synced');
   return ev.m.id;
 }
 
@@ -80,7 +81,7 @@ await check('Campus Royale: landing phase, picks honoured, auto-placed players f
   assert(Math.hypot(ps[2].x - ps[3].x, ps[2].z - ps[3].z) > 150 && Math.hypot(ps[2].x - pick.x, ps[2].z - pick.z) > 150, 'auto-placed players not spread out');
   for (const p of ps) assert(p.primary === 'standard' && p.secondary === '' && p.hopper0 === ROYALE.start.hopper && p.carried0 === 0 && p.alive && !p.out, `start loadout ${p.primary}/${p.secondary}/${p.hopper0}/${p.carried0}`);
   const s = r.host.state;
-  assert(s.loot.size > 250, `only ${s.loot.size} supplies on the ground`);
+  assert(s.crates.size > 200 && [...s.crates.values()].every((c) => c.kind === 'crate' && !c.opened && c.items.size >= 2), `only ${s.crates.size} supply crates`);
   assert(s.zone.r > 900 && s.zone.nr === 600 && s.zone.phase === 1 && s.standing === 4 && s.groups === 4, `zone ${s.zone.r}/${s.zone.nr} standing ${s.standing}`);
   assert(s.geo === geo.hash, 'state does not carry the geometry hash');
   r.bots[3].send('land', { id: 3 });
@@ -149,18 +150,18 @@ await check('loot pick-up: distance, line of sight, two players grabbing at once
   const far = await putLoot(a, 'paintbomb', MC.x + 6, MC.z);
   a.send('pick', { id: far });
   await until(() => a.events('error').some((e) => e.m.code === 'far'), 2000, 'too far refused');
-  assert(a.state.loot.has(far) && a.me.paintbomb === 0, 'picked up from 6 m');
+  assert(a.state.crates.has(far) && a.me.paintbomb === 0, 'picked up from 6 m');
   // behind a wall (line of sight): the Library foyer wall, item on the far side within reach
   const wall = probes.find((q) => q.expect?.wall);
   await place(c, wall.end[0], wall.end[2], NORTH, 0, true, wall.start[1]);
   const behind = await putLoot(c, 'wipes', wall.end[0], wall.end[2] - 1.6, 1, 0.6);
   c.send('pick', { id: behind });
   await until(() => c.events('error').some((e) => e.m.code === 'sight' || e.m.code === 'far'), 2000, 'blocked pick refused');
-  assert(c.state.loot.has(behind) && c.me.wipes === 0, 'picked up through a wall');
+  assert(c.state.crates.has(behind) && c.me.wipes === 0, 'picked up through a wall');
   // race: a and b both grab the same item in the same instant
   const prize = await putLoot(a, 'kit', MC.x + 0.5, MC.z + 0.4);
   a.send('pick', { id: prize }); b.send('pick', { id: prize });
-  await until(() => !a.state.loot.has(prize), 2000, 'prize taken');
+  await until(() => !a.state.crates.has(prize), 2000, 'prize taken');
   await sleep(300);
   const got = [a.me.kit, b.me.kit];
   assert(got[0] + got[1] === 1, `the item was duplicated or lost: ${got}`);
@@ -172,14 +173,14 @@ await check('loot pick-up: distance, line of sight, two players grabbing at once
   const extra = await putLoot(a, 'paintbomb', MC.x, MC.z + 0.5);
   a.send('pick', { id: extra });
   await until(() => a.events('error').some((e) => e.m.code === 'full'), 2000, 'full refused');
-  assert(a.me.paintbomb === CARRY.paintbomb && a.state.loot.has(extra), 'carried more than the limit');
+  assert(a.me.paintbomb === CARRY.paintbomb && a.state.crates.has(extra), 'carried more than the limit');
   // paintball packs top up to the carry limit and leave the rest on the ground
   a.send('test:give', { ammo: { standard: EQUIPMENT_BY_ID.standard.total - 15 } });
   await until(() => a.me.carried0 === EQUIPMENT_BY_ID.standard.total - 15, 2000, 'ammo given');
   const pack = await putLoot(a, 'ammo:standard', MC.x - 0.5, MC.z, 40);
   a.send('pick', { id: pack });
   await until(() => a.me.carried0 === EQUIPMENT_BY_ID.standard.total, 2000, 'ammo topped up');
-  await until(() => a.state.loot.get(pack)?.n === 25, 2000, 'remainder left on the ground');
+  await until(() => [...(a.state.crates.get(pack)?.items.values() || [])][0]?.n === 25, 2000, 'remainder left on the ground');
   // blasters: an empty slot fills; a third swaps with the one in hand, which drops
   const r1 = await putLoot(a, 'blaster:rapid', MC.x, MC.z - 0.5);
   a.send('pick', { id: r1 });
@@ -196,6 +197,89 @@ await check('loot pick-up: distance, line of sight, two players grabbing at once
   // drop: the blaster in hand goes to the ground
   a.send('drop', { what: 'blaster' });
   await until(() => a.me.primary === '' && a.me.equip === 'rapid', 2000, 'dropped the blaster in hand');
+  await leaveAll(r.bots);
+});
+
+await check('supply crates: E opens a crate for everyone, pick one item by its uid, the HUD inventory updates, the same item cannot be taken twice, supplies collected counted', async () => {
+  const r = await royale(2);
+  const [a, b] = r.bots;
+  // a real crate rolled for this match, outdoors and on the ground
+  const [cid, crate] = [...a.state.crates.entries()].find(([, c]) => c.kind === 'crate' && Math.abs(c.y) < 0.01 && !geo.blockedAt(c.x + 1, c.z, 0, 0.4) && !geo.blockedAt(c.x - 1, c.z, 0, 0.4));
+  await place(a, crate.x + 1, crate.z, WEST); await place(b, crate.x - 1, crate.z, EAST);
+  assert(!crate.opened, 'crate starts closed');
+  a.send('open', { id: cid });
+  await until(() => b.state.crates.get(cid)?.opened, 2000, 'the other player sees it open');
+  assert(a.events('opened').some((e) => e.m.id === cid), 'opener told');
+  const items = [...crate.items.entries()];
+  const [uid, l] = items.find(([, x]) => !x.item.startsWith('blaster:')) || items[0];
+  const before = a.me.supplies;
+  a.send('pick', { id: cid, item: uid });
+  b.send('pick', { id: cid, item: uid });
+  await until(() => !a.state.crates.get(cid)?.items.has(uid) || a.state.crates.get(cid)?.items.get(uid).n !== l.n, 2000, 'item taken');
+  await sleep(300);
+  const took = [a, b].filter((x) => x.events('picked').some((e) => e.m.crate === cid));
+  const refused = [a, b].filter((x) => x.events('error').some((e) => e.m.code === 'gone' || e.m.code === 'full' || e.m.code === 'have-better' || e.m.code === 'no-blaster'));
+  assert(took.length >= 1 && took.length + refused.length === 2, `both took the same item (${took.length} took, ${refused.length} refused)`);
+  assert(took[0].me.supplies === (took[0] === a ? before : 0) + 1, 'supplies collected not counted');
+  const ev = took[0].events('picked').find((e) => e.m.crate === cid);
+  assert(ev.m.item === l.item, 'wrong item');
+  // an emptied crate stays, open and empty, for everyone
+  for (const [u] of [...a.state.crates.get(cid).items.entries()]) { a.send('pick', { id: cid, item: u }); await sleep(150); b.send('pick', { id: cid, item: u }); await sleep(150); }
+  await sleep(300);
+  const c = b.state.crates.get(cid);
+  assert(c && c.opened, 'crate vanished or closed');
+  await leaveAll(r.bots);
+});
+
+await check('paint shield blocks paint (and firing) for its time; paint-scan pulse shows nearby opponents; paint refill pack', async () => {
+  const r = await royale(3);
+  const [a, t, far] = r.bots;
+  await place(t, MC.x + 6, MC.z, WEST); await place(a, MC.x - 4, MC.z, EAST); await place(far, MC.x + 200, MC.z, 0);
+  t.send('test:give', { shield: 1, scan: 1, primary: 'standard', hopper0: 20 });
+  await until(() => t.me.shield === 1 && t.me.scan === 1, 2000, 'given');
+  t.send('use', { kind: 'shield' });
+  await until(() => t.me.shieldUntil > t.state.now && t.me.shield === 0, 2000, 'shield up');
+  aim(a, { x: MC.x - 4, z: MC.z }, { x: MC.x + 6, z: MC.z });
+  await a.tap(); await sleep(500);
+  assert(t.me.paint === 0 && a.events('hit').some((e) => e.m.shield), 'paint got through the shield');
+  t.clear(); t.in.pitch = 1.2; await t.tap(100); await sleep(200);
+  assert(!t.events('shot').some((e) => e.m.o === t.id), 'fired from inside the shield');
+  await until(() => t.state.now > t.me.shieldUntil, 6000, 'shield down');
+  await a.tap();
+  await until(() => t.me.paint > 0, 3000, 'painted after the shield');
+  t.send('use', { kind: 'scan' });
+  const sc = await until(() => t.events('scan')[0], 2000, 'scan result');
+  assert(sc.m.seen.some((q) => q.id === a.id) && !sc.m.seen.some((q) => q.id === far.id), `scan ${JSON.stringify(sc.m.seen)}`);
+  // refill: half a carry for the blaster in hand
+  const rf = await putLoot(a, 'refill', MC.x - 4, MC.z + 0.5);
+  a.send('pick', { id: rf });
+  await until(() => a.me.carried0 === EQUIPMENT_BY_ID.standard.total / 2, 2000, 'refill');
+  await leaveAll(r.bots);
+});
+
+await check('special supply drop: announced (where, when) before it lands, lands as a better crate', async () => {
+  const r = await royale(2);
+  const [a] = r.bots;
+  const A = a.state.airdrop;
+  assert(!A.announced && !A.landed && (A.x || A.z), 'airdrop spot not chosen or announced too early');
+  a.send('test:airdrop', {});
+  await until(() => A.announced, 2000, 'announced');
+  const ann = await until(() => a.events('airdrop').find((e) => !e.m.landed), 2000, 'announcement event');
+  assert(ann.m.at > a.state.now - 0.1, 'announced after landing');
+  await until(() => A.landed && a.state.crates.has(A.crate), 3000, 'landed');
+  const c = a.state.crates.get(A.crate);
+  assert(c.kind === 'drop' && Math.hypot(c.x - A.x, c.z - A.z) < 0.01 && [...c.items.values()].some((l) => /3$/.test(l.item)) && [...c.items.values()].some((l) => l.item === 'shield'), 'airdrop contents');
+  const v = validateSpotOk(c);
+  assert(v, 'airdrop landed on an invalid spot');
+  await leaveAll(r.bots);
+});
+
+await check('12 players in a Campus Royale free-for-all: all land on verified spots, apart, and play', async () => {
+  const r = await royale(12);
+  const ps = [...r.host.state.players.values()];
+  assert(ps.length === 12 && ps.every((p) => p.alive && !p.out), '12 standing');
+  for (const p of ps) for (const q of ps) if (p !== q) assert(Math.hypot(p.x - q.x, p.z - q.z) > 20, 'two players landed together');
+  assert(r.host.state.standing === 12 && r.host.state.groups === 12, 'counts');
   await leaveAll(r.bots);
 });
 
@@ -363,6 +447,7 @@ await check('free-for-all: a tag is a round elimination (no respawn), spectating
   assert(s.get(a.id).score === 2 * SCORE.tag + SCORE.completion + 2 * SCORE.place + SCORE.win, `winner score ${s.get(a.id).score}`);
   assert(s.get(b.id).score === SCORE.completion, `3rd score ${s.get(b.id).score}`);
   assert(R.rankings[0].id === a.id && R.rankings[0].placement === 1 && R.rankings[2].id === b.id, 'rankings by placement');
+  assert(R.rankings.every((k) => k.supplies === a.state.players.get(k.id).supplies), 'supplies collected not in the results');
   assert(R.rankings[2].survived > 0 && R.rankings[2].survived < R.rankings[1].survived && R.rankings[0].survived >= R.rankings[1].survived, 'survival times');
   // rematch: a new landing; back to the lobby restores the lobby blaster choice
   a.send('rematch', {});
@@ -374,7 +459,7 @@ await check('free-for-all: a tag is a round elimination (no respawn), spectating
   assert(a.state.results.draw || a.state.results.winner, 'cap result');
   a.send('lobby', {});
   await until(() => a.state.phase === 'lobby', 3000, 'lobby');
-  assert([...a.state.players.values()].every((p) => p.primary === 'standard' && p.secondary === 'rapid' && a.state.loot.size === 0), 'lobby loadout not restored');
+  assert([...a.state.players.values()].every((p) => p.primary === 'standard' && p.secondary === 'rapid' && a.state.crates.size === 0), 'lobby loadout not restored');
   await leaveAll(r.bots);
 });
 
