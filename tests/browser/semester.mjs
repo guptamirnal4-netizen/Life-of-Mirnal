@@ -34,10 +34,14 @@ const sitAt = (clock) => g((clock) => {
 }, clock);
 const gotoDay = (i) => g((i) => { const G = window.__game; G.state.sem.day = i - 1; G.advanceDay(); }, i);
 
+// College Life is hidden behind FEATURES.collegeLife (js/features.js); switch it on and skip the first-visit intro
+
+await page.addInitScript(() => { try { localStorage.setItem('pwb-features', 'collegeLife'); localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
+
 await page.goto('http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 await g(() => { window.__game.voice.mock = true; });
-await page.getByRole('button', { name: /College Life/ }).click();
+await page.getByRole('button', { name: /College Life/i }).click();
 await page.getByRole('button', { name: /Turn on my microphone/ }).click();
 await page.waitForTimeout(300);
 const intro = await page.locator('#overlay').innerText();

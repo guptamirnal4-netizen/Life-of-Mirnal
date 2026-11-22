@@ -9,11 +9,13 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const g = (fn, arg) => page.evaluate(fn, arg);
 const results = [];
 const check = (name, ok, info = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${info}`); };
+// College Life is hidden behind FEATURES.collegeLife (js/features.js); switch it on and skip the first-visit intro
+await page.addInitScript(() => { try { localStorage.setItem('pwb-features', 'collegeLife'); localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
 await page.goto(process.argv[3] || 'http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 await g(() => { window.__game.voice.mock = true; const c = document.getElementById('game'); Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (window.__locked ? c : null) }); });
 const t0 = Date.now();
-await page.getByRole('button', { name: /College Life/ }).click();
+await page.getByRole('button', { name: /College Life/i }).click();
 await page.getByRole('button', { name: /Turn on my microphone/ }).waitFor();
 console.log('college load ms', Date.now() - t0);
 await page.getByRole('button', { name: /Turn on my microphone/ }).click();

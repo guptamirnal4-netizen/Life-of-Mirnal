@@ -14,6 +14,10 @@ const log = (...a) => console.log(...a);
 const fails = [];
 const check = (ok, what) => { log(ok ? 'PASS' : 'FAIL', what); if (!ok) fails.push(what); };
 
+// College Life is hidden behind FEATURES.collegeLife (js/features.js); switch it on and skip the first-visit intro
+
+await page.addInitScript(() => { try { localStorage.setItem('pwb-features', 'collegeLife'); localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
+
 await page.goto('http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 await page.evaluate(() => {
@@ -21,7 +25,7 @@ await page.evaluate(() => {
   const canvas = document.getElementById('game');
   Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (window.__locked ? canvas : null) });
 });
-await page.getByRole('button', { name: /College Life/ }).click();
+await page.getByRole('button', { name: /College Life/i }).click();
 await page.getByRole('button', { name: /Turn on my microphone/ }).click();
 await page.waitForTimeout(300);
 await page.getByRole('button', { name: 'Start the day' }).click();

@@ -56,10 +56,14 @@ const view = async (name, [u, v, y], [lu, lv, ly]) => {
 };
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png` });
 
+// College Life is hidden behind FEATURES.collegeLife (js/features.js); switch it on and skip the first-visit intro
+
+await page.addInitScript(() => { try { localStorage.setItem('pwb-features', 'collegeLife'); localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
+
 await page.goto(URL, { waitUntil: 'load' });
 await page.waitForTimeout(1000);
 await g(() => { window.__game.voice.mock = true; const c = document.getElementById('game'); Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (window.__locked ? c : null) }); });
-await page.getByRole('button', { name: /College Life/ }).click();
+await page.getByRole('button', { name: /College Life/i }).click();
 await page.getByRole('button', { name: /Turn on my microphone/ }).click();
 await page.waitForTimeout(500);
 await page.getByRole('button', { name: 'Start the day' }).click();

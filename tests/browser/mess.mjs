@@ -17,6 +17,10 @@ const mission = () => page.locator('#hud-mission').innerText();
 const walk = async (ms, keys = ['KeyW']) => { for (const k of keys) await page.keyboard.down(k); await page.waitForTimeout(ms); for (const k of keys) await page.keyboard.up(k); await page.waitForTimeout(300); };
 const closePanels = () => g(() => document.querySelectorAll('#overlay .close').forEach((b) => b.click()));
 
+// College Life is hidden behind FEATURES.collegeLife (js/features.js); switch it on and skip the first-visit intro
+
+await page.addInitScript(() => { try { localStorage.setItem('pwb-features', 'collegeLife'); localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
+
 await page.goto(process.env.BASE || 'http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 await g(() => {
@@ -24,7 +28,7 @@ await g(() => {
   const canvas = document.getElementById('game');
   Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (window.__locked ? canvas : null) });
 });
-await page.getByRole('button', { name: /College Life/ }).click();
+await page.getByRole('button', { name: /College Life/i }).click();
 await page.getByRole('button', { name: /Turn on my microphone/ }).click();
 await page.waitForTimeout(300);
 const intro = await page.locator('#overlay').innerText();

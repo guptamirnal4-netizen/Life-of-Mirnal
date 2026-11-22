@@ -11,6 +11,10 @@ const log = (...a) => console.log(...a);
 const fails = [];
 const check = (ok, what) => { log(ok ? 'PASS' : 'FAIL', what); if (!ok) fails.push(what); };
 
+// College Life is hidden behind FEATURES.collegeLife (js/features.js); switch it on and skip the first-visit intro
+
+await page.addInitScript(() => { try { localStorage.setItem('pwb-features', 'collegeLife'); localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
+
 await page.goto('http://localhost:8080/', { waitUntil: 'load' });
 await page.waitForTimeout(800);
 // Headless Chrome has no real pointer lock, so stand in for it: __locked = "the player clicked into the game".
@@ -22,7 +26,7 @@ await page.evaluate(() => {
 const lock = (on) => page.evaluate((on) => { window.__locked = on; }, on);
 const g = (fn, arg) => page.evaluate(fn, arg);
 
-await page.getByRole('button', { name: /College Life/ }).click();
+await page.getByRole('button', { name: /College Life/i }).click();
 await page.getByRole('button', { name: /Turn on my microphone/ }).click();
 await page.waitForTimeout(300);
 await page.getByRole('button', { name: 'Start the day' }).click();

@@ -15,3 +15,10 @@ export const FEATURES = {
   // resume (ROADMAP in data/college.js). Personal, so hidden; the data stays in the file.
   resumeRoadmap: false,
 };
+
+// For tests and debugging only: ?features=collegeLife,school (or localStorage 'pwb-features' = "collegeLife")
+// turns hidden sections back on for this browser. Nothing in the UI links here.
+try {
+  const on = new URLSearchParams(globalThis.location?.search || '').get('features') || globalThis.localStorage?.getItem('pwb-features') || '';
+  for (const k of on.split(',').map((s) => s.trim())) if (k in FEATURES) FEATURES[k] = true;
+} catch { /* no location or storage (Node, private mode) */ }
