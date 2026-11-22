@@ -64,7 +64,31 @@ export const MEDC = makeArena({
   },
 });
 
-export const ARENAS = [MEDC];
+// ---------- Whole Campus (Campus Royale) ----------
+// The entire BITS campus inside its boundary wall: no net, no bunkers, the campus itself is the cover. Movement and
+// paintballs use the exported campus geometry (js/paintball/geometry.js), attached at load time (server/geo.js on
+// the server, client/geo.js in the browser) together with the verified landing and supply registries
+// (js/paintball/data/royale-spots.json). Its rules are Campus Royale (js/paintball/royale.js).
+export const CAMPUS = {
+  id: 'campus',
+  name: 'Whole Campus',
+  ruleset: 'Campus Royale',
+  royale: true,
+  centre: { x: 139, z: 492 },
+  bounds: { minX: -406, maxX: 684, minZ: -396, maxZ: 1380 },
+  solids: [],
+  spawns: { 0: [] },
+  geo: null,
+  spots: null,
+  attach(geo, spots) {
+    this.geo = geo; this.spots = spots;
+    const b = geo.bbox;
+    this.bounds = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
+    this.centre = { x: (b.minX + b.maxX) / 2, z: (b.minZ + b.maxZ) / 2 };
+  },
+};
+
+export const ARENAS = [MEDC, CAMPUS];
 export const ARENAS_BY_ID = Object.fromEntries(ARENAS.map((a) => [a.id, a]));
 
 // The spawn set for a mode: team count 0 → free-for-all, otherwise that many teams.
@@ -80,6 +104,7 @@ export function solidDist(s, x, z) {
 // Checks a spawn registry: inside the fence with margin, clear of every bunker, no two spawns closer than `gap`.
 // Returns a list of problems (empty = valid). The server refuses to open an arena that fails.
 export function validateSpawns(arena, { clear = 1.5, gap = 3, margin = 1 } = {}) {
+  if (arena.royale) return arena.geo && arena.spots ? [] : [`${arena.id}: campus geometry not loaded`];
   const bad = [];
   const b = arena.bounds;
   for (const [set, list] of Object.entries(arena.spawns)) {
