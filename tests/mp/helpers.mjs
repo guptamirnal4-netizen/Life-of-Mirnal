@@ -33,7 +33,7 @@ export function summary() {
 
 export async function boot() { return startServer({ port: 0, test: true, quiet: true }); }
 
-const EVENTS = ['host', 'shot', 'impact', 'hit', 'painted', 'tag', 'ended', 'overtime', 'closed', 'error', 'rtc'];
+const EVENTS = ['host', 'shot', 'impact', 'hit', 'painted', 'tag', 'ended', 'overtime', 'closed', 'error', 'rtc', 'landed', 'picked', 'bomb', 'boom', 'down', 'out', 'revived', 'test:loot'];
 // A connected player: the room, a log of every server event, and a pilot that sends inputs at INPUT_DT.
 export class Bot {
   constructor(room) {
@@ -80,7 +80,7 @@ export function solvePitch(id, from, to, h) {
 }
 
 // Create a room and fill it with n players. Returns { url, bots, host }.
-export async function makeRoom(srv, n, { mode = 'ffa', duration = null, test = {}, loadouts = [], look } = {}) {
+export async function makeRoom(srv, n, { mode = 'ffa', duration = null, test = {}, loadouts = [], look, arena = null } = {}) {
   const url = `ws://localhost:${srv.port}`;
   const opts = (i) => ({ nickname: `P${i + 1}`, loadout: loadouts[i], look, test: { countdown: 0.2, protection: 0, respawn: 1, ...test } });
   const first = await new Client(url).create('paintball', opts(0));
@@ -91,6 +91,10 @@ export async function makeRoom(srv, n, { mode = 'ffa', duration = null, test = {
   if (mode !== 'ffa' || duration) {
     host.send('config', duration ? { mode, duration } : { mode });
     await until(() => bots.every((b) => b.state.mode === mode && (!duration || b.state.duration === duration)), 3000, 'config');
+  }
+  if (arena) {
+    host.send('config', { arena });
+    await until(() => bots.every((b) => b.state.arena === arena), 3000, 'arena');
   }
   return { url, bots, host, code: first.roomId };
 }
@@ -105,8 +109,8 @@ export async function startMatch(bots) {
 export async function leaveAll(bots) { await Promise.all(bots.map((b) => b.leave())); }
 
 // Place a player (test helper, test flag only) and keep the pilot's aim in step.
-export async function place(bot, x, z, yaw = 0, pitch = 0, unprotect = true) {
+export async function place(bot, x, z, yaw = 0, pitch = 0, unprotect = true, y = undefined) {
   bot.in.yaw = yaw; bot.in.pitch = pitch;
-  bot.send('test:place', { x, z, yaw, pitch, unprotect });
+  bot.send('test:place', { x, z, yaw, pitch, unprotect, y });
   await until(() => Math.abs(bot.me.x - x) < 0.01 && Math.abs(bot.me.z - z) < 0.01, 2000, `place ${bot.me?.nickname}`);
 }

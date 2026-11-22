@@ -1,5 +1,8 @@
 // Paintball room state, synced to every client by Colyseus (@colyseus/schema 5 builder API, plain JavaScript).
-import { schema, t } from '@colyseus/schema';
+import { schema, t, Encoder } from '@colyseus/schema';
+
+// Campus Royale's full state (a few hundred supplies on the ground) is larger than the default 8 KB first patch.
+Encoder.BUFFER_SIZE = 256 * 1024;
 
 export const PbPlayer = schema({
   nickname: t.string().default(''),
