@@ -12,7 +12,8 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { PaintballRoom, TestPaintballRoom, liveRooms } from './PaintballRoom.js';
 import { loadCampus } from './geo.js';
 
-const DEFAULT_ORIGINS = ['https://play-with-bitsian.vercel.app', 'https://life-of-mirnal.vercel.app'];
+// Older deployment addresses can be allowed with ALLOWED_ORIGINS (set on the host, not in the repo).
+const DEFAULT_ORIGINS = ['https://play-with-bitsian.vercel.app'];
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 export function originAllowed(origin, extra = []) {

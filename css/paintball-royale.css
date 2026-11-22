@@ -50,6 +50,6 @@ body.touch #pb-hud .pb-crate { left: 50%; top: 24%; transform: translateX(-50%);
 #pb-hud.landing > * { visibility: hidden; }
 #pb-hud.out .ammo, #pb-hud.out .pb-inv, #pb-hud.out .cross, #pb-hud.out .paint { display: none; }
 #pb-touch .tbtn[data-n]::after { content: attr(data-n); position: absolute; right: -2px; top: -2px; min-width: 18px; height: 18px; border-radius: 9px; background: #ffd23d; color: #0b1020; font: 800 12px/18px system-ui; text-align: center; }
-body.touch #pb-hud.royale .pb-inv { top: 118px; bottom: auto; }
-body.touch #pb-hud.royale .center-msg { top: 30%; font-size: 13px; padding: 5px 10px; }
+body.touch #pb-hud.royale .pb-inv { bottom: 58px; max-width: 56vw; }
+body.touch #pb-hud.royale .center-msg { top: 60%; font-size: 13px; padding: 5px 10px; }
 body.touch #pb-hud.royale .pb-prompt { top: calc(50% + 28px); font-size: 13px; }
