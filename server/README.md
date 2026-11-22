@@ -49,6 +49,17 @@ filling the teams; a mode change trims bots that no longer fit).
   painted, keeps inside the paint zone and moves to the next circle early, races to the supply drop sometimes, sticks
   with its squad and cleans off downed teammates (no friendly fire), lands spread out (squads together; a squad with
   a human leaves the landing pick to them), and respawns and re-engages in timed matches.
+- **Hearing and hunting.** Paintballs fired (120 m on the campus, 90 m on Med-C), paint bombs bursting (120 m) and
+  crates opening (50 m) give bots within range (not the source's teammates) a rough position to investigate (the
+  error grows with distance); running feet are heard at short range outside the view cone. Armed Medium / Hard bots
+  go and look; Hard bots hunt towards the last-known position of the nearest opponent once kitted; idle bots roam
+  towards the next circle's middle.
+- **A play area for bot rooms.** A Campus Royale room with bots plays in a circle sized to its player count (radius
+  280 m for 12 players, round a random final-zone centre with ≥ 2 landing spots and ≥ 3 supply spots
+  per player; `planRegion` in `js/paintball/royale.js`): landing is limited to it, the first circle is it, and the
+  zone runs on `REGION_PHASES` (~5½ min; the supply drop comes earlier). The landing map shows only its spots and
+  the circle; the HUD says "Play area". All-human rooms keep the whole campus and the full zone.
+  `tests/mp/bot-pacing.mjs` measures real-speed matches (no test helpers that move anyone).
 - **Navigation.** Med-C: a visibility graph round the bunkers. Whole Campus: a waypoint graph
   (`js/paintball/data/bot-nav.{bin,json}`, ~155 KB gzip, 23 k nodes / 151 k edges) built offline by
   `node dev/build-bot-nav.mjs` (~40 s) from the same 1 m flood fill as the Campus Royale registries: every node is
@@ -116,7 +127,7 @@ Health check: `GET /health` returns `{"ok":true,"rooms":N,"test":false}`.
 
 Tests: `npm test` (pure logic, campus geometry, registries, bot navigation and decisions), `npm run test:mp` (the
 real server plus `@colyseus/sdk` clients over WebSocket: `tests/mp/paintball.mjs`, `tests/mp/royale.mjs` and
-`tests/mp/bots.mjs`), `node tests/browser/paintball-bots.mjs` (Play vs Bots and the lobby's bot controls in Chrome),
+`tests/mp/bots.mjs`, `tests/mp/bot-pacing.mjs`), `node tests/browser/paintball-bots.mjs` (Play vs Bots and the lobby's bot controls in Chrome),
 `node tests/browser/paintball.mjs` and `node tests/browser/paintball-campus.mjs` (real Chrome pages; they start both
 servers themselves), `node tests/browser/paintball-perf.mjs 12 x campus` (frame time with 12 clients).
 

@@ -149,7 +149,8 @@ await chk('Play vs Bots on the Whole Campus: 11 bots land (spread), loot, follow
   assert(R.botCalls.land === 11, `${R.botCalls.land} landing picks`);
   const pos = [...s.players.values()].filter((p) => p.bot);
   let min = Infinity; for (const a of pos) for (const b of pos) if (a !== b) min = Math.min(min, Math.hypot(a.x - b.x, a.z - b.z));
-  assert(min > 30, `bots landed ${min.toFixed(0)} m apart at the closest`);
+  assert(min > 20 && s.regionR > 0, `bots landed ${min.toFixed(0)} m apart at the closest (inside a ${Math.round(s.regionR)} m play area)`);
+  assert(pos.every((p) => Math.hypot(p.x - s.regionX, p.z - s.regionZ) <= s.regionR), 'everyone landed inside the play area');
   const tags = []; me.room.onMessage('tag', (m) => tags.push(m));
   await until(() => s.phase === 'results', 240000, 'results');
   const rk = [...s.results.rankings];
