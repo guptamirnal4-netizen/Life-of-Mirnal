@@ -30,6 +30,7 @@ const portalUp = (page) => page.waitForFunction(() => window.__game?.mode === 't
 // ---- first visit: "Press to start" plays the film ----
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('pwb-features', 'engineIntro'); } catch { /* */ } }); // these tests cover the in-engine film intro (FEATURES.engineIntro)
   const page = await ctx.newPage(); watch(page, 'first-visit');
   await page.goto(URL, { waitUntil: 'load' });
   await page.locator('[data-portal=splash]').waitFor();
@@ -41,6 +42,8 @@ const portalUp = (page) => page.waitForFunction(() => window.__game?.mode === 't
 }
 
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+
+await ctx.addInitScript(() => { try { localStorage.setItem('pwb-features', 'engineIntro'); } catch { /* */ } }); // these tests cover the in-engine film intro (FEATURES.engineIntro)
 await seen(ctx);
 const page = await ctx.newPage();
 watch(page, 'desktop');
@@ -226,6 +229,7 @@ await ctx.close();
 // ---- phones ----
 for (const [name, vp] of [['phone-portrait', { width: 390, height: 844 }], ['phone-landscape', { width: 844, height: 390 }]]) {
   const c = await browser.newContext({ viewport: vp, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await c.addInitScript(() => { try { localStorage.setItem('pwb-features', 'engineIntro'); } catch { /* */ } }); // these tests cover the in-engine film intro (FEATURES.engineIntro)
   await seen(c);
   const p = await c.newPage();
   watch(p, name);
@@ -253,6 +257,7 @@ for (const [name, vp] of [['phone-portrait', { width: 390, height: 844 }], ['pho
 
 // ---- dev/render-film.mjs API (capture mode, fixed steps) ----
 const c2 = await browser.newContext({ viewport: { width: 960, height: 540 } });
+await c2.addInitScript(() => { try { localStorage.setItem('pwb-features', 'engineIntro'); } catch { /* */ } }); // these tests cover the in-engine film intro (FEATURES.engineIntro)
 await seen(c2);
 const pc = await c2.newPage(); watch(pc, 'capture');
 await pc.goto(URL, { waitUntil: 'load' });

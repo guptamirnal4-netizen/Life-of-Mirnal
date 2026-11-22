@@ -51,6 +51,7 @@ console.log(`web ${BASE} · game server ws://localhost:${GAME}`);
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
 async function newPage(name, { seen = false, expectNetworkFailures = false, ...opts } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, permissions: ['microphone'], ...opts });
+  await ctx.addInitScript(() => { try { localStorage.setItem('pwb-features', 'engineIntro'); } catch { /* */ } }); // these tests cover the in-engine film intro (FEATURES.engineIntro)
   if (seen) await ctx.addInitScript(() => { try { localStorage.setItem('pwb-intro-seen', 'true'); } catch { /* */ } });
   const page = await ctx.newPage();
   page.setDefaultTimeout(30000);
