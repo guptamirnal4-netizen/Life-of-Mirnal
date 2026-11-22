@@ -2,12 +2,13 @@
 // players interpolated between server snapshots, paintballs in flight, splats, paint bursts and sounds.
 // The server decides everything that counts (movement, hits, paint, tags); this only shows it.
 import * as THREE from 'three';
-import { INPUT_DT, stepMove, sanitizeInput } from '../sim.js';
+import { INPUT_DT, stepMove, sanitizeInput, sweepArena } from '../sim.js';
 import { MOVE, TEAMS, MODES_BY_ID } from '../rules.js';
 import { EQUIPMENT_BY_ID } from '../equipment.js';
 import { blaster, equip, poseAim, paintball, splatGeometry } from '../models.js';
 import { makeAvatar, disposeAvatar, lookKey } from './avatar.js';
 import * as sfx from './sounds.js';
+import { crosshairAim, RECOIL } from './aim.js';
 
 const INTERP_MS = 110;
 const MAX_SPLATS = 160;
@@ -30,6 +31,8 @@ export class MatchView {
     this.fx = new THREE.Group(); this.fx.name = 'pb-fx'; scene.add(this.fx);
     this.vm = null; this.vmId = null; // first-person blaster
     this.me = null; this.placed = false;
+    this.aim = null; // what the crosshair points at and the aim that lands a paintball there (aim.js)
+    this.recoil = { p: 0, y: 0 }; this.bloom = 0; this.localNext = 0; this.burstAt = []; // predicted firing feel
     this.sendBuf = [];
     this.unsub = [
       room.onMessage('shot', (m) => this.onShot(m)),
@@ -45,7 +48,7 @@ export class MatchView {
     const sm = Math.hypot(p.stick.x, p.stick.y);
     if (sm > 0.15) { f = p.stick.y; s = p.stick.x; }
     const run = sm > 0.15 ? sm > 0.9 : k('ShiftLeft', 'ShiftRight');
-    return sanitizeInput({ seq: ++this.seq, f, s, run, jump: k('Space') && !frozen, fire: this.fireHeld && !frozen, reload: this.reloadPressed, slot: this.slot, yaw: p.yaw, pitch: p.pitch });
+    return sanitizeInput({ seq: ++this.seq, f, s, run, jump: k('Space') && !frozen, fire: this.fireHeld && !frozen, reload: this.reloadPressed, slot: this.slot, yaw: p.yaw, pitch: p.pitch, ...(this.aim && !frozen ? { ay: this.aim.yaw, ap: this.aim.pitch } : {}) });
   }
 
   step(dt, state, keys) {
@@ -59,6 +62,7 @@ export class MatchView {
       if (!this.placed && ACTIVE.has(state.phase)) { this.player.yaw = me.yaw; this.player.pitch = 0; this.placed = true; this.slot = me.slot; this.seq = Math.max(this.seq, me.seq); }
     }
     this.reconcile(me, frozen);
+    this.predictFire(state, me, frozen);
     this.acc = Math.min(this.acc + dt, INPUT_DT * 5);
     while (this.acc >= INPUT_DT) {
       this.acc -= INPUT_DT;
@@ -71,6 +75,41 @@ export class MatchView {
     if (this.pending.length > 90) this.pending.splice(0, this.pending.length - 90);
     if (this.sendBuf.length && this.room.connection.isOpen) { this.room.send('in', this.sendBuf); this.sendBuf = []; }
     this.smooth.multiplyScalar(Math.exp(-dt * 12));
+  }
+
+  // Recoil, the crosshair bloom and the blaster kick happen the moment you fire, not a round trip later: the same
+  // checks and rate the server applies (PaintballRoom.blasterTick), predicted here. Only the feel is predicted;
+  // the server still decides every paintball.
+  predictFire(state, me, frozen) {
+    const t = performance.now() / 1000;
+    for (let i = this.burstAt.length - 1; i >= 0; i--) if (t >= this.burstAt[i]) { this.burstAt.splice(i, 1); this.kickNow(me.equip, 0.8); }
+    const e = EQUIPMENT_BY_ID[me.equip];
+    const hopper = me.slot ? me.hopper1 : me.hopper0;
+    const can = e && !frozen && !me.down && this.fireHeld && hopper > 0 && me.reloadUntil <= state.now
+      && state.now >= me.protectedUntil && state.now >= me.switchUntil && state.now >= (me.shieldUntil || 0);
+    if (!can) { if (!this.fireHeld) this.localNext = Math.min(this.localNext, t); return; }
+    if (t < this.localNext) return;
+    this.localNext = Math.max(this.localNext, t - 0.05) + 1 / e.rate;
+    this.kickNow(e.id, 1);
+    for (let k = 1; k < Math.min(e.burst, hopper); k++) this.burstAt.push(t + k * e.burstGap);
+  }
+
+  kickNow(id, scale) {
+    const r = (RECOIL[id] || 0.01) * scale * (0.85 + Math.random() * 0.3);
+    const yj = (Math.random() - 0.5) * r * 0.6;
+    this.player.pitch = Math.min(1.45, this.player.pitch + r); this.player.yaw += yj;
+    this.recoil.p += r; this.recoil.y += yj;
+    this.kick = 1; this.bloom = Math.min(1.6, this.bloom + 0.9 * scale);
+    if (this.puff) { this.puff.visible = true; this.puff.userData.life = 0.09; }
+    const a = this.avatars.get(this.room.sessionId); if (a) a.fire = 1;
+  }
+
+  // the view settles back after each kick (most of the way, quickly, like a paintball marker's soft recoil)
+  settleRecoil(dt) {
+    const k = 1 - Math.exp(-dt * 10);
+    const dp = this.recoil.p * k; const dy = this.recoil.y * k;
+    this.player.pitch -= dp; this.player.yaw -= dy; this.recoil.p -= dp; this.recoil.y -= dy;
+    this.bloom = Math.max(0, this.bloom - dt * 3);
   }
 
   // The server's word on where we are: take it, then replay the inputs it has not applied yet.
@@ -101,7 +140,12 @@ export class MatchView {
       const back = alive ? 3.2 : 5.5; const up = alive ? 0.45 : 2.2;
       const fx = -Math.sin(p.yaw) * Math.cos(p.pitch); const fz = -Math.cos(p.yaw) * Math.cos(p.pitch); const fy = Math.sin(p.pitch);
       const rx = Math.cos(p.yaw); const rz = -Math.sin(p.yaw);
-      cam.position.set(eye.x - fx * back + rx * 0.55, Math.max(0.4, eye.y + up - fy * back), eye.z - fz * back + rz * 0.55);
+      const want = { x: eye.x - fx * back + rx * 0.55, y: Math.max(0.4, eye.y + up - fy * back), z: eye.z - fz * back + rz * 0.55 };
+      // the shoulder camera never ends up inside or behind a wall: pull it in towards you (like PUBG's)
+      const hit = sweepArena({ x: eye.x, y: eye.y, z: eye.z }, want, this.arena);
+      const k = hit ? Math.max(0.15, hit.t - 0.3 / Math.max(0.5, Math.hypot(want.x - eye.x, want.y - eye.y, want.z - eye.z))) : 1;
+      this.camPull = this.camPull === undefined || k < this.camPull ? k : this.camPull + (k - this.camPull) * Math.min(1, dt * 6);
+      cam.position.set(eye.x + (want.x - eye.x) * this.camPull, eye.y + (want.y - eye.y) * this.camPull, eye.z + (want.z - eye.z) * this.camPull);
     } else cam.position.copy(eye);
     cam.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
     // first-person paintball blaster
@@ -120,6 +164,36 @@ export class MatchView {
       this.vm.position.set(0.24, -0.24 - reload, -0.5 + this.kick * 0.05);
       this.vm.rotation.x = reload * 1.4 + this.kick * 0.1;
     }
+    // the air puff at the muzzle when you fire (first person)
+    if (!this.puff) {
+      this.puff = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5, depthWrite: false }));
+      this.puff.visible = false; this.puff.renderOrder = 6; cam.add(this.puff);
+    }
+    if (this.puff.visible) {
+      this.puff.userData.life -= dt;
+      const k = Math.max(0, this.puff.userData.life / 0.09);
+      this.puff.visible = k > 0 && !!show;
+      this.puff.position.set(0.24, -0.2, -0.98 + this.kick * 0.05);
+      this.puff.scale.setScalar(0.02 + (1 - k) * 0.07);
+      this.puff.material.opacity = 0.55 * k;
+      if (id) this.puff.material.color.set(EQUIPMENT_BY_ID[id]?.colour || '#ffffff').lerp(new THREE.Color('#ffffff'), 0.6);
+    }
+    this.updateAim(state, alive);
+  }
+
+  // what the crosshair points at, from this frame's camera
+  updateAim(state, alive) {
+    const e = this.me && EQUIPMENT_BY_ID[this.me.equip];
+    if (!alive || !e || this.me.out || !(state.phase === 'playing' || state.phase === 'overtime' || state.phase === 'countdown')) { this.aim = null; return; }
+    const cam = this.camera; cam.updateMatrixWorld();
+    const dir = cam.getWorldDirection(this._dir || (this._dir = new THREE.Vector3()));
+    const eye = { x: this.pos.x, y: this.pos.y + MOVE.eye, z: this.pos.z };
+    const bodies = [];
+    for (const [id, a] of this.avatars) {
+      if (id === this.room.sessionId || !a.npc.group.visible || a.down) continue;
+      const g = a.npc.group.position; bodies.push({ id, x: g.x, y: g.y, z: g.z });
+    }
+    this.aim = crosshairAim(cam.position, dir, eye, e, this.arena, bodies);
   }
 
   // ---------- everyone else (and my body in third person) ----------
@@ -167,6 +241,11 @@ export class MatchView {
       a.npc.poseAs({ x, y, z }, yaw, walking && !p.down, false, dt, a.npc.gait, speed);
       const lod = !mine && Math.hypot(x - this.camera.position.x, z - this.camera.position.z) > LOD;
       if (!lod) poseAim(a.npc, pitch);
+      a.down = !!p.down;
+      if (a.fire > 0) { // firing: the blaster arm jolts up and settles
+        a.fire = Math.max(0, a.fire - dt * 7);
+        if (!lod && a.npc.arms) { a.npc.arms[1].rotation.x -= a.fire * 0.22; a.npc.arms[0].rotation.x -= a.fire * 0.16; }
+      }
       // fully painted, waiting for a squadmate: lying down
       a.npc.group.rotation.x = p.down ? -1.35 : 0;
       if (p.down) a.npc.group.position.y = y + 0.3;
@@ -187,9 +266,12 @@ export class MatchView {
     mesh.scale.setScalar(m.e === 'launcher' ? 2.6 : m.e === 'spread' ? 0.8 : 1);
     mesh.position.set(m.x, m.y, m.z);
     // my own paintballs start at the blaster's muzzle, not between my eyes
-    if (m.o === this.room.sessionId) { mesh.position.y -= 0.16; this.kick = 1; }
+    const mine = m.o === this.room.sessionId;
+    if (mine) { mesh.position.y -= 0.16; if (this.view === 'first') mesh.visible = false; } // (the kick was predicted when you pulled the trigger)
+    else { const a = this.avatars.get(m.o); if (a) a.fire = 1; }
     this.fx.add(mesh);
-    this.balls.set(m.i, { mesh, v: new THREE.Vector3(m.vx, m.vy, m.vz), g: e.gravity, life: e.range / e.speed + 1.5 });
+    // my own paintball shows once it has left the barrel (a few metres out), not as a blob in front of my eyes
+    this.balls.set(m.i, { mesh, v: new THREE.Vector3(m.vx, m.vy, m.vz), g: e.gravity, life: e.range / e.speed + 1.5, hide: mine ? Math.min(0.06, 2.5 / e.speed) : 0 });
     const d = this.camera.position.distanceTo(mesh.position);
     if (!m.i || !this.lastPop || performance.now() - this.lastPop > 25) { sfx.pop({ standard: 1, rapid: 1.3, burst: 1.1, spread: 0.8, precision: 1.5, launcher: 0.55 }[m.e] || 1, 1 / (1 + d * 0.08)); this.lastPop = performance.now(); }
   }
@@ -201,11 +283,17 @@ export class MatchView {
     const e = EQUIPMENT_BY_ID[m.e]; const colour = e?.colour || '#ff3d7f';
     const pt = new THREE.Vector3(m.x, m.y, m.z); const n = new THREE.Vector3(m.nx, m.ny, m.nz);
     const big = e?.splash ? e.splash * 0.35 : 0.22 + Math.random() * 0.1;
-    if (m.k === 'player') { const a = this.avatars.get(m.t); if (a && a.npc.group.visible) this.markAvatar(a, pt, n, colour); } else this.addSplat(pt, n, colour, big);
+    // on bunkers and walls the paint is a wet, deeper shade: it shows even on a bunker of its own colour
+    if (m.k === 'player') { const a = this.avatars.get(m.t); if (a && a.npc.group.visible) this.markAvatar(a, pt, n, colour); } else this.addSplat(pt, n, m.k === 'solid' ? this.wet(colour) : colour, big);
     this.burst(pt, n, colour, e?.splash ? 26 : 8, e?.splash ? 5 : 2.5);
     sfx.splat(1 / (1 + this.camera.position.distanceTo(pt) * 0.1));
   }
 
+  wet(colour) {
+    if (!this.wets) this.wets = new Map();
+    if (!this.wets.has(colour)) this.wets.set(colour, `#${new THREE.Color(colour).lerp(new THREE.Color('#1a0f2e'), 0.38).getHexString()}`);
+    return this.wets.get(colour);
+  }
   splatMat(colour) {
     if (!this.splatMats.has(colour)) this.splatMats.set(colour, new THREE.MeshStandardMaterial({ color: colour, roughness: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide }));
     return this.splatMats.get(colour);
@@ -254,6 +342,7 @@ export class MatchView {
   fxUpdate(dt) {
     for (const [id, b] of this.balls) {
       b.v.y -= b.g * dt; b.mesh.position.addScaledVector(b.v, dt); b.life -= dt;
+      if (b.hide > 0) { b.hide -= dt; if (b.hide <= 0) b.mesh.visible = true; }
       if (b.life <= 0 || b.mesh.position.y < -1) { this.fx.remove(b.mesh); this.balls.delete(id); }
     }
     for (const b of this.bursts) {
@@ -265,6 +354,7 @@ export class MatchView {
 
   update(dt, state, keys, nowMs) {
     this.step(dt, state, keys);
+    this.settleRecoil(dt);
     this.camera3(dt, state);
     this.avatarsUpdate(dt, state, nowMs);
     this.fxUpdate(dt);

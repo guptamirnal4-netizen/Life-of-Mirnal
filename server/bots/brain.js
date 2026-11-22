@@ -6,7 +6,7 @@
 // Pure helpers (aim, blaster choice, loot value, landing pick, move input) are exported for the unit tests.
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../../js/paintball/equipment.js';
 import { MOVE, TICK_HZ } from '../../js/paintball/rules.js';
-import { aimDir } from '../../js/paintball/sim.js';
+import { aimDir, ballisticAim } from '../../js/paintball/sim.js';
 import { ITEMS, BOMB, pickupPlan } from '../../js/paintball/items.js';
 import { ROYALE } from '../../js/paintball/royale.js';
 
@@ -24,11 +24,8 @@ export const BLASTER_VALUE = { standard: 2, spread: 3.5, rapid: 4, burst: 4, lau
 // Yaw / pitch from an eye position to a point, with the paintball's drop over the flight (fixed-point refinements).
 export function solveAim(eye, to, equipId) {
   const e = EQUIPMENT_BY_ID[equipId] || EQUIPMENT_BY_ID.standard;
-  const dx = to.x - eye.x; const dz = to.z - eye.z; const dy = to.y - eye.y; const d = Math.hypot(dx, dz);
-  let pitch = Math.atan2(dy, d);
-  const h = 1 / TICK_HZ / Math.max(1, Math.ceil((e.speed / TICK_HZ) / 3)); // the server's sub-step (its stepping drops a little more)
-  for (let i = 0; i < 6; i++) { const t = d / Math.max(1, e.speed * Math.cos(pitch)); pitch = Math.atan2(dy + 0.5 * e.gravity * t * (t + h), d); }
-  return { yaw: yawTo(dx, dz), pitch: clamp(pitch, -1.4, 1.4), dist: d, flight: d / e.speed };
+  const a = ballisticAim(eye, to, e.speed, e.gravity);
+  return { ...a, flight: a.dist / e.speed };
 }
 
 // Pitch for a paint bomb to come down about d metres away on level ground: thrown from h0 above it along the aim

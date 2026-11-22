@@ -81,13 +81,24 @@
 #pb-hud .ammo .other { font-size: 12px; opacity: 0.75; }
 #pb-hud .reload { height: 6px; width: 160px; margin-left: auto; border-radius: 3px; background: rgba(255,255,255,0.2); overflow: hidden; }
 #pb-hud .reload i { display: block; height: 100%; background: #ffd23d; }
-#pb-hud .cross { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; }
-#pb-hud .cross::before, #pb-hud .cross::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
-#pb-hud .cross::before { left: 12px; top: 3px; width: 2px; height: 20px; }
-#pb-hud .cross::after { top: 12px; left: 3px; height: 2px; width: 20px; }
+/* crosshair: four ticks round a dot; --g (set every frame) is the spread gap in px */
+#pb-hud .cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --g: 6px; pointer-events: none; transition: opacity 0.12s; }
+#pb-hud .cross i, #pb-hud .cross .dot { position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.45); border-radius: 1px; }
+#pb-hud .cross .l, #pb-hud .cross .r { width: 9px; height: 2px; top: -1px; }
+#pb-hud .cross .t, #pb-hud .cross .b { width: 2px; height: 9px; left: -1px; }
+#pb-hud .cross .l { right: var(--g); }
+#pb-hud .cross .r { left: var(--g); }
+#pb-hud .cross .t { bottom: var(--g); }
+#pb-hud .cross .b { top: var(--g); }
+#pb-hud .cross .dot { width: 2px; height: 2px; left: -1px; top: -1px; border-radius: 50%; }
+#pb-hud .cross.off { opacity: 0.35; }
+#pb-hud .cross.far i { opacity: 0.6; }
+#pb-hud .cross.none { display: none; }
 #pb-hud .hitmark { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; opacity: 0; font: 900 34px/40px system-ui; text-align: center; color: #fff; }
 #pb-hud .hitmark.show { animation: pb-hit 0.35s; }
 #pb-hud .hitmark.precision { color: #ffd23d; }
+#pb-hud .hitmark.tag { color: #ff3d5a; font-size: 46px; }
+#pb-hud .hitmark.tag.show { animation: pb-hit 0.5s; }
 @keyframes pb-hit { 0% { opacity: 1; transform: scale(1.4); } 100% { opacity: 0; transform: scale(0.9); } }
 #pb-hud .big { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: clamp(30px, 7vw, 72px); font-weight: 900; text-align: center; white-space: nowrap; }
 #pb-hud .center-msg { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); background: rgba(10,12,28,0.7); padding: 8px 16px; border-radius: 12px; font-weight: 700; text-align: center; }
@@ -97,7 +108,7 @@
 #pb-hud .voice .me { background: rgba(10,12,28,0.6); padding: 3px 9px; border-radius: 9px; }
 #pb-hud .voice .me.live { background: #7cff4f; color: #0b1020; text-shadow: none; font-weight: 700; }
 #pb-hud .hint { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); font-size: 13px; opacity: 0.85; white-space: nowrap; }
-#pb-hud.zoom .cross { width: 60px; height: 60px; margin: -30px 0 0 -30px; border: 2px solid rgba(255,255,255,0.8); border-radius: 50%; }
+#pb-hud.zoom .cross::after { content: ''; position: absolute; width: 60px; height: 60px; left: -30px; top: -30px; border: 1.5px solid rgba(255,255,255,0.75); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.25); }
 #pb-board { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); max-height: 80vh; overflow: auto; background: rgba(10,12,28,0.88); border-radius: 16px; padding: 12px 16px; pointer-events: none; }
 .pb-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pb-table th { text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; padding: 4px 6px; }

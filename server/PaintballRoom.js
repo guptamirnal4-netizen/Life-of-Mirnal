@@ -10,7 +10,7 @@ import { PbState, PbPlayer, PbRank, PbTeamResult } from './schema.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX, LOADOUT_SIZE } from '../js/paintball/equipment.js';
 import { MODES_BY_ID, MAX_PLAYERS, SCORE, ASSIST_WINDOW, TIMING, TICK_HZ, MOVE } from '../js/paintball/rules.js';
 import { ARENAS_BY_ID, validateSpawns, spawnSet } from '../js/paintball/arena.js';
-import { INPUT_DT, sanitizeInput, stepMove, aimDir, sweepArena, segPlayer, blocked, BODY } from '../js/paintball/sim.js';
+import { INPUT_DT, sanitizeInput, stepMove, aimDir, fireAim, sweepArena, segPlayer, blocked, BODY } from '../js/paintball/sim.js';
 import { cleanLook } from '../js/paintball/looks.js';
 import { sameChannel } from '../js/paintball/channels.js';
 import { rng, makeCode, cleanNick, assignTeams, smallestTeam, canStart, slotsFor, pickSpawn, standings, timeUp, overtimeCheck, finalise, finaliseRoyale } from './logic/match.js';
@@ -552,6 +552,7 @@ export class PaintballRoom extends Room {
           stepMove(pos, i, INPUT_DT, this.arena, frozen, p.down ? ROYALE.downSpeed : 1);
           p.x = pos.x; p.y = pos.y; p.z = pos.z; p.vy = pos.vy;
           p.yaw = i.yaw; p.pitch = i.pitch;
+          sim.ay = i.ay; sim.ap = i.ap; // the crosshair aim (undefined: fire where you look)
           sim.trigger = i.fire && !p.down;
           if (royale && i.fire && p.channel) p.channel = ''; // firing stops cleaning
           if (i.fire) sim.pulled = true;
@@ -625,9 +626,10 @@ export class PaintballRoom extends Room {
 
   fire(id, p, e) {
     const eye = { x: p.x, y: p.y + MOVE.eye, z: p.z };
+    const sim = this.sim.get(id); const aim = fireAim(p.yaw, p.pitch, sim?.ay, sim?.ap);
     for (let k = 0; k < e.pellets; k++) {
       const a = this.rand() * Math.PI * 2; const r = e.spread * Math.sqrt(this.rand());
-      const d = aimDir(p.yaw + Math.cos(a) * r, p.pitch + Math.sin(a) * r);
+      const d = aimDir(aim.yaw + Math.cos(a) * r, aim.pitch + Math.sin(a) * r);
       const pb = { id: ++this.pid, owner: id, team: p.team, equip: e.id, x: eye.x, y: eye.y, z: eye.z, vx: d.x * e.speed, vy: d.y * e.speed, vz: d.z * e.speed, dist: 0, hit: new Set() };
       this.projectiles.push(pb);
       if (p.bot) { const b = this.bots.brains.get(id); if (b) b.stats.shots++; }

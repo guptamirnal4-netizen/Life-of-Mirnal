@@ -11,6 +11,7 @@ import { makeAvatar, disposeAvatar } from './avatar.js';
 import { h, statBars, BLURB, EQUIPMENT_LIST, confetti, copyText, fmtTime } from './ui.js';
 import * as sfx from './sounds.js';
 import { arenaGroup, poseAim } from '../models.js';
+import { spreadPx } from './aim.js';
 import { RoyaleView } from './royale.js';
 import { loadCampusGeo } from './geo.js';
 import { ZONE_PHASES, zoneLength, ROYALE } from '../royale.js';
@@ -202,15 +203,20 @@ export class PaintballMode {
     const who = (id, name) => (this.state?.players.get(id)?.bot ? `${BOT_BADGE} ${name}` : name);
     this.feed.push({ text: `${m.precision ? '🎯 ' : '🎨 '}${who(m.by, m.byName || '?')} tagged ${who(m.target, m.targetName)}${m.assists.length ? ` (+${m.assists.length} assist${m.assists.length > 1 ? 's' : ''})` : ''}`, at: performance.now(), cls: mine || me ? 'mine' : '' });
     if (this.feed.length > 6) this.feed.shift();
-    if (mine) { this.big('TAG! +100', '#7cff4f'); sfx.jingle(true); } else if (assist) this.big('ASSIST +40', '#30d5ff');
+    if (mine) { this.big('TAG! +100', '#7cff4f'); sfx.jingle(true); this.flashHit('hitmark show tag', '✕'); } else if (assist) this.big('ASSIST +40', '#30d5ff');
     if (me) { this.taggedBy = m.byName; sfx.jingle(false); }
   }
   onHit(m) {
     if (!this.hud) return;
-    const el = this.hud.hit; el.textContent = m.protected || m.shield ? '🛡' : '✕';
-    el.className = `hitmark show${m.p ? ' precision' : ''}`; void el.offsetWidth; el.className = `hitmark show${m.p ? ' precision' : ''}`;
-    clearTimeout(this.hitT); this.hitT = setTimeout(() => { el.className = 'hitmark'; }, 360);
+    this.flashHit(`hitmark show${m.p ? ' precision' : ''}`, m.protected || m.shield ? '🛡' : '✕');
     sfx.ding(!!m.p);
+  }
+
+  flashHit(cls, text) {
+    if (!this.hud) return;
+    const el = this.hud.hit; el.textContent = text;
+    el.className = 'hitmark'; void el.offsetWidth; el.className = cls;
+    clearTimeout(this.hitT); this.hitT = setTimeout(() => { el.className = 'hitmark'; }, cls.includes('tag') ? 520 : 360);
   }
   onPainted(m) {
     if (!this.hud) return;
@@ -350,6 +356,7 @@ export class PaintballMode {
       splatter: q('splatter'), map: h('canvas', { class: 'minimap', width: 160, height: 92 }), voice: q('voice'), hint: q('hint'), board: h('div', { id: 'pb-board', class: 'hidden' }),
     };
     hud.reloadBox.append(hud.reload);
+    hud.cross.append(h('i', { class: 'l' }), h('i', { class: 'r' }), h('i', { class: 't' }), h('i', { class: 'b' }), h('b', { class: 'dot' }));
     if (this.royaleOn) { hud.map.width = 170; hud.map.height = 170; hud.map.classList.add('round'); hud.root.classList.add('royale'); Object.assign(hud, { R: this.royale.hudParts() }); }
     hud.root.append(hud.splatter, h('div', { class: 'top' }, hud.teams, hud.timer), hud.my, hud.feed, hud.map, hud.voice,
       h('div', { class: 'paint' }, hud.paintLabel, h('div', { class: 'meter' }, hud.meter)),
@@ -386,6 +393,23 @@ export class PaintballMode {
         tap('p-shield', '🛡️', () => R.gadget('shield')), tap('p-scan', '📡', () => R.gadget('scan')), tap('p-map', '🗺️', () => { R.bigMap = !R.bigMap; }), tap('p-inv', '🎒', () => { this.invOpen = !this.invOpen; this.hud?.root.classList.toggle('inv-open', this.invOpen); }));
     }
     return box;
+  }
+
+  // The crosshair, every frame: its gap is the blaster's spread cone at the current field of view, it opens up as
+  // you fire and settles back, dims when you cannot fire or the target is beyond the blaster's range.
+  updateCross() {
+    const hud = this.hud; const v = this.view; const me = this.me; const s = this.state;
+    if (!hud || !v || !me) return;
+    const e = EQUIPMENT_BY_ID[me.equip];
+    const show = !!(e && v.aim && me.alive && !me.out && !me.down);
+    hud.cross.classList.toggle('none', !show);
+    if (!show) return;
+    const gap = Math.max(3, spreadPx(e.spread, this.camera.fov, window.innerHeight)) + v.bloom * 10;
+    hud.cross.style.setProperty('--g', `${gap.toFixed(1)}px`);
+    const H = me.slot ? me.hopper1 : me.hopper0;
+    const off = H <= 0 || me.reloadUntil > s.now || me.switchUntil > s.now || me.protectedUntil > s.now || (me.shieldUntil || 0) > s.now;
+    hud.cross.classList.toggle('off', off);
+    hud.cross.classList.toggle('far', !v.aim.inRange);
   }
 
   updateHud(nowMs) {
@@ -578,6 +602,7 @@ export class PaintballMode {
         if (me?.out) this.spectatePos = this.royale.spectateCam();
         this.royale.update(dt, s, now);
       }
+      this.updateCross();
       if (now - (this.hudAt || 0) > 90) { this.hudAt = now; this.updateHud(now); }
       if (phase === 'countdown') { const n = Math.ceil(s.phaseEnds - s.now); if (n !== this.lastCount && n > 0) { this.lastCount = n; sfx.beep(false); } }
     } else {

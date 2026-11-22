@@ -1,7 +1,7 @@
 // Paintball simulation shared by the game server (authoritative) and the browser (client-side prediction):
 // player movement against the arena's solids and net fence, and paintball sweeps. Plain math, no three.js or DOM,
 // so the server and the client step exactly the same code.
-import { MOVE } from './rules.js';
+import { MOVE, TICK_HZ } from './rules.js';
 import { BOMB } from './items.js';
 
 // The client sends one input per INPUT_DT step; the server replays them at the same step.
@@ -18,11 +18,35 @@ export function aimDir(yaw, pitch) {
   return { x: -Math.sin(yaw) * c, y: Math.sin(pitch), z: -Math.cos(yaw) * c };
 }
 
+const TAU = Math.PI * 2;
+const wrapAngle = (a) => { a %= TAU; if (a > Math.PI) a -= TAU; if (a < -Math.PI) a += TAU; return a; };
+
+// Yaw / pitch that lands a paintball (speed, gravity) fired from `eye` on the point `to`. The server steps
+// paintballs in sub-steps, which drops them a little more than the closed form; `h` accounts for that.
+export function ballisticAim(eye, to, speed, gravity) {
+  const dx = to.x - eye.x; const dz = to.z - eye.z; const dy = to.y - eye.y; const d = Math.hypot(dx, dz);
+  let pitch = Math.atan2(dy, d);
+  const h = 1 / TICK_HZ / Math.max(1, Math.ceil((speed / TICK_HZ) / 3));
+  for (let i = 0; i < 6; i++) { const t = d / Math.max(1, speed * Math.cos(pitch)); pitch = Math.atan2(dy + 0.5 * gravity * t * (t + h), d); }
+  return { yaw: Math.atan2(-dx, -dz), pitch: clamp(pitch, -1.4, 1.4), dist: d };
+}
+
+// The crosshair aim (ay, ap) may differ from where you look (yaw, pitch) only by AIM_SLACK radians: enough for the
+// third-person shoulder camera and for paintball drop, never a free aimbot. Without an aim, you fire where you look.
+export const AIM_SLACK = 0.45;
+export function fireAim(yaw, pitch, ay, ap) {
+  if (!Number.isFinite(ay) || !Number.isFinite(ap)) return { yaw, pitch };
+  const dy = clamp(wrapAngle(ay - yaw), -AIM_SLACK, AIM_SLACK);
+  return { yaw: yaw + dy, pitch: clamp(pitch + clamp(ap - pitch, -AIM_SLACK, AIM_SLACK), -1.45, 1.45) };
+}
+
 // Whatever the client sends, only these fields with these ranges are used.
 export function sanitizeInput(i = {}) {
   let f = clamp(fin(Number(i.f)), -1, 1); let s = clamp(fin(Number(i.s)), -1, 1);
   const m = Math.hypot(f, s); if (m > 1) { f /= m; s /= m; }
+  const ay = Number(i.ay); const ap = Number(i.ap); const aim = Number.isFinite(ay) && Number.isFinite(ap);
   return {
+    ...(aim ? { ay: wrapAngle(ay), ap: clamp(ap, -1.45, 1.45) } : {}),
     seq: Math.max(0, Math.floor(fin(Number(i.seq)))),
     f, s,
     run: !!i.run, jump: !!i.jump, fire: !!i.fire, reload: !!i.reload,
