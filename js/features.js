@@ -14,6 +14,9 @@ export const FEATURES = {
   // "The road ahead" list on the Year 1 complete panel: real internships and projects from the original author's
   // resume (ROADMAP in data/college.js). Personal, so hidden; the data stays in the file.
   resumeRoadmap: false,
+  // The intro: false plays the 1:26 trailer video (media/, made by dev/make-trailer.mjs); true plays the live
+  // in-engine film instead (js/cinematic/). ?film always plays the in-engine film.
+  engineIntro: false,
 };
 
 // For tests and debugging only: ?features=collegeLife,school (or localStorage 'pwb-features' = "collegeLife")

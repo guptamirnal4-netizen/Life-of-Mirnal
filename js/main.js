@@ -36,6 +36,7 @@ import { createPortal } from './portal/portal.js';
 import { settings as prefsSettings, onSettings, graphicsChoice } from './portal/settings.js';
 import { installAudioBus, audioDebug } from './portal/audio.js';
 import { introSeen, markIntroSeen, loadPrefs } from './portal/prefs.js';
+import { playIntroVideo } from './portal/intro-video.js';
 installAudioBus(); // Settings → volumes reach every sound (the film, paintball effects, voice chat)
 
 // ---------- Renderer & scene ----------
@@ -1512,7 +1513,7 @@ function getPortal() {
       create: (nickname) => openPaintball({ action: 'create', nickname, portal: true }),
       join: (code, nickname) => openPaintball({ action: 'join', code, nickname, portal: true }),
       practice: (setup, nickname) => openPaintball({ action: 'practice', practice: setup, nickname, portal: true }),
-      playIntro: () => playFilm(),
+      playIntro: () => playIntro(),
       openFreeRoam,
       roomCode: () => paintball?.room?.roomId || null,
       extras: titleExtras,
@@ -2301,12 +2302,17 @@ showTitle();
 frame();
 // URL launchers: ?film, ?explore, ?room=CODE (joins straight away, no intro), ?paintball (the paintball client's own
 // start screen). Otherwise a first visit gets "Press to start" → the intro film → the portal.
+// The intro: the 1:26 trailer video, or the live in-engine film when FEATURES.engineIntro is on.
+function playIntro() {
+  if (FEATURES.engineIntro) return playFilm();
+  return playIntroVideo({ onEnd: () => markIntroSeen() });
+}
 const launch = new URLSearchParams(location.search);
 if (launch.has('film')) playFilm();
 else if (launch.has('explore')) openExplorer(launch.get('explore') === 'school' ? 'school' : 'college');
 else if (launch.has('room')) openPaintball({ action: 'join', code: launch.get('room') || '', nickname: loadPrefs().nickname, portal: true });
 else if (launch.has('paintball')) openPaintball({});
-else if (!introSeen()) getPortal().splash({ onStart: () => playFilm() });
+else if (!introSeen()) getPortal().splash({ onStart: () => playIntro() });
 
 // Exposed for automated testing in the browser.
 window.__game = { playFilm, openExplorer, get portal() { return portal; }, settings: prefsSettings, audioDebug, get mode() { return mode; }, skipFilm: () => { if (film?.finish) film.finish(); else if (film) endFilm(film.back); }, openPaintball, get paintball() { return paintball; }, get explorer() { return explorer; }, get film() { return film; }, graphics, get state() { return state; }, voice, talkTo, get anthem() { return anthem; }, finishAnthem, player, npcs, get campus() { return campus; }, get slots() { return slots; }, interact, handleInteractable, startGame, createState, advanceDay, skipToNext, endDay };
