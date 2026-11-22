@@ -51,11 +51,12 @@ const send = (page, type, msg) => page.evaluate(([t, m]) => window.__pb.room.sen
 const portalUp = (page) => page.waitForFunction(() => window.__game?.mode === 'title' && window.__game.portal?.visible, null, { timeout: 30000 });
 // watch the match from the page's side: shots by bots, tags, bot positions over time
 const watch = (page) => page.evaluate(() => {
+  clearInterval(window.__botwatch?.timer);
   const w = window.__botwatch = { shots: 0, tags: [], moved: new Set(), start: new Map() };
   const R = window.__pb.room;
-  R.onMessage('shot', (m) => { if (window.__pb.state.players.get(m.o)?.bot) w.shots++; });
+  R.onMessage('shot', (m) => { if (window.__pb?.state?.players.get(m.o)?.bot) w.shots++; });
   R.onMessage('tag', (m) => w.tags.push(m));
-  w.timer = setInterval(() => { for (const [id, p] of window.__pb.state.players) { if (!p.bot || !p.alive) continue; const s = w.start.get(id); if (!s) w.start.set(id, { x: p.x, z: p.z }); else if (Math.hypot(p.x - s.x, p.z - s.z) > 3) w.moved.add(id); } }, 200);
+  w.timer = setInterval(() => { if (!window.__pb?.state) return; for (const [id, p] of window.__pb.state.players) { if (!p.bot || !p.alive) continue; const s = w.start.get(id); if (!s) w.start.set(id, { x: p.x, z: p.z }); else if (Math.hypot(p.x - s.x, p.z - s.z) > 3) w.moved.add(id); } }, 200);
 });
 const watched = (page) => page.evaluate(() => { const w = window.__botwatch; return { shots: w.shots, tags: w.tags.length, byBot: w.tags.filter((t) => window.__pb.state.players.get(t.by)?.bot).length, moved: w.moved.size }; });
 // bot avatars drawn in the 3D scene right now
@@ -67,6 +68,21 @@ const lookAtBot = (page) => page.evaluate(() => {
   if (best) { window.__game.player.yaw = Math.atan2(-(best.x - me.x), -(best.z - me.z)); window.__game.player.pitch = -0.05; }
   return best ? Math.round(bd) : -1;
 });
+// for the screenshot: stand 7 m from the nearest bot (on its side towards us) and look at it
+async function closeUp(page) {
+  const t = await page.evaluate(() => {
+    const me = window.__pb.me; let best = null; let bd = 1e9;
+    for (const p of window.__pb.state.players.values()) if (p.bot && p.alive && !p.out) { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < bd) { bd = d; best = p; } }
+    if (!best) return null;
+    const k = 7 / (bd || 1); return { x: best.x + (me.x - best.x) * k, z: best.z + (me.z - best.z) * k, bx: best.x, bz: best.z };
+  });
+  if (!t) return;
+  await send(page, 'test:place', { x: t.x, z: t.z, unprotect: false });
+  await page.evaluate((t) => { window.__pb.view.placed = false; window.__game.player.yaw = Math.atan2(-(t.bx - t.x), -(t.bz - t.z)); window.__game.player.pitch = -0.08; }, t);
+  await sleep(500);
+  await lookAtBot(page);
+  await sleep(250);
+}
 async function playVsBots(page, { arena, bots, level }) {
   await page.locator('[data-portal=bots]').click();
   await page.locator('[data-sheet=bots]').waitFor();
@@ -105,6 +121,7 @@ try {
   const drawn1 = await botsDrawn(A);
   check(drawn1 >= 1, `Med-C: bot avatars are drawn (${drawn1}, nearest ${d1} m)`);
   check(await A.evaluate(() => [...document.querySelectorAll('#pb-hud .feed div')].some((d) => d.textContent.includes('🤖'))) || w1.tags === 0, 'Med-C: the tag feed shows 🤖 on bots');
+  await closeUp(A);
   await shot(A, 'medc-match.png');
   await A.keyboard.down('Tab'); await sleep(250);
   check((await A.locator('#pb-board .pb-bot').count()) === 5, 'Med-C: the scoreboard marks the 5 bots with 🤖');
@@ -142,6 +159,7 @@ try {
   check(w2.tags >= 1, `campus: a tag happens (${w2.tags} tags, ${w2.byBot} by bots)`);
   const d2 = await lookAtBot(A); await sleep(900);
   check((await botsDrawn(A)) >= 1, `campus: bot avatars are drawn (nearest ${d2} m)`);
+  await closeUp(A);
   await shot(A, 'campus-match.png');
   await send(A, 'test:end', {});
   await A.locator('[data-pb=results]').waitFor({ timeout: 20000 });

@@ -100,7 +100,7 @@ try {
   await backdrop(A);
   await sleep(1500);
   check(/PLAY WITH/.test(await A.locator('#title h1').innerText()) && (await A.title()) === 'Play with BITSians', 'Play with BITSians branding');
-  for (const id of ['create', 'join', 'customise', 'modes', 'howto', 'settings', 'intro']) check(await A.locator(`.p-menu [data-portal=${id}]`).isVisible(), `primary entry visible: ${id}`);
+  for (const id of ['bots', 'create', 'join', 'customise', 'modes', 'howto', 'settings', 'intro']) check(await A.locator(`.p-menu [data-portal=${id}]`).isVisible(), `primary entry visible: ${id}`);
   check(await A.evaluate(() => { const c = document.querySelector('[data-pb=portal-preview]'); return !!c && c.width > 0; }), 'live 3D character preview on the portal');
   await shot(A, '03-portal.png');
 
