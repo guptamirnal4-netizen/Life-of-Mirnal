@@ -1940,8 +1940,10 @@ function updateHUD(slot) {
 // frame by dev/render-film.mjs. at: start (or resume) at that time.
 let film = null;
 let filmReturn = null; // { t, back } while the viewer explores a place from the film
-function playFilm({ capture = false, at = 0, back = null } = {}) {
+function playFilm({ capture = false, at = null, back = null } = {}) {
   if (film) return film;
+  // no start time given: pick up where the viewer left the film last time (the film offers ↺ to start over)
+  if (at == null) at = capture ? 0 : savedFilmPosition()?.t ?? 0;
   closeAll();
   exitLock();
   minimap.closeBig();
@@ -1959,10 +1961,14 @@ function playFilm({ capture = false, at = 0, back = null } = {}) {
   film = new PaintballFilm({
     scene, camera, campus: bitsCampus, graphics, range: COLLEGE_RANGE,
     hooks: {
-      // "Explore this place": pause, open Campus Free Roam at the place, offer "Return to the film"
-      explore: (place, t) => { filmReturn = { t, back }; endFilm(back, { title: false }); openExplorer('college', { place, fromFilm: true }); },
-      // "Open the lobby": the multiplayer paintball game (wired by the paintball client when it is present)
-      lobby: () => { const open = window.__game?.openPaintball; if (typeof open !== 'function') return false; endFilm(back); open(); return true; },
+      // "Create a room" / "Join a room": end the film, then open the multiplayer paintball game
+      // create: straight into a new room through the portal flow; join: back to the portal with its join sheet open
+      paintball: ({ action = 'create' } = {}) => {
+        const open = window.__game?.openPaintball; if (typeof open !== 'function') return false;
+        endFilm(back);
+        if (action === 'join') getPortal().open('join'); else open({ action: 'create', portal: true });
+        return true;
+      },
     },
   });
   film.back = back;
