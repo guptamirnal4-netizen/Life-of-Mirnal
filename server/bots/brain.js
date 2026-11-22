@@ -5,7 +5,7 @@
 //
 // Pure helpers (aim, blaster choice, loot value, landing pick, move input) are exported for the unit tests.
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../../js/paintball/equipment.js';
-import { MOVE } from '../../js/paintball/rules.js';
+import { MOVE, TICK_HZ } from '../../js/paintball/rules.js';
 import { aimDir } from '../../js/paintball/sim.js';
 import { ITEMS, BOMB, pickupPlan } from '../../js/paintball/items.js';
 import { ROYALE } from '../../js/paintball/royale.js';
@@ -21,19 +21,26 @@ const yawTo = (dx, dz) => Math.atan2(-dx, -dz);
 export const PREFER = { spread: 8, rapid: 14, launcher: 18, burst: 20, standard: 22, precision: 38 };
 export const BLASTER_VALUE = { standard: 2, spread: 3.5, rapid: 4, burst: 4, launcher: 4.2, precision: 5 };
 
-// Yaw / pitch from an eye position to a point, with the paintball's drop over the flight (two refinements).
+// Yaw / pitch from an eye position to a point, with the paintball's drop over the flight (fixed-point refinements).
 export function solveAim(eye, to, equipId) {
   const e = EQUIPMENT_BY_ID[equipId] || EQUIPMENT_BY_ID.standard;
   const dx = to.x - eye.x; const dz = to.z - eye.z; const dy = to.y - eye.y; const d = Math.hypot(dx, dz);
   let pitch = Math.atan2(dy, d);
-  for (let i = 0; i < 2; i++) { const t = d / Math.max(1, e.speed * Math.cos(pitch)); pitch = Math.atan2(dy + 0.5 * e.gravity * t * t, d); }
+  const h = 1 / TICK_HZ / Math.max(1, Math.ceil((e.speed / TICK_HZ) / 3)); // the server's sub-step (its stepping drops a little more)
+  for (let i = 0; i < 6; i++) { const t = d / Math.max(1, e.speed * Math.cos(pitch)); pitch = Math.atan2(dy + 0.5 * e.gravity * t * (t + h), d); }
   return { yaw: yawTo(dx, dz), pitch: clamp(pitch, -1.4, 1.4), dist: d, flight: d / e.speed };
 }
 
-// Pitch for a paint bomb to land about d metres away on level ground (thrown along the aim with BOMB.loft added).
-export function bombPitch(d) {
-  const k = clamp((BOMB.gravity * d) / (BOMB.speed * BOMB.speed), 0, 1);
-  return clamp(0.5 * Math.asin(k) - BOMB.loft, -0.4, 1.2);
+// Pitch for a paint bomb to come down about d metres away on level ground: thrown from h0 above it along the aim
+// with BOMB.loft added (the flatter of the two arcs, found by bisection).
+export function bombPitch(d, h0 = MOVE.eye - 0.15) {
+  const v = BOMB.speed; const g = BOMB.gravity;
+  const range = (th) => { const vx = v * Math.cos(th); const vy = v * Math.sin(th); return (vx / g) * (vy + Math.sqrt(vy * vy + 2 * g * h0)); };
+  let lo = -0.6; let hi = Math.PI / 4;
+  if (d <= range(lo)) return lo - BOMB.loft;
+  if (d >= range(hi)) return hi - BOMB.loft;
+  for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (range(m) < d) lo = m; else hi = m; }
+  return (lo + hi) / 2 - BOMB.loft;
 }
 
 // Forward / sideways input (relative to the yaw you look along) that walks in the direction (dx, dz).
@@ -147,7 +154,10 @@ export class Brain {
     if (c.royale) {
       const hot = now - this.lastPainted < 0.8;
       if (hot && p.shield > 0 && p.paint >= 55 && now >= p.shieldUntil && now - this.shieldRoll > 3) { this.shieldRoll = now; if (this.rand() < L.shield) this.act('use', { kind: 'shield' }); }
-      if (!this.visible && !p.channel && p.paint >= 35 && now - this.lastPainted > 2 && (p.wipes || p.kit) && now - this.cleanRoll > 4) {
+      const Z = s.zone; const outside = Z.r > 0 && Math.hypot(p.x - Z.x, p.z - Z.z) > Z.r - 3;
+      // outside the paint zone: get back in first (cleaning there is wasted)
+      if (outside && (p.paint >= 40 || !this.visible) && this.thinkZone(c, true)) return;
+      if (!outside && !this.visible && !p.channel && p.paint >= 35 && now - this.lastPainted > 2 && (p.wipes || p.kit) && now - this.cleanRoll > 4) {
         this.cleanRoll = now;
         if (this.rand() < L.clean) { this.act('use', { kind: p.kit && (p.paint >= 60 || !p.wipes) ? 'kit' : 'wipes' }); this.mode = 'channel'; return; }
       }

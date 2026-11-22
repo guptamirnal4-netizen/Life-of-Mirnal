@@ -16,6 +16,20 @@ import { loadNav, FieldNav } from './nav.js';
 const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
 export const BUDGET = { rays: 32, expansions: 6000, thinks: 8 }; // per room per tick
 const fieldNavs = new Map();
+
+// Can a body walk straight from `from` ({ x, y, z }) to the point [x, z, y] on the campus? The nav builder's rule:
+// 0.25 m steps, floors followed, a body a little wider than a player's must not touch anything solid.
+export function walkLine(geo, from, pt) {
+  const L = Math.hypot(pt[0] - from.x, pt[1] - from.z); const n = Math.max(1, Math.ceil(L / 0.25));
+  if (n > 200) return false;
+  let y = from.y;
+  for (let i = 1; i <= n; i++) {
+    const x = from.x + ((pt[0] - from.x) * i) / n; const z = from.z + ((pt[1] - from.z) * i) / n;
+    y = geo.floorAt(x, z, y);
+    if (geo.blockedAt(x, z, y, 0.36)) return false;
+  }
+  return Math.abs(y - pt[2]) < 0.4;
+}
 const CACHE = 300;
 
 export class BotManager {
@@ -113,19 +127,7 @@ export class BotManager {
   }
 
   // Can a body walk straight from `from` to the point [x, z, y]? (the nav builder's rule)
-  walkable(from, pt) {
-    if (!this.arena.geo) return this.field.clear(from.x, from.z, pt[0], pt[1]);
-    const geo = this.arena.geo;
-    const L = Math.hypot(pt[0] - from.x, pt[1] - from.z); const n = Math.max(1, Math.ceil(L / 0.25));
-    if (n > 200) return false;
-    let y = from.y;
-    for (let i = 1; i <= n; i++) {
-      const x = from.x + ((pt[0] - from.x) * i) / n; const z = from.z + ((pt[1] - from.z) * i) / n;
-      y = geo.floorAt(x, z, y);
-      if (geo.blockedAt(x, z, y, 0.36)) return false;
-    }
-    return Math.abs(y - pt[2]) < 0.4;
-  }
+  walkable(from, pt) { return this.arena.geo ? walkLine(this.arena.geo, from, pt) : this.field.clear(from.x, from.z, pt[0], pt[1]); }
 
   // A spot out of the threat's sight, close by: behind a bunker (Med-C) or a campus wall / tree.
   coverFrom(p, threat) {

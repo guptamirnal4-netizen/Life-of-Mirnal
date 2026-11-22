@@ -19,6 +19,7 @@ import { MODES, MODES_BY_ID, TEAMS, TIMING, modeLabel, MAX_PLAYERS } from '../ru
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../equipment.js';
 import { CHARACTERS, OUTFIT_COLOURS, PANTS_COLOURS, MASK_COLOURS, ACCESSORIES } from '../looks.js';
 import { loadPrefs, savePrefs, cleanNickname, randomNickname } from '../../portal/prefs.js';
+import { BOT_LEVELS, BOT_LEVELS_BY_ID, BOT_BADGE, botLabel } from '../bots.js';
 
 export const GAME_NAME = 'Play with BITSians';
 const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
@@ -82,16 +83,18 @@ export class PaintballMode {
   feedPush(text, mine = false) { this.feed.push({ text, at: performance.now(), cls: mine ? 'mine' : '' }); if (this.feed.length > 6) this.feed.shift(); }
 
   // ---------- start screen ----------
-  // The entry point. action 'create' hosts a new room, 'join' (or a code alone) joins one; nickname overrides the
-  // remembered one. portal: opened from the portal (js/portal/portal.js), so leaving the room or a failed
-  // create/join goes back there (with the message) instead of to this client's own start screen.
-  open({ code, action = null, nickname = null, portal = false } = {}) {
+  // The entry point. action 'create' hosts a new room, 'join' (or a code alone) joins one, 'practice' starts a
+  // Play vs Bots room (practice: { arena, mode, bots, level }); nickname overrides the remembered one. portal:
+  // opened from the portal (js/portal/portal.js), so leaving the room or a failed create/join goes back there (with
+  // the message) instead of to this client's own start screen.
+  open({ code, action = null, nickname = null, portal = false, practice = null } = {}) {
     this.portal = !!portal;
     const nick = cleanNickname(nickname);
     if (nick) rememberNick(nick);
     const name = nick || savedNick() || randomNickname();
     const c = normaliseCode(code);
     if (action === 'create') return this.connect({ nickname: name });
+    if (action === 'practice') return this.connect({ nickname: name, practice: practice || {} });
     if (c && isCode(c)) return this.connect({ code: c, nickname: name });
     if (action === 'join') return this.showStart('Room codes are 5 letters/numbers, like K7PQ2.', true);
     this.showStart();
@@ -107,7 +110,7 @@ export class PaintballMode {
     this.mount(h('div', { class: 'pb-screen' }, h('div', { class: 'pb-card narrow pb-stack' },
       h('h1', {}, GAME_NAME),
       h('div', { class: 'pb-sub' }, '🎯 Multiplayer paintball on the Med-C Ground or across the whole campus (Campus Royale) · private rooms for up to 12 friends'),
-      !conf && h('div', { class: 'pb-status bad', 'data-pb': 'not-configured' }, 'The multiplayer game server is not configured for this site yet, so rooms cannot be created or joined. (Nothing here is simulated: there are no fake rooms or players.)'),
+      !conf && h('div', { class: 'pb-status bad', 'data-pb': 'not-configured' }, `The multiplayer game server is not configured for this site yet, so rooms cannot be created or joined, and Play vs Bots needs it too (the bots run on the game server). There are no fake rooms, and bots are always marked ${BOT_BADGE}.`),
       status && h('div', { class: `pb-status${bad ? ' bad' : ''}`, 'data-pb': 'status' }, status),
       h('label', { class: 'pb-sub' }, 'Nickname (remembered in this browser only)'), nick,
       h('button', { class: 'primary', disabled: !conf, 'data-pb': 'create', onclick: () => this.connect({ nickname: name() }) }, '➕ Create a private room'),
@@ -117,21 +120,23 @@ export class PaintballMode {
     setTimeout(() => (savedNick() ? code : nick).focus(), 50);
   }
 
-  async connect({ code = null, nickname }) {
+  async connect({ code = null, nickname, practice = null }) {
     if (!this.net.configured) return this.showStart();
     this.mount(h('div', { class: 'pb-screen' }, h('div', { class: 'pb-card narrow pb-stack' }, h('h1', {}, GAME_NAME), this.statusEl = h('div', { class: 'pb-status', 'data-pb': 'status' }, 'Connecting to the game server…'))));
     try {
       await this.net.wake((t) => { if (this.statusEl) this.statusEl.textContent = t; });
     } catch {
-      return this.showRetry('The game server is not reachable right now. It may be starting up or offline.', { code, nickname });
+      return this.showRetry('The game server is not reachable right now. It may be starting up or offline.', { code, nickname, practice });
     }
     try {
-      this.statusEl.textContent = code ? `Joining room ${code}…` : 'Creating your room…';
+      this.statusEl.textContent = code ? `Joining room ${code}…` : practice ? `${BOT_BADGE} Starting your match against bots…` : 'Creating your room…';
       const opts = { nickname, look: this.look, loadout: this.loadout };
       const prefs = loadPrefs(); // the host's default mode and arena (the portal's Game Modes)
-      const room = code ? await this.net.join(code, opts) : await this.net.create({ ...opts, arena: prefs.arena });
+      const room = code ? await this.net.join(code, opts)
+        : practice ? await this.net.create({ ...opts, arena: practice.arena || prefs.arena, practice: { mode: practice.mode || 'ffa', bots: practice.bots, level: practice.level } })
+          : await this.net.create({ ...opts, arena: prefs.arena });
       this.attach(room);
-      if (!code && prefs.mode !== 'ffa') room.send('config', { mode: prefs.mode });
+      if (!code && !practice && prefs.mode !== 'ffa') room.send('config', { mode: prefs.mode });
     } catch (e) {
       this.showStart(joinError(e), true);
     }
@@ -193,8 +198,9 @@ export class PaintballMode {
   onTag(m) {
     const mine = m.by === this.room.sessionId; const me = m.target === this.room.sessionId;
     const assist = m.assists.includes(this.room.sessionId);
-    if (m.zone && !m.by) { this.feedPush(`🎨 The paint zone tagged ${m.targetName}`, m.target === this.room.sessionId); if (m.target === this.room.sessionId) this.taggedBy = 'the paint zone'; return; }
-    this.feed.push({ text: `${m.precision ? '🎯 ' : '🎨 '}${m.byName || '?'} tagged ${m.targetName}${m.assists.length ? ` (+${m.assists.length} assist${m.assists.length > 1 ? 's' : ''})` : ''}`, at: performance.now(), cls: mine || me ? 'mine' : '' });
+    if (m.zone && !m.by) { this.feedPush(`🎨 The paint zone tagged ${botLabel(this.state?.players.get(m.target)) || m.targetName}`, m.target === this.room.sessionId); if (m.target === this.room.sessionId) this.taggedBy = 'the paint zone'; return; }
+    const who = (id, name) => (this.state?.players.get(id)?.bot ? `${BOT_BADGE} ${name}` : name);
+    this.feed.push({ text: `${m.precision ? '🎯 ' : '🎨 '}${who(m.by, m.byName || '?')} tagged ${who(m.target, m.targetName)}${m.assists.length ? ` (+${m.assists.length} assist${m.assists.length > 1 ? 's' : ''})` : ''}`, at: performance.now(), cls: mine || me ? 'mine' : '' });
     if (this.feed.length > 6) this.feed.shift();
     if (mine) { this.big('TAG! +100', '#7cff4f'); sfx.jingle(true); } else if (assist) this.big('ASSIST +40', '#30d5ff');
     if (me) { this.taggedBy = m.byName; sfx.jingle(false); }
@@ -220,7 +226,7 @@ export class PaintballMode {
   // ---------- lobby ----------
   lobbySig() {
     const s = this.state; const v = this.voice;
-    return JSON.stringify([s.phase, s.mode, s.arena, s.duration, s.slotsOpen, [...s.players.entries()].map(([id, p]) => [id, p.nickname, p.ready, p.host, p.team, p.connected, p.character, p.outfit, p.pants, p.mask, p.accessory, p.primary, p.secondary, p.voice, p.talking]), v?.on, v?.openMic, v?.mutedAll, [...(v?.muted || [])], Object.values(v?.debug() || {}).map((d) => d.state), this.voiceErr, this.copied]);
+    return JSON.stringify([s.phase, s.mode, s.arena, s.duration, s.slotsOpen, s.botLevel, s.practice, [...s.players.entries()].map(([id, p]) => [id, p.nickname, p.ready, p.host, p.team, p.connected, p.character, p.outfit, p.pants, p.mask, p.accessory, p.primary, p.secondary, p.voice, p.talking, p.bot]), v?.on, v?.openMic, v?.mutedAll, [...(v?.muted || [])], Object.values(v?.debug() || {}).map((d) => d.state), this.voiceErr, this.copied]);
   }
 
   renderLobby() {
@@ -233,11 +239,14 @@ export class PaintballMode {
     const playerRow = ([id, p]) => h('div', { class: `pb-player${id === myId ? ' me' : ''}`, style: `--team:${mode.teams ? teamColour(p.team) : p.mask}`, 'data-pb-player': p.nickname },
       h('span', { class: `pb-speak${p.talking ? ' on' : ''}`, title: p.voice ? 'voice on' : 'voice off' }, p.voice ? '🔊' : '·'),
       h('span', { class: 'name' }, p.nickname, id === myId ? ' (you)' : ''),
+      p.bot && h('span', { class: 'pb-badge bot', title: `Computer-controlled player · ${BOT_LEVELS_BY_ID[s.botLevel]?.name || ''}` }, `${BOT_BADGE} BOT`),
       p.host && h('span', { class: 'pb-badge host' }, 'HOST'),
       !p.connected && h('span', { class: 'pb-badge off' }, 'reconnecting'),
       mode.teams > 0 && h('span', { class: 'pb-badge' }, teamName(p.team)),
       h('span', { class: `pb-badge${p.ready ? ' ready' : ''}` }, p.ready ? 'READY' : 'not ready'),
-      this.voice?.on && id !== myId && p.voice && h('button', { class: 'small', title: 'Mute this player', onclick: () => this.voice.mutePeer(id, !this.voice.muted.has(id)) }, this.voice.muted.has(id) ? '🔇' : '🔈'));
+      this.voice?.on && id !== myId && p.voice && h('button', { class: 'small', title: 'Mute this player', onclick: () => this.voice.mutePeer(id, !this.voice.muted.has(id)) }, this.voice.muted.has(id) ? '🔇' : '🔈'),
+      host && p.bot && h('button', { class: 'small', title: `Remove ${p.nickname}`, 'aria-label': `Remove ${p.nickname}`, 'data-pb': 'bot-remove', onclick: () => this.room.send('bot:remove', { id }) }, '✕'));
+    const bots = ps.filter(([, p]) => p.bot).length;
     const slots = Math.max(0, Math.min(MAX_PLAYERS, mode.players[1]) - ps.length);
     const voiceState = this.voice?.debug() || {};
     const left = h('div', { class: 'pb-stack' },
@@ -248,7 +257,13 @@ export class PaintballMode {
         h('button', { class: 'small', 'data-pb': 'copy-link', onclick: async () => { this.copied = (await copyText(`Join my ${GAME_NAME} paintball room: ${shareLink(this.room.roomId)}`)) ? 'link' : 'fail'; this.sig = ''; } }, this.copied === 'link' ? '✓ Link copied' : '🔗 Share link')),
       this.copied === 'fail' && h('div', { class: 'pb-note' }, `Share this link: ${shareLink(this.room.roomId)}`),
       h('h3', {}, `Players ${ps.length}/${Math.min(MAX_PLAYERS, mode.players[1])}`),
-      h('div', { class: 'pb-players', 'data-pb': 'players' }, ...ps.map(playerRow), ...Array.from({ length: Math.min(slots, 4) }, () => h('div', { class: 'pb-slot' }, 'Open slot · share the code')), slots > 4 && h('div', { class: 'pb-note' }, `+${slots - 4} more open slots`)),
+      h('div', { class: 'pb-players', 'data-pb': 'players' }, ...ps.map(playerRow), ...Array.from({ length: Math.min(slots, 4) }, () => h('div', { class: 'pb-slot' }, host ? 'Open slot · share the code or add a bot' : 'Open slot · share the code')), slots > 4 && h('div', { class: 'pb-note' }, `+${slots - 4} more open slots`)),
+      h('div', { class: 'pb-row', 'data-pb': 'bots' },
+        h('span', { class: 'pb-note' }, `${BOT_BADGE} Bots${bots ? ` (${bots})` : ''}`),
+        sel(BOT_LEVELS.map((l) => [l.id, l.name]), s.botLevel, (v) => this.room.send('bot:level', { level: v }), 'Bot difficulty'),
+        host && h('button', { class: 'small', 'data-pb': 'bot-add', disabled: slots <= 0, onclick: () => this.room.send('bot:add', {}) }, '🤖 Add bot'),
+        host && h('button', { class: 'small', 'data-pb': 'bot-fill', disabled: slots <= 0, onclick: () => this.room.send('bot:fill', {}) }, 'Fill empty slots with bots')),
+      h('div', { class: 'pb-note' }, `${BOT_LEVELS_BY_ID[s.botLevel]?.name || ''} bots: ${BOT_LEVELS_BY_ID[s.botLevel]?.blurb || ''} ${host ? (mode.teams ? 'Team modes can start with bots filling the teams.' : 'Bots never join voice chat.') : 'The host adds bots and picks their difficulty.'}`),
       mode.teams > 0 && h('div', { class: 'pb-teams' }, ...Array.from({ length: mode.teams }, (_, t) => h('div', { class: 'pb-team', style: `--team:${TEAMS[t].colour}` }, h('b', {}, `Team ${TEAMS[t].name}`), h('div', { class: 'pb-note' }, ps.filter(([, p]) => p.team === t).map(([, p]) => p.nickname).join(', ') || 'empty')))),
       h('h3', {}, 'Paintball match'),
       h('div', { class: 'pb-row' },
@@ -428,7 +443,7 @@ export class PaintballMode {
       ...rows.map(([id, r], i) => {
         const p = s.players.get(id);
         return h('tr', { class: id === myId ? 'me' : '' }, h('td', {}, String(r.place || i + 1)),
-          h('td', {}, h('span', { class: 'tdot', style: `background:${mode.teams ? teamColour(r.team) : p?.mask || '#888'}` }), r.nickname, p?.host ? ' 👑' : ''),
+          h('td', {}, h('span', { class: 'tdot', style: `background:${mode.teams ? teamColour(r.team) : p?.mask || '#888'}` }), (r.bot || p?.bot) && h('span', { class: 'pb-bot', title: 'Bot' }, `${BOT_BADGE} `), r.nickname, p?.host ? ' 👑' : ''),
           mode.teams > 0 && h('td', {}, teamName(r.team)), h('td', { class: 'n' }, String(r.score)), h('td', { class: 'n' }, String(r.tags)), h('td', { class: 'n' }, String(r.assists)), h('td', { class: 'n' }, String(r.timesTagged)),
           roy && h('td', { class: 'n' }, String(r.supplies ?? 0)), roy && h('td', { class: 'n' }, r.placement ? `#${r.placement}` : p?.out ? 'out' : '—'), roy && h('td', { class: 'n' }, fmtTime(r.survived ?? (s.phase === 'playing' ? s.now - s.playStart : 0))),
           h('td', {}, p?.talking ? '🔊' : ''));

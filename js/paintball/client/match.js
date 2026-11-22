@@ -133,7 +133,7 @@ export class MatchView {
       const key = lookKey(p, maskColour);
       if (a && a.key !== key) { disposeAvatar(a.npc); this.avatars.delete(id); a = null; }
       if (!a) {
-        const npc = makeAvatar(this.scene, { ...p.toJSON?.() ?? p, nickname: p.nickname, equip: p.equip }, { id: `pb-${id}`, maskColour });
+        const npc = makeAvatar(this.scene, { ...p.toJSON?.() ?? p, nickname: p.bot ? `🤖 ${p.nickname}` : p.nickname, equip: p.equip }, { id: `pb-${id}`, maskColour });
         a = { npc, key, snaps: [], equip: p.equip, marks: [] };
         this.avatars.set(id, a);
       }

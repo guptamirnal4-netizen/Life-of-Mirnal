@@ -1511,6 +1511,7 @@ function getPortal() {
     hooks: {
       create: (nickname) => openPaintball({ action: 'create', nickname, portal: true }),
       join: (code, nickname) => openPaintball({ action: 'join', code, nickname, portal: true }),
+      practice: (setup, nickname) => openPaintball({ action: 'practice', practice: setup, nickname, portal: true }),
       playIntro: () => playFilm(),
       openFreeRoam,
       roomCode: () => paintball?.room?.roomId || null,
@@ -2119,7 +2120,7 @@ function exploreFrame(dt) {
 // Ground of the same BitsCampus. From the title screen, ?paintball, ?room=CODE, or window.__game.openPaintball().
 let paintball = null;
 let paintballLoading = null;
-// opts: { action: 'create' | 'join', code, nickname, portal } (see PaintballMode.open)
+// opts: { action: 'create' | 'join' | 'practice', code, nickname, practice, portal } (see PaintballMode.open)
 function openPaintball(opts = {}) {
   if (paintball) { if ((opts.code || opts.action) && !paintball.room) paintball.open(opts); return Promise.resolve(paintball); }
   if (paintballLoading) return paintballLoading;
