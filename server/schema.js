@@ -10,6 +10,7 @@ export const PbPlayer = schema({
   ready: t.boolean().default(false),
   host: t.boolean().default(false),
   team: t.int8().default(-1),
+  bot: t.boolean().default(false), // a computer-controlled player (server/bots/): shown with a 🤖 badge, never in voice chat
   // character customisation
   character: t.uint8().default(0), // a base look (js/paintball/looks.js)
   outfit: t.string().default('#30d5ff'),
@@ -99,7 +100,7 @@ export const PbZone = schema({
 }, 'PbZone');
 
 export const PbRank = schema({
-  id: t.string(), nickname: t.string(), team: t.int8().default(-1), place: t.uint8(),
+  id: t.string(), nickname: t.string(), team: t.int8().default(-1), place: t.uint8(), bot: t.boolean().default(false),
   score: t.int32(), tags: t.uint16(), assists: t.uint16(), timesTagged: t.uint16(),
   placement: t.uint8().default(0), survived: t.float32().default(0), supplies: t.uint16().default(0), // Campus Royale
 }, 'PbRank');
@@ -131,6 +132,8 @@ export const PbState = schema({
   teamScores: t.array('int32'),
   slotsOpen: t.uint8().default(12),
   testMode: t.boolean().default(false),
+  botLevel: t.string().default('medium'), // bots' difficulty in this room (js/paintball/bots.js), host's choice
+  practice: t.boolean().default(false), // a Play vs Bots room: only its creator, started straight away
   players: t.map(PbPlayer),
   results: t.ref(PbResults).default(() => new PbResults()),
   // Campus Royale
@@ -141,4 +144,8 @@ export const PbState = schema({
   standing: t.uint8().default(0), // players not yet eliminated
   groups: t.uint8().default(0), // players (free-for-all) or squads still standing
   playStart: t.float32().default(0),
+  // rooms with bots: the play area (a circle sized to the player count; 0 = the whole campus)
+  regionX: t.float32().default(0),
+  regionZ: t.float32().default(0),
+  regionR: t.float32().default(0),
 }, 'PbState');

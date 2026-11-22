@@ -266,7 +266,7 @@ export class RoyaleView {
     if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
     this.drawMap(cv, s, { landing: true });
     const me = this.me; const d = me && me.drop >= 0 ? this.spots.drops[me.drop] : null;
-    L.info.textContent = `Landing in ${Math.max(0, Math.ceil(s.phaseEnds - s.now))} s · ${d ? `your spot: ${d.name}` : 'no spot picked yet'}`;
+    L.info.textContent = `Landing in ${Math.max(0, Math.ceil(s.phaseEnds - s.now))} s · ${d ? `your spot: ${d.name}` : 'no spot picked yet'}${s.regionR ? ` · match with bots: land inside the circle (a ${Math.round(s.regionR * 2)} m play area)` : ''}`;
   }
 
   // ---------- maps ----------
@@ -317,7 +317,8 @@ export class RoyaleView {
     }
     if (landing) {
       g.fillStyle = 'rgba(255,255,255,0.55)';
-      for (const d of this.spots.drops) { g.fillRect(w.X(d.x) - 1, w.Z(d.z) - 1, 2, 2); }
+      const inArea = (d) => !s.regionR || Math.hypot(d.x - s.regionX, d.z - s.regionZ) <= s.regionR - 8; // a room with bots: only the play area
+      for (const d of this.spots.drops) { if (inArea(d)) g.fillRect(w.X(d.x) - 1, w.Z(d.z) - 1, 2, 2); }
       for (const [id, p] of s.players) {
         if (p.drop < 0 || (teams && p.team !== me?.team && id !== myId) || (!teams && id !== myId)) continue;
         const d = this.spots.drops[p.drop]; if (!d) continue;
@@ -382,7 +383,7 @@ export class RoyaleView {
     // zone
     const Z = s.zone; const left = Math.max(0, Z.ends - s.now);
     const dOut = Math.hypot(pos.x - Z.x, pos.z - Z.z) - Z.r;
-    let zt = s.phase !== 'playing' ? 'Paint zone: the whole campus' : Z.shrinking ? `🎨 Paint zone closing · ${fmtTime(left)}` : Z.r > 0.5 ? `🎨 Paint zone shrinks in ${fmtTime(left)}` : '🎨 Paint zone closed';
+    let zt = s.phase !== 'playing' ? (s.regionR ? `Play area: the ${Math.round(s.regionR * 2)} m circle on the map` : 'Paint zone: the whole campus') : Z.shrinking ? `🎨 Paint zone closing · ${fmtTime(left)}` : Z.r > 0.5 ? `🎨 Paint zone shrinks in ${fmtTime(left)}` : '🎨 Paint zone closed';
     if (dOut > 0 && s.phase === 'playing') {
       const dx = Z.x - pos.x; const dz = Z.z - pos.z; const ang = Math.atan2(dx, -dz) + this.mode.player.yaw;
       zt += ` · OUTSIDE: ${Math.round(dOut)} m to safety ${'⬆↗➡↘⬇↙⬅↖'[Math.round(((ang * 180) / Math.PI + 720) % 360 / 45) % 8]} (+${Z.dps}/s paint)`;

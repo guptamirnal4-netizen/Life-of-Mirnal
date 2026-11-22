@@ -188,3 +188,41 @@ export function pickFinal(spots, rand) {
   const i = spots.finals[Math.floor(rand() * spots.finals.length)];
   return spots.drops[i];
 }
+
+// ---------- a smaller play area for rooms with bots ----------
+// A room with bots (often one person against 11 of them) on the whole 1 × 1.8 km campus spends minutes before anyone
+// meets. So such a room plays in a region sized to the player count: a circle round a random final-zone centre that
+// holds enough landing spots (2 per player, outdoors) and supply spots (3 per player); landing, the first circle and
+// the final spot all lie inside it, and the zone runs on REGION_PHASES (radii as shares of the region, ~5½ min).
+// All-human rooms keep the full campus and ZONE_PHASES. Returns { x, z, r, final: { x, z } }.
+export const REGION_PHASES = [
+  { wait: 45, shrink: 35, r: 0.62, dps: 2 },
+  { wait: 35, shrink: 30, r: 0.38, dps: 3 },
+  { wait: 30, shrink: 25, r: 0.2, dps: 5 },
+  { wait: 25, shrink: 20, r: 0.09, dps: 8 },
+  { wait: 20, shrink: 20, r: 0.03, dps: 12 },
+  { wait: 15, shrink: 20, r: 0, dps: 18 },
+];
+export const regionPhases = (r) => REGION_PHASES.map((p) => ({ ...p, r: Math.round(p.r * r) }));
+export const regionRadius = (players) => 110 + 14 * Math.max(2, players); // 12 players → 278 m
+export function planRegion(spots, players, rand) {
+  const R0 = regionRadius(players);
+  const { drops, supplies, finals } = readSpots(spots);
+  const fits = (c, r) => {
+    let nd = 0; let ns = 0;
+    for (const d of drops) if (!d.indoor && Math.hypot(d.x - c.x, d.z - c.z) < r * 0.85) nd++;
+    for (const q of supplies) if (Math.hypot(q.x - c.x, q.z - c.z) < r * 0.9) ns++;
+    return nd >= 2 * players && ns >= 3 * players;
+  };
+  const order = finals.map((i) => drops[i]).map((d) => [rand(), d]).sort((a, b) => a[0] - b[0]).map(([, d]) => d);
+  for (let r = R0; r < 900; r += 40) {
+    const c = order.find((d) => fits(d, r));
+    if (!c) continue;
+    // the final spot: another final-zone centre well inside the region (or its middle)
+    const inner = finals.map((i) => drops[i]).filter((d) => Math.hypot(d.x - c.x, d.z - c.z) < r * 0.45);
+    const f = inner.length ? inner[Math.floor(rand() * inner.length)] : c;
+    return { x: c.x, z: c.z, r, final: { x: f.x, z: f.z } };
+  }
+  return null;
+}
+export const inRegion = (region, x, z, margin = 0) => !region || Math.hypot(x - region.x, z - region.z) <= region.r - margin;

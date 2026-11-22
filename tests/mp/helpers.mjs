@@ -87,7 +87,7 @@ export async function makeRoom(srv, n, { mode = 'ffa', duration = null, test = {
   const bots = [new Bot(first)];
   for (let i = 1; i < n; i++) bots.push(new Bot(await new Client(url).joinById(first.roomId, opts(i))));
   const host = bots[0];
-  await until(() => bots.every((b) => b.state.players.size === n), 5000, 'everyone sees everyone');
+  await until(() => bots.every((b) => b.state.players?.size === n), 5000, 'everyone sees everyone');
   if (mode !== 'ffa' || duration) {
     host.send('config', duration ? { mode, duration } : { mode });
     await until(() => bots.every((b) => b.state.mode === mode && (!duration || b.state.duration === duration)), 3000, 'config');

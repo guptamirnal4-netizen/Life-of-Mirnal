@@ -36,6 +36,7 @@ export async function startServer({ port = Number(process.env.PORT) || 2567, hos
   const health = createEndpoint('/health', { method: 'GET' }, async () => new Response(JSON.stringify({ ok: true, rooms: liveRooms.size, test, geo: campus.geo.hash }), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }));
   server.router = createRouter({ health });
   server.define('paintball', test ? TestPaintballRoom : PaintballRoom);
+  PaintballRoom.log = !quiet; // a tick-time line per bot room every minute
   await server.listen(port, host);
   const actual = transport.server?.address?.()?.port ?? port;
   if (!quiet) console.log(`Play with BITSians paintball server → ws://localhost:${actual}${test ? ' (test flag on)' : ''} · campus geometry ${campus.geo.hash} loaded in ${campus.ms} ms · RSS ${Math.round(process.memoryUsage().rss / 1048576)} MB`);

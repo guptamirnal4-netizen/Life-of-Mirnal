@@ -1,6 +1,9 @@
 // The paintball room: a private room joined by a short code, server-authoritative paintball match at TICK_HZ.
 // Clients send inputs only (movement intent, aim, trigger, reload, switch); the server moves everyone, fires,
 // flies and sweeps the paintballs, applies paint, tags, assists, scores and runs the match clock.
+// Bots (server/bots/) are players too: they live in the state like humans (flagged `bot`) and their AI sends the
+// same messages a browser sends, through the same handlers (dispatch), cooldowns, paintball counts and hit checks.
+// A room never stays open for bots alone: when the last human leaves, the bots go and the room closes.
 import crypto from 'node:crypto';
 import { Room, CloseCode } from '@colyseus/core';
 import { PbState, PbPlayer, PbRank, PbTeamResult } from './schema.js';
@@ -14,6 +17,9 @@ import { rng, makeCode, cleanNick, assignTeams, smallestTeam, canStart, slotsFor
 import { RoyaleRules } from './logic/royale.js';
 import { loadCampus } from './geo.js';
 import { ROYALE } from '../js/paintball/royale.js';
+import { BOT_LEVELS_BY_ID, BOT_NAMES, BOT_LIMITS, DEFAULT_BOT_LEVEL, botsBusyMessage } from '../js/paintball/bots.js';
+import { CHARACTERS, OUTFIT_COLOURS, PANTS_COLOURS, MASK_COLOURS, ACCESSORIES } from '../js/paintball/looks.js';
+import { BotManager } from './bots/manager.js';
 
 export const CLOSE_BY_HOST = 4101;
 export const CLOSE_IDLE = 4102;
@@ -21,9 +27,24 @@ const codes = new Set(); // codes of open rooms (unique per server process)
 export const liveRooms = new Set(); // for tests: rooms not yet disposed
 const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
 const RTC_KINDS = new Set(['offer', 'answer', 'ice', 'bye']);
+// what a bot may send: exactly a player's own messages (never host controls, voice or test helpers)
+const BOT_MESSAGES = new Set(['in', 'land', 'open', 'pick', 'drop', 'throw', 'use', 'revive']);
+// bots across the whole server process (Render's free instance has very little CPU)
+const botCounts = new Map(); // room → bots in it
+const envNum = (k, d) => (Number(process.env[k]) > 0 ? Number(process.env[k]) : d);
+// sensible blaster pairs for a bot in a timed match
+const BOT_LOADOUTS = [['standard', 'spread'], ['burst', 'rapid'], ['precision', 'rapid'], ['rapid', 'spread'], ['standard', 'burst'], ['launcher', 'standard'], ['burst', 'spread'], ['precision', 'standard']];
 
 export class PaintballRoom extends Room {
   static test = false; // server started with the test flag (tests/mp): allows short durations and test helpers
+  static botLimits = { rooms: envNum('PB_BOT_ROOMS', BOT_LIMITS.rooms), total: envNum('PB_BOT_TOTAL', BOT_LIMITS.total) };
+  static log = false; // print a tick-time line now and then while bots play (the server turns it on unless quiet)
+  // bots in use across the server, other than in `except`
+  static botsInUse(except = null) {
+    let rooms = 0; let total = 0;
+    for (const [r, n] of botCounts) if (r !== except && n > 0) { rooms++; total += n; }
+    return { rooms, total };
+  }
 
   onCreate(options = {}) {
     const test = this.constructor.test;
@@ -34,12 +55,12 @@ export class PaintballRoom extends Room {
     this.arena = arena;
     this.maxClients = MAX_PLAYERS;
     this.autoDispose = true;
-    this.rand = rng(crypto.randomBytes(4).readUInt32LE(0));
+    const o = test && options.test ? options.test : {};
+    this.rand = rng(Number.isInteger(o.seed) ? o.seed : crypto.randomBytes(4).readUInt32LE(0));
     this.roomId = makeCode(this.rand, codes);
     codes.add(this.roomId);
     liveRooms.add(this);
     this.setPrivate(true); // never listed; joined only by code
-    const o = test && options.test ? options.test : {};
     const num = (v, d) => (Number.isFinite(v) && v >= 0 ? v : d);
     this.timing = {
       countdown: num(o.countdown, TIMING.countdown), respawn: num(o.respawn, TIMING.respawn), protection: num(o.protection, TIMING.protection),
@@ -57,8 +78,30 @@ export class PaintballRoom extends Room {
     this.pid = 0;
     this.lastActivity = 0;
     this.rtcCount = new Map();
+    this.bots = new BotManager(this);
+    this.botSeq = 0;
+    this.botNames = [...BOT_NAMES]; for (let i = this.botNames.length - 1; i > 0; i--) { const j = Math.floor(this.rand() * (i + 1)); [this.botNames[i], this.botNames[j]] = [this.botNames[j], this.botNames[i]]; }
+    this.tickMs = new Float32Array(1200); this.tickCpu = new Float32Array(1200); this.tickN = 0;
+    this.handlers = {};
+    // Play vs Bots: a private room for its creator alone, filled with bots and started as soon as they join
+    const pr = options.practice;
+    if (pr && typeof pr === 'object') {
+      const mode = MODES_BY_ID[pr.mode] ? pr.mode : 'ffa';
+      const want = mode === 'ffa' ? Math.max(1, Math.min(MAX_PLAYERS - 1, Math.floor(Number(pr.bots) || 5))) : Math.min(MAX_PLAYERS, MODES_BY_ID[mode].players[1]) - 1;
+      if (!this.botsFree(want)) throw new Error(botsBusyMessage(PaintballRoom.botLimits));
+      this.practice = { bots: want };
+      s.practice = true; s.mode = mode;
+      s.botLevel = BOT_LEVELS_BY_ID[pr.level] ? pr.level : DEFAULT_BOT_LEVEL;
+      const d = Math.floor(Number(pr.duration));
+      if (TIMING.durations.includes(d) || (test && d >= 1 && d <= 600)) s.duration = d;
+      this.maxClients = 1;
+    }
 
-    const on = (type, fn) => this.onMessage(type, (client, msg) => { this.lastActivity = s.now; const p = s.players.get(client.sessionId); if (p) fn(client, p, msg ?? {}); });
+    // Every message has one handler (client, player, msg); a browser's message and a bot's (dispatch) both run it.
+    const on = (type, fn) => {
+      this.handlers[type] = fn;
+      this.onMessage(type, (client, msg) => { this.lastActivity = s.now; const p = s.players.get(client.sessionId); if (p && !p.bot) fn(client, p, msg ?? {}); });
+    };
     const hostOnly = (fn) => (client, p, msg) => (p.host ? fn(client, p, msg) : client.send('error', { code: 'host-only', message: 'Only the host can do that.' }));
     const lobby = (fn) => (client, p, msg) => (s.phase === 'lobby' ? fn(client, p, msg) : client.send('error', { code: 'not-lobby', message: 'That can only be changed in the lobby.' }));
 
@@ -82,6 +125,7 @@ export class PaintballRoom extends Room {
     on('config', hostOnly(lobby((client, p, msg) => {
       if (msg.mode !== undefined && MODES_BY_ID[msg.mode] && msg.mode !== s.mode) {
         const was = MODES_BY_ID[s.mode].teams; s.mode = msg.mode;
+        this.trimBots();
         if (MODES_BY_ID[s.mode].teams !== was) this.randomiseTeams();
       }
       if (msg.arena !== undefined && ARENAS_BY_ID[msg.arena]) { this.arena = ARENAS_BY_ID[msg.arena]; s.arena = msg.arena; }
@@ -101,6 +145,11 @@ export class PaintballRoom extends Room {
     on('rematch', hostOnly((client) => { if (s.phase === 'results') this.startMatch(); }));
     on('lobby', hostOnly(() => { if (s.phase === 'results') this.toLobby(); }));
     on('close', hostOnly(() => this.closeRoom()));
+    // bots: the host adds one, fills every open slot, removes one, or sets the room's difficulty (lobby only)
+    on('bot:add', hostOnly(lobby((client) => this.addBotChecked(client))));
+    on('bot:fill', hostOnly(lobby((client) => { while (this.state.slotsOpen > 0) if (!this.addBotChecked(client)) break; })));
+    on('bot:remove', hostOnly(lobby((client, p, msg) => { if (typeof msg.id === 'string' && s.players.get(msg.id)?.bot) this.removeBot(msg.id); })));
+    on('bot:level', hostOnly(lobby((client, p, msg) => { if (BOT_LEVELS_BY_ID[msg.level]) { s.botLevel = msg.level; this.bots.setLevel(msg.level); } })));
     // voice chat: on/off, talking indicator, and WebRTC signalling relayed only inside a voice channel
     on('voice', (client, p, msg) => { p.voice = !!msg.on; if (!p.voice) p.talking = false; });
     on('talk', (client, p, msg) => { p.talking = p.voice && !!msg.on; });
@@ -112,6 +161,7 @@ export class PaintballRoom extends Room {
       if (!sameChannel(p, to, { phase: s.phase, teams: MODES_BY_ID[s.mode].teams })) return;
       const data = msg.data ?? null;
       if (JSON.stringify(data ?? '').length > 16000) return;
+      if (to.bot) return; // bots never take part in voice chat
       const target = this.clients.find((c) => c.sessionId === msg.to);
       target?.send('rtc', { from: client.sessionId, kind: msg.kind, data });
     });
@@ -128,7 +178,8 @@ export class PaintballRoom extends Room {
     // A client claiming a hit is ignored on purpose: only the server's own paintball sweeps paint anyone.
     on('hit', () => {});
     if (test) {
-      on('test:place', (client, p, msg) => {
+      on('test:place', (client, me, msg) => {
+        const p = typeof msg.id === 'string' && s.players.get(msg.id)?.bot ? s.players.get(msg.id) : me; // a bot can be placed too
         if (Number.isFinite(msg.x)) p.x = msg.x; if (Number.isFinite(msg.z)) p.z = msg.z; p.y = 0; p.vy = 0;
         if (this.arena.geo) p.y = this.arena.geo.floorAt(p.x, p.z, Number.isFinite(msg.y) ? msg.y + 0.05 : 0.05);
         if (Number.isFinite(msg.yaw)) p.yaw = msg.yaw; if (Number.isFinite(msg.pitch)) p.pitch = msg.pitch;
@@ -154,13 +205,93 @@ export class PaintballRoom extends Room {
         this.royale.zoneOverride = msg.off ? null : { x: msg.x, z: msg.z, r: msg.r, next: { x: msg.x, z: msg.z, r: msg.r }, phase: 1, shrinking: false, ends: 999, dps: msg.dps ?? 10 };
       });
       on('test:airdrop', () => { if (this.arena.royale && this.state.phase === 'playing') this.royale.airdropTick(this.state.now - this.state.playStart, true); });
-      on('test:end', () => { if (this.arena.royale && this.state.phase === 'playing') this.state.phaseEnds = this.state.now; });
+      on('test:end', () => {
+        if (this.arena.royale) { if (this.state.phase === 'playing') this.state.phaseEnds = this.state.now; return; }
+        if (this.state.phase !== 'playing' && this.state.phase !== 'overtime') return;
+        const r = timeUp(standings(s.mode, this.plainPlayers()));
+        this.endMatch(r.result === 'overtime' ? { result: 'draw' } : r);
+      });
     }
     this.onMessage('*', () => {}); // unknown message types are ignored (not a disconnect)
 
     this.setPatchRate(1000 / TICK_HZ);
     this.setSimulationInterval((ms) => this.tick(ms / 1000), 1000 / TICK_HZ);
     this.clock.setInterval(() => this.rtcCount.clear(), 1000);
+    this.clock.setInterval(() => this.logTicks(), 60000);
+  }
+
+  // A bot's message: the same handler a browser's message runs (only a player's own messages). The "client" it
+  // gets answers through sendTo, which hands a bot's messages to its brain.
+  dispatch(id, type, msg) {
+    const p = this.state.players.get(id);
+    if (!p || !p.bot || !BOT_MESSAGES.has(type)) return false;
+    this.botCalls = this.botCalls || {}; this.botCalls[type] = (this.botCalls[type] || 0) + 1;
+    this.handlers[type]?.({ sessionId: id, send: (t, m) => this.sendTo(id, t, m) }, p, msg ?? {});
+    return true;
+  }
+
+  teams() { return MODES_BY_ID[this.state.mode].teams; }
+
+  // ---------- bots ----------
+  botsFree(n, mine = 0) {
+    const L = PaintballRoom.botLimits; const use = PaintballRoom.botsInUse(this);
+    if (!mine && use.rooms >= L.rooms) return false;
+    return use.total + mine + n <= L.total;
+  }
+  addBotChecked(client) {
+    const s = this.state;
+    if (s.slotsOpen <= 0) { client.send('error', { code: 'full', message: 'The room is full.' }); return false; }
+    if (!this.botsFree(1, this.bots.size)) { client.send('error', { code: 'bots-busy', message: botsBusyMessage(PaintballRoom.botLimits) }); return false; }
+    this.addBot();
+    return true;
+  }
+  addBot() {
+    const s = this.state; const r = this.rand;
+    const id = `bot-${this.roomId}-${++this.botSeq}`;
+    const taken = [...s.players.values()].map((q) => q.nickname);
+    const name = this.botNames.find((n) => !taken.includes(`Bot ${n}`)) || this.botNames[this.botSeq % this.botNames.length];
+    const p = new PbPlayer();
+    p.bot = true; p.nickname = cleanNick(`Bot ${name}`, taken);
+    const pick = (list) => list[Math.floor(r() * list.length)];
+    Object.assign(p, cleanLook({ character: Math.floor(r() * CHARACTERS.length), outfit: pick(OUTFIT_COLOURS), pants: pick(PANTS_COLOURS), mask: pick(MASK_COLOURS), accessory: pick(ACCESSORIES).id }, p));
+    const lo = pick(BOT_LOADOUTS); p.primary = lo[0]; p.secondary = lo[1]; p.equip = p.primary;
+    p.ready = true; p.connected = true; p.alive = false;
+    const teams = this.teams();
+    if (teams) p.team = smallestTeam([...s.players.values()].map((q) => q.team), teams);
+    s.players.set(id, p);
+    this.sim.set(id, this.newSim());
+    this.joinOrder.push(id);
+    this.bots.add(id, s.botLevel, (this.rand() * 4294967296) >>> 0);
+    botCounts.set(this, this.bots.size);
+    this.updateSlots();
+    return id;
+  }
+  removeBot(id) {
+    const s = this.state;
+    if (!s.players.get(id)?.bot) return;
+    s.players.delete(id); this.sim.delete(id); this.bots.remove(id);
+    this.joinOrder = this.joinOrder.filter((q) => q !== id);
+    botCounts.set(this, this.bots.size);
+    this.updateSlots();
+  }
+  // after a mode change: no more bots than the mode takes
+  trimBots() {
+    const cap = Math.min(MAX_PLAYERS, MODES_BY_ID[this.state.mode].players[1]);
+    for (let i = this.joinOrder.length - 1; i >= 0 && this.state.players.size > cap; i--) if (this.state.players.get(this.joinOrder[i])?.bot) this.removeBot(this.joinOrder[i]);
+  }
+  humans() { let n = 0; for (const p of this.state.players.values()) if (!p.bot) n++; return n; }
+
+  // tick time (ms) over the last minute: p50, p95, max
+  tickStats() {
+    const n = Math.min(this.tickN, this.tickMs.length);
+    const a = Array.from(this.tickMs.subarray(0, n)).sort((x, y) => x - y); const b = Array.from(this.tickCpu.subarray(0, n)).sort((x, y) => x - y);
+    const q = (L, k) => (n ? L[Math.min(n - 1, Math.floor(k * n))] : 0);
+    return { n, p50: q(a, 0.5), p95: q(a, 0.95), max: n ? a[n - 1] : 0, cpuP50: q(b, 0.5), cpuP95: q(b, 0.95), cpuMax: n ? b[n - 1] : 0 };
+  }
+  logTicks() {
+    if (!PaintballRoom.log || !this.bots.size) return;
+    const t = this.tickStats();
+    console.log(`[bots] room ${this.roomId} · ${this.bots.size} ${this.state.botLevel} bots · ${this.state.arena} · tick p50 ${t.p50.toFixed(2)} ms, p95 ${t.p95.toFixed(2)} ms, max ${t.max.toFixed(2)} ms (CPU p95 ${t.cpuP95.toFixed(2)} ms) · RSS ${Math.round(process.memoryUsage().rss / 1048576)} MB`);
   }
 
   // ---------- joining, leaving, reconnecting ----------
@@ -181,6 +312,15 @@ export class PaintballRoom extends Room {
     this.joinOrder.push(client.sessionId);
     this.lastActivity = s.now;
     this.updateSlots();
+    if (this.practice && !this.practice.started) {
+      // Play vs Bots: fill the room with bots and start at once (no ready-up)
+      this.practice.started = true;
+      const mode = MODES_BY_ID[s.mode];
+      const n = mode.teams ? Math.min(MAX_PLAYERS, mode.players[1]) - 1 : this.practice.bots;
+      for (let i = 0; i < n && s.players.size < MAX_PLAYERS; i++) this.addBot();
+      p.ready = true;
+      this.startMatch();
+    }
   }
 
   newSim() { return { queue: [], budget: 0, trigger: false, nextFire: 0, burstLeft: 0, nextBurst: 0, reloadWanted: false, painters: new Map(), used: new Set() }; }
@@ -212,18 +352,23 @@ export class PaintballRoom extends Room {
     this.sim.delete(client.sessionId);
     this.joinOrder = this.joinOrder.filter((id) => id !== client.sessionId);
     if (wasHost) this.passHost(client.sessionId);
+    // the last human has gone: the bots go too (an empty room then closes by itself)
+    if (!this.humans()) for (const id of [...this.joinOrder]) this.removeBot(id);
     this.updateSlots();
   }
 
   passHost(fromId) {
     const s = this.state;
-    const next = this.joinOrder.find((id) => id !== fromId && s.players.get(id)?.connected);
+    const next = this.joinOrder.find((id) => id !== fromId && s.players.get(id)?.connected && !s.players.get(id).bot);
     if (!next) return;
     for (const [id, q] of s.players) q.host = id === next;
     this.broadcast('host', { id: next, name: s.players.get(next).nickname });
   }
 
-  updateSlots() { this.state.slotsOpen = slotsFor(this.state.mode, this.state.players.size); }
+  updateSlots() {
+    this.state.slotsOpen = slotsFor(this.state.mode, this.state.players.size);
+    if (!this.practice) this.maxClients = Math.max(this.clients.length, MAX_PLAYERS - this.bots.size); // bots take seats too
+  }
 
   randomiseTeams() {
     const s = this.state;
@@ -240,6 +385,7 @@ export class PaintballRoom extends Room {
   }
 
   onDispose() {
+    botCounts.delete(this); this.bots.clear();
     codes.delete(this.roomId);
     liveRooms.delete(this);
     this.projectiles.length = 0;
@@ -257,6 +403,7 @@ export class PaintballRoom extends Room {
     s.teamScores.clear();
     for (let t = 0; t < mode.teams; t++) s.teamScores.push(0);
     this.projectiles.length = 0;
+    this.bots.resetAll();
     if (this.arena.royale) {
       for (const id of this.joinOrder) {
         const p = s.players.get(id); if (!p) continue;
@@ -283,7 +430,7 @@ export class PaintballRoom extends Room {
   toLobby() {
     const s = this.state;
     s.phase = 'lobby'; s.teamsLocked = false; s.phaseEnds = 0;
-    for (const p of s.players.values()) { p.ready = false; p.alive = false; p.out = false; p.down = false; }
+    for (const p of s.players.values()) { p.ready = !!p.bot; p.alive = false; p.out = false; p.down = false; } // bots are always ready
     s.crates.clear(); this.royale.bombs.length = 0;
     for (const [id, p] of s.players) {
       const lo = this.sim.get(id)?.loadout; // Campus Royale borrowed the blaster slots: give the lobby choice back
@@ -291,7 +438,7 @@ export class PaintballRoom extends Room {
       p.slot = 0; p.equip = p.primary;
     }
     this.projectiles.length = 0;
-    this.unlock();
+    if (!this.practice) this.unlock(); // a Play vs Bots room stays private to its creator
     this.updateSlots();
   }
 
@@ -323,7 +470,7 @@ export class PaintballRoom extends Room {
     const R = s.results;
     R.draw = r.draw; R.winner = r.winner || ''; R.runnerUp = r.runnerUp || ''; R.mvp = r.mvp || ''; R.mvpName = r.mvpName || '';
     R.rankings.clear(); R.teams.clear();
-    for (const k of r.rankings) R.rankings.push(Object.assign(new PbRank(), k));
+    for (const k of r.rankings) R.rankings.push(Object.assign(new PbRank(), k, { bot: !!s.players.get(k.id)?.bot }));
     for (const k of r.teams) R.teams.push(Object.assign(new PbTeamResult(), k));
     R.ready = true;
     for (const [id, p] of s.players) { p.used = [...(this.sim.get(id)?.used || [])].join(','); p.ready = false; }
@@ -343,7 +490,7 @@ export class PaintballRoom extends Room {
     const R = s.results;
     R.draw = r.draw; R.winner = r.winner || ''; R.runnerUp = r.runnerUp || ''; R.mvp = r.mvp || ''; R.mvpName = r.mvpName || '';
     R.rankings.clear(); R.teams.clear();
-    for (const k of r.rankings) R.rankings.push(Object.assign(new PbRank(), k));
+    for (const k of r.rankings) R.rankings.push(Object.assign(new PbRank(), k, { bot: !!s.players.get(k.id)?.bot }));
     for (const k of r.teams) R.teams.push(Object.assign(new PbTeamResult(), k));
     R.ready = true;
     for (const [id, p] of s.players) { p.used = [...(this.sim.get(id)?.used || [])].join(','); p.ready = false; p.channel = ''; }
@@ -366,6 +513,14 @@ export class PaintballRoom extends Room {
 
   // ---------- the simulation tick ----------
   tick(dt) {
+    const t0 = performance.now(); const c0 = process.cpuUsage();
+    this.step(dt);
+    const c1 = process.cpuUsage(c0);
+    this.tickCpu[this.tickN % this.tickCpu.length] = (c1.user + c1.system) / 1000; // CPU ms (other processes on the machine do not count)
+    this.tickMs[this.tickN++ % this.tickMs.length] = performance.now() - t0;
+  }
+
+  step(dt) {
     const s = this.state;
     s.now += dt;
     if (s.now - this.lastActivity > this.timing.idle) {
@@ -381,6 +536,7 @@ export class PaintballRoom extends Room {
     const royale = !!this.arena.royale;
     const active = ACTIVE.has(s.phase);
     const live = s.phase === 'playing' || s.phase === 'overtime';
+    this.bots.tick(dt); // bots think and send their inputs (through the 'in' handler) before anyone moves
     for (const [id, p] of s.players) {
       const sim = this.sim.get(id);
       if (!sim) continue;
@@ -474,6 +630,8 @@ export class PaintballRoom extends Room {
       const d = aimDir(p.yaw + Math.cos(a) * r, p.pitch + Math.sin(a) * r);
       const pb = { id: ++this.pid, owner: id, team: p.team, equip: e.id, x: eye.x, y: eye.y, z: eye.z, vx: d.x * e.speed, vy: d.y * e.speed, vz: d.z * e.speed, dist: 0, hit: new Set() };
       this.projectiles.push(pb);
+      if (p.bot) { const b = this.bots.brains.get(id); if (b) b.stats.shots++; }
+      if (k === 0) this.bots.noise(p.x, p.y, p.z, id, this.arena.geo ? 120 : 90); // the sound of a paintball blaster
       this.broadcast('shot', { i: pb.id, o: id, e: e.id, x: r3(pb.x), y: r3(pb.y), z: r3(pb.z), vx: r3(pb.vx), vy: r3(pb.vy), vz: r3(pb.vz) });
     }
   }
@@ -586,7 +744,10 @@ export class PaintballRoom extends Room {
     t.alive = false; t.respawnAt = s.now + this.timing.respawn; t.paint = PAINT_MAX;
   }
 
-  sendTo(id, type, msg) { this.clients.find((c) => c.sessionId === id)?.send(type, msg); }
+  sendTo(id, type, msg) {
+    if (this.bots.has(id)) { this.bots.message(id, type, msg); return; }
+    this.clients.find((c) => c.sessionId === id)?.send(type, msg);
+  }
 }
 
 const r3 = (v) => Math.round(v * 1000) / 1000;

@@ -5,7 +5,7 @@ import { PbLoot, PbCrate } from '../schema.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../../js/paintball/equipment.js';
 import { MODES_BY_ID, SCORE, ASSIST_WINDOW, MOVE } from '../../js/paintball/rules.js';
 import { CAMPUS } from '../../js/paintball/arena.js';
-import { ROYALE, ZONE_PHASES, planZone, zoneAt, readSpots, assignLandings, spawnCrates, pickFinal, nearestDrop, pickAirdrop } from '../../js/paintball/royale.js';
+import { ROYALE, ZONE_PHASES, planZone, zoneAt, readSpots, assignLandings, spawnCrates, pickFinal, nearestDrop, pickAirdrop, planRegion, regionPhases, inRegion } from '../../js/paintball/royale.js';
 import { ITEMS, pickupPlan, BOMB, SMOKE, KITS, CARRY, SHIELD, SCAN, bombPaint, gearPaint, PACK, rollAirdrop } from '../../js/paintball/items.js';
 import { stepBomb, throwVelocity, BODY } from '../../js/paintball/sim.js';
 
@@ -19,6 +19,8 @@ export class RoyaleRules {
     this.lootId = 0;
     this.circles = null;
     this.zoneOverride = null; // test helper
+    this.phases = ZONE_PHASES;
+    this.region = null; // rooms with bots: a play area sized to the player count (js/paintball/royale.js planRegion)
   }
 
   get s() { return this.room.state; }
@@ -75,13 +77,23 @@ export class RoyaleRules {
       p.ammo.clear();
       this.mirror(p);
     }
-    // the zone for this match: a random final spot from the registry
-    const final = pickFinal(CAMPUS.spots, room.rand);
-    const b = this.geo.bbox; const c = CAMPUS.centre;
-    const startR = Math.ceil(Math.max(...[[b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.maxZ]].map(([x, z]) => Math.hypot(x - c.x, z - c.z)))) + 10;
-    this.circles = planZone(room.rand, { centre: c, startR, final: { x: final[0], z: final[1] } });
-    this.applyZone(zoneAt(this.circles, 0, ZONE_PHASES, room.timing.zoneScale));
-    s.zone.phases = ZONE_PHASES.length;
+    // the zone for this match: a random final spot from the registry. A room with bots plays in a region sized to
+    // its player count with a faster zone, so a solo player meets the bots within a couple of minutes.
+    this.region = room.bots.size ? planRegion(CAMPUS.spots, s.players.size, room.rand) : null;
+    if (this.region) {
+      const R = this.region;
+      this.phases = regionPhases(R.r);
+      this.circles = planZone(room.rand, { centre: { x: R.x, z: R.z }, startR: R.r, final: R.final }, this.phases);
+    } else {
+      this.phases = ZONE_PHASES;
+      const final = pickFinal(CAMPUS.spots, room.rand);
+      const b = this.geo.bbox; const c = CAMPUS.centre;
+      const startR = Math.ceil(Math.max(...[[b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.maxZ]].map(([x, z]) => Math.hypot(x - c.x, z - c.z)))) + 10;
+      this.circles = planZone(room.rand, { centre: c, startR, final: { x: final[0], z: final[1] } });
+    }
+    s.regionX = this.region?.x || 0; s.regionZ = this.region?.z || 0; s.regionR = this.region?.r || 0;
+    this.applyZone(zoneAt(this.circles, 0, this.phases, room.timing.zoneScale));
+    s.zone.phases = this.phases.length;
     s.phase = 'landing';
     s.phaseEnds = s.now + room.timing.landing;
     this.updateCounts();
@@ -94,12 +106,16 @@ export class RoyaleRules {
     const drops = this.spots.drops;
     let d = Number.isInteger(msg.id) && drops[msg.id] ? drops[msg.id] : null;
     if (!d && Number.isFinite(msg.x) && Number.isFinite(msg.z)) {
-      const n = nearestDrop(drops, msg.x, msg.z);
-      if (n && Math.hypot(n.x - msg.x, n.z - msg.z) < 120) d = n;
+      const n = nearestDrop(this.landingDrops(), msg.x, msg.z);
+      if (n && (Math.hypot(n.x - msg.x, n.z - msg.z) < 120 || (this.region && inRegion(this.region, msg.x, msg.z, -150)))) d = n;
     }
     if (!d) return this.sendErr(id, 'land', 'Pick a landing spot on the campus map.');
+    if (this.region && !inRegion(this.region, d.x, d.z, 8)) d = nearestDrop(this.landingDrops(), d.x, d.z); // inside the play area
     if (this.teams()) { for (const q of s.players.values()) if (q.team === p.team) q.drop = d.id; } else p.drop = d.id;
   }
+
+  // the landing spots players may use: all of them, or those inside the play area of a room with bots
+  landingDrops() { return this.region ? this.spots.drops.filter((d) => inRegion(this.region, d.x, d.z, 8)) : this.spots.drops; }
 
   land() {
     const s = this.s; const room = this.room;
@@ -111,7 +127,9 @@ export class RoyaleRules {
       const g = groups.get(k); g.members.push(id);
       if (p.drop >= 0 && g.choice === null) g.choice = p.drop;
     }
-    const L = assignLandings(this.spots.drops, [...groups.values()], room.rand);
+    const pool = this.landingDrops(); const idx = new Map(pool.map((d, i) => [d.id, i]));
+    const list = [...groups.values()].map((g) => ({ ...g, choice: g.choice !== null && idx.has(g.choice) ? idx.get(g.choice) : null }));
+    const L = assignLandings(pool, list, room.rand);
     for (const [id, spot] of L) {
       const p = s.players.get(id); if (!p) continue;
       p.x = spot.x; p.z = spot.z; p.y = spot.y; p.vy = 0; p.drop = spot.drop;
@@ -121,8 +139,8 @@ export class RoyaleRules {
     }
     for (const c of spawnCrates(this.spots.supplies, room.rand)) this.addCrate('crate', c.items, c.x, c.y, c.z);
     // the special supply drop: where (inside the zone of its time) and when
-    const at = ROYALE.airdrop.at * room.timing.zoneScale;
-    const zAt = zoneAt(this.circles, at, ZONE_PHASES, room.timing.zoneScale);
+    const at = ROYALE.airdrop.at * room.timing.zoneScale * (this.region ? 0.55 : 1);
+    const zAt = zoneAt(this.circles, at, this.phases, room.timing.zoneScale);
     const d = pickAirdrop(this.spots.drops, zAt.next.r > 0 ? zAt.next : zAt, room.rand);
     Object.assign(s.airdrop, { x: d.x, y: d.y, z: d.z, at: 0, announced: false, landed: false, crate: '' });
     this.airdropAt = at;
@@ -138,7 +156,7 @@ export class RoyaleRules {
     if (s.phase === 'landing') { if (s.now >= s.phaseEnds) this.land(); return; }
     if (s.phase !== 'playing') return;
     const t = s.now - s.playStart;
-    const z = this.zoneOverride || zoneAt(this.circles, t, ZONE_PHASES, room.timing.zoneScale);
+    const z = this.zoneOverride || zoneAt(this.circles, t, this.phases, room.timing.zoneScale);
     this.applyZone(z);
     for (const [id, p] of s.players) {
       if (!p.alive || p.out) continue;
@@ -315,6 +333,7 @@ export class RoyaleRules {
     if (!this.canLoot(id, p)) return;
     const c = this.crateInReach(id, p, msg.id); if (!c) return;
     c.opened = true;
+    this.room.bots.noise(c.x, c.y, c.z, id, 50); // a crate lid is heard nearby
     this.room.sendTo(id, 'opened', { id: msg.id });
   }
   // 'pick' { id: crate, item: uid (optional: the first item) }
@@ -396,6 +415,7 @@ export class RoyaleRules {
   burst(b) {
     const s = this.s; const room = this.room; const teams = this.teams();
     room.broadcast('boom', { i: b.id, k: b.kind, o: b.owner, x: r3(b.x), y: r3(b.y), z: r3(b.z) });
+    room.bots.noise(b.x, b.y, b.z, b.owner, 120);
     if (b.kind === 'smoke') return;
     const from = { x: b.x, y: b.y + 0.25, z: b.z };
     for (const [id, p] of s.players) {

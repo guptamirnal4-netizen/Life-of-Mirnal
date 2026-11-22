@@ -1,11 +1,11 @@
 // The portal: the start screen of Play with BITSians, a lobby menu for multiplayer paintball over the campus
 // backdrop. A live 3D preview of your character (the paintball client's Preview), your nickname, and the entries:
-// Create Room, Join Room, Customise Character, Game Modes, How to Play, Settings, Watch the Intro. Each entry opens
-// a panel ("sheet") that slides over the portal; Create and Join open the real paintball client at that step
-// (main.js → openPaintball({ action, code, nickname, portal: true })). The Settings sheet can also open over a
+// Play vs Bots, Create Room, Join Room, Customise Character, Game Modes, How to Play, Settings, Watch the Intro.
+// Each entry opens a panel ("sheet") that slides over the portal; Create, Join and Play vs Bots open the real
+// paintball client at that step (main.js → openPaintball({ action, code, nickname, practice, portal: true })). The Settings sheet can also open over a
 // paintball room (from its lobby or match menu). First visit: a "Press to start" splash that plays the intro film.
 import { h } from '../ui/dom.js';
-import { loadPrefs, savePrefs, cleanNickname, markIntroSeen } from './prefs.js';
+import { loadPrefs, savePrefs, cleanNickname, markIntroSeen, cleanPractice } from './prefs.js';
 import { settings, setSetting, resetSettings, GRAPHICS_CHOICES, graphicsChoice } from './settings.js';
 import { CHARACTERS, OUTFIT_COLOURS, PANTS_COLOURS, MASK_COLOURS, ACCESSORIES } from '../paintball/looks.js';
 import { EQUIPMENT, EQUIPMENT_BY_ID } from '../paintball/equipment.js';
@@ -16,6 +16,7 @@ import { ROYALE, ZONE_PHASES, zoneLength } from '../paintball/royale.js';
 import { statBars, BLURB } from '../paintball/client/ui.js';
 import { normaliseCode, isCode } from '../paintball/client/codes.js';
 import { PROFILES } from '../graphics/GraphicsConfig.js';
+import { BOT_LEVELS, BOT_BADGE } from '../paintball/bots.js';
 
 export const PRODUCT = 'Play with BITSians';
 
@@ -49,7 +50,7 @@ const TOUCH_CONTROLS = [
 const focusables = (el) => [...el.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]')].filter((e) => e.offsetParent !== null);
 
 export function createPortal({ root, hooks }) {
-  // hooks: create(nick), join(code, nick), playIntro(), openFreeRoam(), roomCode() → code | null, extras() → [{ label, sub, voice, onClick }],
+  // hooks: create(nick), join(code, nick), practice({ arena, mode, bots, level }, nick), playIntro(), openFreeRoam(), roomCode() → code | null, extras() → [{ label, sub, voice, onClick }],
   //        touch() → bool, voice (js/voice.js Voice), toast(text), credits()
   let prefs = loadPrefs();
   let visible = false;
@@ -81,7 +82,9 @@ export function createPortal({ root, hooks }) {
   function renderMenu() {
     const extras = hooks.extras?.() || [];
     extrasEl.replaceChildren(...extras.map((x, i) => entry(`extra-${i}`, x.label, x.sub, () => x.onClick(), { cls: 'p-btn-extra', voice: x.voice || '' })));
+    const P = prefs.practice;
     menuEl.replaceChildren(
+      entry('bots', 'PLAY VS BOTS', `Solo practice now · ${P.mode === 'ffa' ? `${P.bots} bot${P.bots > 1 ? 's' : ''}` : modeShort(P.mode)} · ${BOT_LEVELS.find((l) => l.id === P.level)?.name} · ${ARENAS_BY_ID[P.arena]?.name}`, (b) => openBots(b), { cls: 'p-hero3', voice: 'play versus vs bots bot practice solo alone computer offline', icon: BOT_BADGE }),
       entry('create', 'CREATE ROOM', `Host a private match · ${modeShort(prefs.mode)} · ${ARENAS_BY_ID[prefs.arena]?.name}`, () => create(), { cls: 'p-hero', voice: 'create host new room match play', icon: '➕' }),
       entry('join', 'JOIN ROOM', 'Enter a friend’s 5-character code', (b) => openJoin(b), { cls: 'p-hero2', voice: 'join enter code friend', icon: '🔑' }),
       entry('customise', 'CUSTOMISE CHARACTER', 'Look, mask and preferred blasters', (b) => openCustomise(b), { voice: 'customise customize character look appearance blasters', icon: '🎨' }),
@@ -112,7 +115,7 @@ export function createPortal({ root, hooks }) {
           h('label', { class: 'p-nick' }, h('small', {}, 'NICKNAME'), nick),
           loadoutEl)),
       h('aside', { class: 'p-right' }, nextEl,
-        h('div', { class: 'p-tip' }, h('small', {}, 'SQUAD UP'), h('span', {}, 'Create a room, share its code or link, and play on the Med-C Ground or across the whole campus. Voice chat in the lobby; team-only in team matches.')))),
+        h('div', { class: 'p-tip' }, h('small', {}, 'SQUAD UP'), h('span', {}, 'Create a room, share its code or link, and play on the Med-C Ground or across the whole campus. Voice chat in the lobby; team-only in team matches. No one around? Play vs Bots, or fill empty slots with bots.')))),
     h('footer', { class: 'p-foot' },
       h('span', { class: 'p-keys' }, h('kbd', {}, '↑'), h('kbd', {}, '↓'), ' navigate ', h('kbd', {}, 'Enter'), ' select ', h('kbd', {}, 'Esc'), ' back'),
       h('span', { class: 'p-device' }, 'Laptop (mouse + keyboard) or phone (touch, best sideways) · Chrome recommended'),
@@ -158,6 +161,11 @@ export function createPortal({ root, hooks }) {
     closeSheet(false);
     hooks.join(c, nickname());
     return true;
+  }
+  function practice(setup) {
+    prefs = savePrefs({ practice: cleanPractice(setup) });
+    closeSheet(false);
+    hooks.practice?.(prefs.practice, nickname());
   }
   function setStatus(text, bad = false) {
     statusMsg = text || null;
@@ -206,6 +214,38 @@ export function createPortal({ root, hooks }) {
       h('p', { class: 'p-muted' }, `You join as “${nickname() || 'a random BITSian name'}” with your customised look and blasters. Rooms hold up to ${MAX_PLAYERS} players.`)), { opener });
   }
 
+  // Play vs Bots: arena, mode (free-for-all with 1–11 bots, or a team mode with bots on both sides), difficulty,
+  // then straight into a private match (no lobby, no ready-up).
+  function openBots(opener) {
+    const body = h('div', { class: 'p-stack', 'data-portal': 'bots-sheet' });
+    let P = { ...prefs.practice };
+    const draw = () => {
+      const keep = document.activeElement?.dataset?.bots;
+      const set = (patch) => { P = cleanPractice({ ...P, ...patch }); prefs = savePrefs({ practice: P }); renderMenu(); draw(); };
+      const pill = (key, v, label, extra = {}) => h('button', { class: `p-pill${P[key] === v ? ' sel' : ''}`, 'aria-pressed': String(P[key] === v), 'data-bots': `${key}-${v}`, onclick: () => set({ [key]: v }), ...extra }, label);
+      const teamMode = MODES_BY_ID[P.mode]?.teams > 0;
+      const range = h('input', { type: 'range', min: 1, max: MAX_PLAYERS - 1, step: 1, value: P.bots, 'aria-label': 'Number of bots', 'data-bots': 'count', oninput: (e) => { out.textContent = `${e.target.value} bot${e.target.value > 1 ? 's' : ''}`; }, onchange: (e) => set({ bots: Number(e.target.value) }) });
+      const out = h('output', {}, `${P.bots} bot${P.bots > 1 ? 's' : ''}`);
+      const m = MODES_BY_ID[P.mode];
+      body.replaceChildren(
+        h('p', {}, `A private match just for you against computer-controlled players (marked ${BOT_BADGE}). It starts straight away; no code to share, no waiting.`),
+        h('h3', {}, 'Arena'),
+        h('div', { class: 'p-chips' }, ...ARENAS.map((a) => pill('arena', a.id, arenaShort(a.id)))),
+        h('h3', {}, 'Mode'),
+        h('div', { class: 'p-chips' }, ...MODES.map((x) => pill('mode', x.id, x.id === 'ffa' ? 'Free-for-All' : x.name))),
+        teamMode ? h('p', { class: 'p-muted', 'data-portal': 'bots-team-note' }, `${m.name}: bots fill your ${m.size > 1 ? `squad (${m.size - 1} squadmate${m.size > 2 ? 's' : ''})` : 'side'} and every other team · ${Math.min(MAX_PLAYERS, m.players[1]) - 1} bots.`)
+          : h('label', { class: 'p-set' }, h('span', {}, 'Opponents'), range, out),
+        h('h3', {}, 'Difficulty'),
+        h('div', { class: 'p-chips' }, ...BOT_LEVELS.map((l) => pill('level', l.id, l.name))),
+        h('p', { class: 'p-muted' }, BOT_LEVELS.find((l) => l.id === P.level)?.blurb || ''),
+        h('button', { class: 'p-cta', 'data-portal': 'bots-go', onclick: () => practice(P) }, `${BOT_BADGE} START · ${arenaShort(P.arena)}`),
+        h('p', { class: 'p-muted' }, 'Bots play by the same rules as everyone: they only see what is in front of them, reload, run out of paintballs and can be tagged. Want friends in too? Create a room, then add bots from the lobby to fill empty slots.'));
+      if (keep) body.querySelector(`[data-bots="${CSS.escape(keep)}"]`)?.focus({ preventScroll: true });
+    };
+    draw();
+    openSheet('bots', 'Play vs Bots', body, { opener, wide: true });
+  }
+
   function openCustomise(opener) {
     const body = h('div', { class: 'p-stack', 'data-portal': 'customise' });
     const draw = () => {
@@ -245,7 +285,7 @@ export function createPortal({ root, hooks }) {
         h('h3', {}, 'Arena'),
         h('div', { class: 'p-cards two' }, ...ARENAS.map((a) => { const i = ARENA_INFO[arenaKey(a)]; const on = prefs.arena === a.id; return h('button', { class: `p-card arena-${arenaKey(a)}${on ? ' sel' : ''}`, 'data-arena': a.id, 'aria-pressed': String(on), onclick: () => set({ arena: a.id }) },
           h('span', { class: 'p-card-tag' }, i.tag), h('b', {}, arenaShort(a.id)), h('span', {}, i.text), on && h('span', { class: 'p-tick' }, '✓ DEFAULT')); })),
-        h('p', { class: 'p-muted' }, 'Picking one sets the default for the next room you host. In the lobby the host can still change the mode, arena and match length; team modes start when the room has exactly the right number of players.'),
+        h('p', { class: 'p-muted' }, 'Picking one sets the default for the next room you host. In the lobby the host can still change the mode, arena and match length; team modes start when the room has exactly the right number of players (the host can fill empty slots with bots).'),
         h('button', { class: 'p-cta', 'data-portal': 'modes-create', onclick: () => create() }, `CREATE ROOM · ${modeShort(prefs.mode)}`));
       if (keep) body.querySelector(`[data-mode="${CSS.escape(keep)}"], [data-arena="${CSS.escape(keep)}"]`)?.focus({ preventScroll: true });
     };
@@ -272,8 +312,11 @@ export function createPortal({ root, hooks }) {
       scoring: () => [h('h3', {}, 'Scoring'), h('table', { class: 'p-table' }, h('tbody', {},
         ...[[`+${SCORE.tag}`, 'Tag: you fill an opponent’s paint meter'], [`+${SCORE.assist}`, `Assist: you painted them within ${ASSIST_WINDOW} s before someone else tagged them`], [`+${SCORE.completion}`, 'Still in the room when the match ends'], [`+${SCORE.win}`, 'Win (you, or every player on the winning team)'], [`+${SCORE.place}`, 'Campus Royale: per player or squad you outlast']].map(([k, v]) => h('tr', {}, h('td', {}, h('b', {}, k)), h('td', {}, v))))),
         h('p', {}, `A hit adds paint; at 100 you are tagged (a round elimination). Med-C Ground: back in after ${TIMING.respawn} s with ${TIMING.protection} s of spawn protection; a tie for first place goes to ${TIMING.overtime} s of overtime. Campus Royale: one tag and you are out (squads: a teammate can clean you off within ${ROYALE.down} s).`)],
+      bots: () => [h('h3', {}, `${BOT_BADGE} Bots`), h('p', {}, `Computer-controlled players, always marked ${BOT_BADGE}. PLAY VS BOTS starts a private match against them straight away (free-for-all with 1–11 bots, or a team mode where bots are your squadmates and the other teams). In a room with friends, the host can add bots, fill the empty slots with bots or remove them, and pick their difficulty; team modes can then start with bots filling the teams.`),
+        h('ul', { class: 'p-list' }, ...BOT_LEVELS.map((l) => h('li', {}, h('b', {}, l.name), ` · ${l.blurb}`))),
+        h('p', {}, 'Bots play by the same rules as everyone: they only see what is in front of them (walls and bunkers hide you), take time to react, reload, run out of paintballs, loot crates, follow the paint zone and can be tagged. They score like players and never join voice chat. A room closes when its last person leaves.')],
     };
-    const names = [['controls', 'Controls'], ['items', 'Items'], ['crates', 'Crates'], ['bombs', 'Paint bombs'], ['zone', 'Paint zone'], ['scoring', 'Scoring']];
+    const names = [['controls', 'Controls'], ['items', 'Items'], ['crates', 'Crates'], ['bombs', 'Paint bombs'], ['zone', 'Paint zone'], ['scoring', 'Scoring'], ['bots', 'Bots']];
     const content = h('div', { class: 'p-tab-body', 'data-portal': 'howto-body' });
     const bar = h('div', { class: 'p-tabs', role: 'tablist' });
     const show = (k) => { content.replaceChildren(...tabs[k]()); for (const b of bar.children) { const on = b.dataset.tab === k; b.classList.toggle('sel', on); b.setAttribute('aria-selected', String(on)); } };
@@ -334,13 +377,14 @@ export function createPortal({ root, hooks }) {
     const m = t.match(/\b(?:join|code)\b(.*)$/);
     if (m) { const c = normaliseCode(m[1]); if (isCode(c)) { join(c); return 'join'; } }
     if (!sheet && /\b(create|host|new room|start a room)\b/.test(t)) { create(); return 'create'; }
+    if (!sheet && /\b(bots?|practice|solo|computer)\b/.test(t)) { menuEl.querySelector('[data-portal=bots]')?.click(); return 'bots'; }
     const said = [[/\bsettings?\b|\boptions\b/, 'settings'], [/\bcustomi[sz]e|\bcharacter\b|\blook\b/, 'customise'], [/\bmodes?\b|\barenas?\b/, 'modes'], [/how to|\bhelp\b|\bcontrols\b/, 'howto'], [/\bintro\b|\bfilm\b|\bmovie\b/, 'intro'], [/\bjoin\b/, 'join']].find(([re]) => re.test(t));
     const inSheet = sheet && hooks.voice?.matchButton?.(text, sheet.el); // a choice on the open panel first ("turban", "low")
     if (inSheet) { inSheet.click(); return inSheet.dataset.portal || 'button'; }
     if (said && visible) { if (sheet) closeSheet(false); menuEl.querySelector(`[data-portal=${said[1]}]`)?.click(); return said[1]; }
     const b = visible && hooks.voice?.matchButton?.(text, menuEl);
     if (b) { b.click(); return b.dataset.portal || 'button'; }
-    hooks.toast?.(`🎤 Heard “${text}”. Try “create room”, “join room K7PQ2”, “customise” or “settings”.`);
+    hooks.toast?.(`🎤 Heard “${text}”. Try “play vs bots”, “create room”, “join room K7PQ2”, “customise” or “settings”.`);
     return null;
   }
   function listen() {
@@ -413,6 +457,6 @@ export function createPortal({ root, hooks }) {
     setStatus,
     get status() { return statusMsg; },
     openSettings, closeSheet, splash, voiceText,
-    open(name) { ({ join: openJoin, customise: openCustomise, modes: openModes, howto: openHowTo, settings: () => openSettings() })[name]?.(); },
+    open(name) { ({ bots: openBots, join: openJoin, customise: openCustomise, modes: openModes, howto: openHowTo, settings: () => openSettings() })[name]?.(); },
   };
 }
