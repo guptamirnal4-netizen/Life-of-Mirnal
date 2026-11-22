@@ -169,6 +169,7 @@ const STYLE = `
 #film .bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 84px; height: 84px; border-radius: 50%; background: rgba(10,12,28,0.6); display: grid; place-items: center; font-size: 34px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 5; }
 #film.paused .bigplay { opacity: 1; }
 #film .hidden { display: none !important; }
+#film .resumed { position: absolute; left: 50%; top: calc(9vh + 14px); transform: translateX(-50%); z-index: 5; background: rgba(10,12,28,0.85); border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 14px; pointer-events: auto; cursor: pointer; white-space: nowrap; }
 @media (max-width: 640px) {
   #film .ch, #film .hide-s { display: none !important; } #film .ic { min-width: 36px; padding: 0 7px; }
   #film .side-card { left: 3vw; right: 3vw; width: auto; top: auto; bottom: 12vh; transform: none; max-height: 52vh; font-size: 12px; }
@@ -303,6 +304,7 @@ export class FilmUI {
       <div class="hots"></div>
       <div class="wipe"></div><div class="flash"></div><div class="fade"></div>
       <div class="bigplay">▶</div>
+      <div class="resumed hidden" data-film="resumed"></div>
       <div class="info glass hidden" role="dialog" aria-label="About the game"></div>
       <div class="chapters glass hidden" role="menu" aria-label="Scenes"></div>
       <div class="ctl">
@@ -870,7 +872,7 @@ export class FilmUI {
     const f = this.film; const ui = this.ui;
     if (hs.game) {
       // "Create a room" / "Join a room": end the film and open the multiplayer paintball game
-      const ok = f.hooks?.paintball?.({});
+      const ok = f.hooks?.paintball?.({ action: hs.game });
       if (ok) return;
     }
     this.resumeAfterInfo = !f.paused;
@@ -880,8 +882,17 @@ export class FilmUI {
     ui.info.innerHTML = `<h3>${info.title}</h3>${info.body}${hs.game ? '<div class="msg">The multiplayer game is not available in this build.</div>' : ''}<div class="btns"></div>`;
     const btns = ui.info.querySelector('.btns');
     const btn = (label, cls, fn) => { const b = document.createElement('button'); b.className = `fb ${cls}`; b.textContent = label; b.addEventListener('click', (e) => { e.stopPropagation(); fn(); }); btns.append(b); return b; };
-    if (!hs.game && f.hooks?.paintball) btn('🎮 Create a room', 'primary', () => f.hooks.paintball({}));
+    if (!hs.game && f.hooks?.paintball) btn('🎮 Create a room', 'primary', () => f.hooks.paintball({ action: 'create' }));
     btn('▶ Back to the film', '', () => this.closeInfo());
+  }
+
+  // "Resumed at 1:40 · ↺ start over" for a few seconds after resuming
+  resumed(t) {
+    const el = this.el.querySelector('.resumed');
+    el.textContent = `▶ Resumed at ${fmt(t)} · ↺ Start over`;
+    el.classList.remove('hidden');
+    el.onclick = (e) => { e.stopPropagation(); el.classList.add('hidden'); this.film.seek(0); this.film.play(); };
+    clearTimeout(this.resT); this.resT = setTimeout(() => el.classList.add('hidden'), 5000);
   }
 
   closeInfo() {
@@ -890,7 +901,7 @@ export class FilmUI {
   }
 
   dispose() {
-    clearTimeout(this.idleTimer);
+    clearTimeout(this.idleTimer); clearTimeout(this.resT);
     if (this.onMove) window.removeEventListener('pointermove', this.onMove);
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.audio.dispose();

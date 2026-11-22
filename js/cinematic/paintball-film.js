@@ -121,6 +121,7 @@ export class PaintballFilm {
     this.done = false;
     this.paused = true;
     this.seek(Math.max(0, Math.min(at, this.duration - 0.05)));
+    if (at > 3 && !capture) this.ui.resumed(this.t);
     if (capture) this.paused = false;
     else if (paused) this.pause();
     else this.play();
@@ -390,7 +391,7 @@ export class PaintballFilm {
       for (const [at, kind] of s.cues || []) this.cues.push({ t: s.t0 + at, kind });
       for (const e of s.ev || []) this.events.push({ ...e, t: s.t0 + e.t });
       for (const h of s.hots || []) this.hots.push({ ...h, t0: s.t0 + (h.from ?? 0.5), t1: s.t0 + Math.min(s.dur - 0.2, h.to ?? s.dur) });
-      for (const p of s.panels || []) this.panels.push({ ...p, t0: s.t0 + (p.from ?? 0), t1: s.t0 + (p.to ?? s.dur), shot: s });
+      for (const p of s.panels || []) this.panels.push({ ...p, t0: s.t0 + (p.from ?? 0), t1: s.t0 + Math.min(s.dur, p.to ?? s.dur), shot: s });
       if (s.caption) this.captions.push({ ...s.caption, t0: s.t0 + (s.caption.at ?? 0.5), t1: s.t0 + Math.min(s.dur - 0.2, (s.caption.at ?? 0.5) + (s.caption.hold ?? 3)) });
     }
     this.lines.sort((a, b) => a.t0 - b.t0);
@@ -569,7 +570,7 @@ export class PaintballFilm {
     const shots = [
       // ================= 1 · Arena Reveal =================
       {
-        name: 'reveal', scene: 0, dur: 11, clock: [hm(15, 20), hm(15, 24)], ease: 'inOut', range: WIDE_RANGE, far: 6000,
+        name: 'reveal', scene: 0, dur: 10.5, clock: [hm(15, 20), hm(15, 24)], ease: 'inOut', range: WIDE_RANGE, far: 6000,
         cam: path([[700, 1250, 2150], [470, 860, 1180], [250, 430, 470]], [[150, 0, 640], [120, 0, 380], [90, 0, 80]], [40, 44]),
         boundary: (lt) => ({ draw: smooth(0.8, 7.5, lt), glow: 1 }),
         zone: { mt: 0, next: false, opacity: (lt) => 0.45 * smooth(5, 9, lt) },
@@ -662,7 +663,7 @@ export class PaintballFilm {
       },
       // ================= 3 · Loadout & Preparation =================
       {
-        name: 'customise', scene: 2, dur: 7, clock: [hm(16, 0), hm(16, 1)], dof: 'advait', ease: 'inOut',
+        name: 'customise', scene: 2, dur: 6.6, clock: [hm(16, 0), hm(16, 1)], dof: 'advait', ease: 'inOut',
         actors: { advait: { at: [101.5, -17], face: [104, -9], act: (t) => (t > 4.4 ? 'inspect' : 'ready') } },
         cam: offsetOrbit([101.5, -17], [3.6, 2.8], 0.2, 1.1, 1.5, 1.25, 1.1, 38),
         panels: [{ kind: 'customise', from: 0.3, to: 6.9 }],
@@ -670,7 +671,7 @@ export class PaintballFilm {
         cues: [[0.3, 'hit'], [1.4, 'tick'], [2.4, 'tick'], [3.4, 'tick'], [4.4, 'tick']],
       },
       {
-        name: 'blasters', scene: 2, dur: 7, clock: [hm(16, 1), hm(16, 2)], ease: 'inOut',
+        name: 'blasters', scene: 2, dur: 6.5, clock: [hm(16, 1), hm(16, 2)], ease: 'inOut',
         shelf: ['standard', 'rapid', 'burst', 'spread', 'precision', 'launcher'].map((id, k) => ({ id, p: [96 + k * 1.6, 1.45, -6 - Math.abs(k - 2.5) * 0.25], yaw: 0.6 + k * 0.5, scale: 2.4 })),
         cam: path([[95.2, 1.7, -10.2], [99.6, 1.6, -10.6], [104.2, 1.7, -10.2]], [[97.6, 1.4, -6], [100.4, 1.4, -6], [103.6, 1.4, -6]], 36),
         panels: [{ kind: 'blasters', from: 0.2, to: 6.9 }],
@@ -689,7 +690,7 @@ export class PaintballFilm {
       },
       // ================= 4 · The Match Begins =================
       {
-        name: 'squads', scene: 3, dur: 6, clock: [hm(16, 10), hm(16, 11)], ease: 'inOut', range: WIDE_RANGE, far: 5000,
+        name: 'squads', scene: 3, dur: 5.5, clock: [hm(16, 10), hm(16, 11)], ease: 'inOut', range: WIDE_RANGE, far: 5000,
         cam: path([[-120, 260, -260], [-60, 200, -200]], [[60, 0, 10], [70, 0, 20]], 46),
         zone: { mt: 0 },
         panels: [{ kind: 'intro', from: 0.2, to: 5.9 }],
@@ -791,7 +792,7 @@ export class PaintballFilm {
         cues: [[2.2, 'ding']],
       },
       {
-        name: 'rotunda', scene: 4, dur: 4.4, clock: [hm(16, 16), hm(16, 16.2)], dof: 'rohan', lb: 1,
+        name: 'rotunda', scene: 4, dur: 4, clock: [hm(16, 16), hm(16, 16.2)], dof: 'rohan', lb: 1,
         actors: {
           rohan: { at: [5.2, -15.6], face: () => P('arjun'), act: 'aim', floor: -1.5 },
           neha: { at: [-7.6, -14.6], face: () => P('vikram'), act: 'aim', floor: -1.5 },
@@ -976,7 +977,7 @@ export class PaintballFilm {
         cues: [[0.1, 'win']],
       },
       {
-        name: 'results', scene: 7, dur: 9, clock: [hm(17, 34), hm(17, 35)], ease: 'linear', lb: 0,
+        name: 'results', scene: 7, dur: 8, clock: [hm(17, 34), hm(17, 35)], ease: 'linear', lb: 0,
         actors: {
           advait: { at: [106.4, 0.6], face: [106.6, 8], act: 'cheer' },
           aanya: { at: [107.8, 0.4], face: [106.6, 8], act: 'cheer+jump' },
@@ -997,7 +998,7 @@ export class PaintballFilm {
         cues: [[0.1, 'cheer'], [1.5, 'cheer']],
       },
       {
-        name: 'outro', scene: 7, dur: 7, clock: [hm(17, 40), hm(17, 42)], ease: 'inOut', lb: 1, range: WIDE_RANGE, far: 6000,
+        name: 'outro', scene: 7, dur: 6.5, clock: [hm(17, 40), hm(17, 42)], ease: 'inOut', lb: 1, range: WIDE_RANGE, far: 6000,
         actors: {
           advait: { at: [106.6, 0.2], face: [60, 60], act: 'wave' },
           aanya: { at: [107.9, 0.3], face: [60, 60], act: 'cheer' },
@@ -1011,10 +1012,10 @@ export class PaintballFilm {
     for (const q of shots) { if (q.hud?.mt) q.mt = q.hud.mt; if (q.hud && q.lb == null) q.lb = 0; }
     // title cards
     let at = 0; for (const s of shots) at += s.dur;
-    this.titles.push({ t0: 0.8, t1: 10.6, title: 'WELCOME TO PLAY WITH BITSIANS', sub: 'BITS PILANI PAINTBALL ARENA', style: 'open' });
+    this.titles.push({ t0: 0.8, t1: 10.1, title: 'WELCOME TO PLAY WITH BITSIANS', sub: 'BITS PILANI PAINTBALL ARENA', style: 'open' });
     const celebrate = shots.slice(0, shots.findIndex((s) => s.name === 'celebrate')).reduce((a, s) => a + s.dur, 0);
     this.titles.push({ t0: celebrate + 0.3, t1: celebrate + 4.9, title: 'CHAMPION OF THE ARENA', sub: 'ADVAIT & AANYA · TEAM PINK', style: 'champ' });
-    this.titles.push({ t0: at - 6.6, t1: at - 0.4, title: FILM_NAME, sub: FILM_LINE, style: 'end' });
+    this.titles.push({ t0: at - 6.2, t1: at - 0.3, title: FILM_NAME, sub: FILM_LINE, style: 'end' });
     return shots;
   }
 }
