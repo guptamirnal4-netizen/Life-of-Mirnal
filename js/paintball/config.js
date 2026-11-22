@@ -3,7 +3,7 @@
 // The static game is on Vercel, which cannot host a long-lived WebSocket server, so the Colyseus server
 // (server/, see server/README.md) runs on its own host (Render). Put its public WebSocket URL here once it exists,
 // e.g. 'wss://play-with-bitsians.onrender.com'. Empty = not configured: the game says so plainly.
-export const PRODUCTION_SERVER_URL = '';
+export const PRODUCTION_SERVER_URL = 'wss://play-with-bitsians-server.onrender.com';
 
 const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
