@@ -6,7 +6,7 @@
 //   free-for-all / duel:     everyone (a private room of friends; push-to-talk is opt-in, so nobody is heard by accident)
 export function sameChannel(a, b, { phase, teams }) {
   if (!a || !b || a === b) return false;
-  const inMatch = phase === 'countdown' || phase === 'playing' || phase === 'overtime';
+  const inMatch = phase === 'landing' || phase === 'countdown' || phase === 'playing' || phase === 'overtime';
   if (!inMatch || !teams) return true;
   return a.team >= 0 && a.team === b.team;
 }

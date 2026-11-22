@@ -1,6 +1,7 @@
 // Play with BITSians: multiplayer paintball in the browser. Screens (start, lobby with customisation and
 // paintball equipment, match HUD, results), input (keyboard/mouse with pointer lock, touch), voice chat, and the
-// 3D match (./match.js) on the Med-C Ground of the one BitsCampus the game already builds.
+// 3D match (./match.js) on the one BitsCampus the game already builds: the Med-C Ground arena, or the whole campus
+// (Campus Royale, ./royale.js).
 import * as THREE from 'three';
 import { Net, joinError } from './net.js';
 import { normaliseCode, isCode, shareLink } from './codes.js';
@@ -10,13 +11,16 @@ import { makeAvatar, disposeAvatar } from './avatar.js';
 import { h, statBars, BLURB, EQUIPMENT_LIST, confetti, copyText, fmtTime } from './ui.js';
 import * as sfx from './sounds.js';
 import { arenaGroup, poseAim } from '../models.js';
+import { RoyaleView } from './royale.js';
+import { loadCampusGeo } from './geo.js';
+import { ZONE_PHASES, zoneLength, ROYALE } from '../royale.js';
 import { ARENAS, ARENAS_BY_ID } from '../arena.js';
 import { MODES, MODES_BY_ID, TEAMS, TIMING, modeLabel, MAX_PLAYERS } from '../rules.js';
 import { EQUIPMENT_BY_ID, PAINT_MAX } from '../equipment.js';
 import { CHARACTERS, OUTFIT_COLOURS, PANTS_COLOURS, MASK_COLOURS, ACCESSORIES } from '../looks.js';
 
 export const GAME_NAME = 'Play with BITSians';
-const ACTIVE = new Set(['countdown', 'playing', 'overtime']);
+const ACTIVE = new Set(['landing', 'countdown', 'playing', 'overtime']);
 const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* private mode */ } } };
 const lockPointer = (c) => { try { const p = c.requestPointerLock?.(); p?.catch?.(() => {}); } catch { /* not allowed now */ } };
 const typing = (e) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
@@ -32,7 +36,7 @@ export class PaintballMode {
     this.look = { character: 0, outfit: OUTFIT_COLOURS[0], pants: PANTS_COLOURS[0], mask: MASK_COLOURS[0], accessory: 'none' };
     this.loadout = ['standard', 'rapid'];
     this.board = false; this.orbit = 0; this.voiceErr = '';
-    if (!document.getElementById('pb-css')) document.head.append(h('link', { id: 'pb-css', rel: 'stylesheet', href: 'css/paintball.css' }));
+    if (!document.getElementById('pb-css')) document.head.append(h('link', { id: 'pb-css', rel: 'stylesheet', href: 'css/paintball.css' }), h('link', { id: 'pb-royale-css', rel: 'stylesheet', href: 'css/paintball-royale.css' }));
     this.root = h('div', { id: 'pb-root' });
     document.body.append(this.root);
     document.body.classList.add('pb-mode');
@@ -40,6 +44,8 @@ export class PaintballMode {
     this.campus = loadWorld();
     this.arenaGroups = new Map();
     this.setArena('medc');
+    // the whole-campus collision map for Campus Royale (client-side prediction), in the background
+    this.geoReady = loadCampusGeo().then(() => { this.geoErr = ''; }, (e) => { this.geoErr = e.message; console.warn('[paintball] campus map:', e.message); });
     this.bindInput();
     globalThis.__pb = this; // tests and debugging
   }
@@ -48,8 +54,10 @@ export class PaintballMode {
     const a = ARENAS_BY_ID[id] || ARENAS[0];
     if (this.arena?.id === a.id) return;
     for (const g of this.arenaGroups.values()) this.scene.remove(g);
-    if (!this.arenaGroups.has(a.id)) this.arenaGroups.set(a.id, arenaGroup(a));
-    this.scene.add(this.arenaGroups.get(a.id));
+    if (!a.royale) {
+      if (!this.arenaGroups.has(a.id)) this.arenaGroups.set(a.id, arenaGroup(a));
+      this.scene.add(this.arenaGroups.get(a.id));
+    }
     this.arena = a;
   }
 
@@ -57,7 +65,15 @@ export class PaintballMode {
   get me() { return this.room ? this.state?.players.get(this.room.sessionId) : null; }
   get inMatch() { return !!this.room && ACTIVE.has(this.state?.phase); }
   get viewName() { return this.view?.view || 'first'; }
-  get focus() { return this.inMatch && this.view ? this.view.eye : new THREE.Vector3(this.arena.centre.x, 0, this.arena.centre.z); }
+  get royaleOn() { return !!this.arena?.royale && !!this.royale; }
+  // where the world streams interiors and the sun's shadows from: your feet (as the life-sim player), the player
+  // you spectate, or the arena from above
+  get focus() {
+    if (this.spectatePos) return new THREE.Vector3(this.spectatePos.x, this.spectatePos.y, this.spectatePos.z);
+    if (this.inMatch && this.view && this.state?.phase !== 'landing') return new THREE.Vector3(this.view.pos.x, this.view.pos.y, this.view.pos.z);
+    return new THREE.Vector3(this.arena.centre.x, 0, this.arena.centre.z);
+  }
+  feedPush(text, mine = false) { this.feed.push({ text, at: performance.now(), cls: mine ? 'mine' : '' }); if (this.feed.length > 6) this.feed.shift(); }
 
   // ---------- start screen ----------
   open({ code } = {}) {
@@ -74,13 +90,13 @@ export class PaintballMode {
     const conf = this.net.configured;
     this.mount(h('div', { class: 'pb-screen' }, h('div', { class: 'pb-card narrow pb-stack' },
       h('h1', {}, GAME_NAME),
-      h('div', { class: 'pb-sub' }, '🎯 Multiplayer paintball on the Med-C Ground · private rooms for up to 12 friends'),
+      h('div', { class: 'pb-sub' }, '🎯 Multiplayer paintball on the Med-C Ground or across the whole campus (Campus Royale) · private rooms for up to 12 friends'),
       !conf && h('div', { class: 'pb-status bad', 'data-pb': 'not-configured' }, 'The multiplayer game server is not configured for this site yet, so rooms cannot be created or joined. (Nothing here is simulated: there are no fake rooms or players.)'),
       status && h('div', { class: `pb-status${bad ? ' bad' : ''}`, 'data-pb': 'status' }, status),
       h('label', { class: 'pb-sub' }, 'Nickname (temporary, only for this session)'), nick,
       h('button', { class: 'primary', disabled: !conf, 'data-pb': 'create', onclick: () => this.connect({ nickname: name() }) }, '➕ Create a private room'),
       h('div', { class: 'pb-row' }, code, h('button', { class: 'go grow', disabled: !conf, 'data-pb': 'join', onclick: () => { const c = normaliseCode(code.value); if (!isCode(c)) { code.focus(); return this.showStart('Room codes are 5 letters/numbers, like K7PQ2.', true); } this.connect({ code: c, nickname: name() }); } }, 'Join with code')),
-      h('div', { class: 'pb-note' }, 'Laptop: WASD move · Shift run · Space jump · mouse aim, click to fire · R reload · Q / wheel / 1–6 switch blaster · right-click zoom · V view · Tab scores · hold T to talk. Phone: joystick, drag to aim, on-screen buttons.'),
+      h('div', { class: 'pb-note' }, 'Laptop: WASD move · Shift run · Space jump · mouse aim, click to fire · R reload · Q / wheel / 1–6 switch blaster · right-click zoom · V view · Tab scores · hold T to talk. Campus Royale: E open crates / pick up · G paint bomb · B colour smoke · H clean · C paint shield · Z paint scan · X drop blaster · M map. Phone: joystick, drag to aim, on-screen buttons.'),
       h('button', { 'data-pb': 'back', onclick: () => this.exit() }, '← Back to the title screen'))));
     setTimeout(() => (store.get('pb-nick') ? code : nick).focus(), 50);
   }
@@ -114,6 +130,7 @@ export class PaintballMode {
     this.room = room; this.sig = ''; this.feed = []; this.lastPhase = null;
     history.replaceState(null, '', `${location.pathname}?room=${room.roomId}${new URLSearchParams(location.search).get('pbserver') ? `&pbserver=${encodeURIComponent(new URLSearchParams(location.search).get('pbserver'))}` : ''}`);
     this.view = new MatchView({ scene: this.scene, camera: this.camera, arena: this.arena, player: this.player, room });
+    this.royale = new RoyaleView(this); this.royale.attach(room);
     this.voice = new VoiceChat({ room, onFail: (id, msg) => this.note(`🔇 ${msg}`), onChange: () => { this.sig = ''; } });
     room.onMessage('error', (m) => this.note(`⚠️ ${m.message}`));
     room.onMessage('host', (m) => this.note(m.id === room.sessionId ? '👑 You are now the host.' : `👑 ${m.name} is now the host.`));
@@ -140,6 +157,7 @@ export class PaintballMode {
   teardownRoom() {
     this.voice?.destroy(); this.voice = null;
     this.view?.dispose(); this.view = null;
+    this.royale?.dispose(); this.royale = null; this.spectatePos = null;
     this.room = null; this.closedReason = null; this.preview?.dispose(); this.preview = null;
     if (document.pointerLockElement) document.exitPointerLock();
     history.replaceState(null, '', location.pathname + (new URLSearchParams(location.search).get('pbserver') ? `?paintball&pbserver=${encodeURIComponent(new URLSearchParams(location.search).get('pbserver'))}` : ''));
@@ -156,6 +174,7 @@ export class PaintballMode {
   onTag(m) {
     const mine = m.by === this.room.sessionId; const me = m.target === this.room.sessionId;
     const assist = m.assists.includes(this.room.sessionId);
+    if (m.zone && !m.by) { this.feedPush(`🎨 The paint zone tagged ${m.targetName}`, m.target === this.room.sessionId); if (m.target === this.room.sessionId) this.taggedBy = 'the paint zone'; return; }
     this.feed.push({ text: `${m.precision ? '🎯 ' : '🎨 '}${m.byName || '?'} tagged ${m.targetName}${m.assists.length ? ` (+${m.assists.length} assist${m.assists.length > 1 ? 's' : ''})` : ''}`, at: performance.now(), cls: mine || me ? 'mine' : '' });
     if (this.feed.length > 6) this.feed.shift();
     if (mine) { this.big('TAG! +100', '#7cff4f'); sfx.jingle(true); } else if (assist) this.big('ASSIST +40', '#30d5ff');
@@ -163,7 +182,7 @@ export class PaintballMode {
   }
   onHit(m) {
     if (!this.hud) return;
-    const el = this.hud.hit; el.textContent = m.protected ? '🛡' : '✕';
+    const el = this.hud.hit; el.textContent = m.protected || m.shield ? '🛡' : '✕';
     el.className = `hitmark show${m.p ? ' precision' : ''}`; void el.offsetWidth; el.className = `hitmark show${m.p ? ' precision' : ''}`;
     clearTimeout(this.hitT); this.hitT = setTimeout(() => { el.className = 'hitmark'; }, 360);
     sfx.ding(!!m.p);
@@ -215,10 +234,11 @@ export class PaintballMode {
       h('h3', {}, 'Paintball match'),
       h('div', { class: 'pb-row' },
         sel(MODES.map((m) => [m.id, m.id === 'ffa' ? 'Individual (Duel / Free-for-All)' : `${m.name} · teams of ${m.size}`]), s.mode, (v) => this.room.send('config', { mode: v }), 'Mode'),
-        sel(ARENAS.map((a) => [a.id, a.name]), s.arena, (v) => this.room.send('config', { arena: v }), 'Arena'),
-        sel(durations.map((d) => [d, d >= 60 ? `${d / 60} min` : `${d} s (test)`]), s.duration, (v) => this.room.send('config', { duration: Number(v) }), 'Duration'),
+        sel(ARENAS.map((a) => [a.id, a.royale ? `${a.name} · ${a.ruleset}` : a.name]), s.arena, (v) => this.room.send('config', { arena: v }), 'Arena'),
+        ARENAS_BY_ID[s.arena]?.royale ? h('span', { class: 'pb-note' }, `⏱ the paint zone decides (~${Math.round(zoneLength() / 60)} min)`) : sel(durations.map((d) => [d, d >= 60 ? `${d / 60} min` : `${d} s (test)`]), s.duration, (v) => this.room.send('config', { duration: Number(v) }), 'Duration'),
         host && mode.teams > 0 && h('button', { class: 'small', 'data-pb': 'randomise', onclick: () => this.room.send('randomise', {}) }, '🎲 Re-randomise teams')),
       !host && h('div', { class: 'pb-note' }, 'The host picks the mode, arena and length.'),
+      ARENAS_BY_ID[s.arena]?.royale && h('div', { class: 'pb-note', 'data-pb': 'royale-rules' }, `🪂 Campus Royale: pick a landing spot on the campus map, land with a Standard blaster and ${ROYALE.start.hopper} paintballs, open supply crates for blasters, paintballs, paint bombs, protective gear, cleaning kits, a paint shield and paint scans. One tag and you are out for the match (squads: a teammate can clean you off within ${ROYALE.down} s). The paint zone shrinks in ${ZONE_PHASES.length} phases; paint builds up outside it. A special supply drop lands mid-match. Last player or squad standing wins.${this.geoErr ? ` ⚠️ Campus map: ${this.geoErr}` : ''}`),
       h('h3', {}, 'Voice chat'),
       h('div', { class: 'pb-row' },
         h('button', { class: `small${this.voice?.on ? ' on' : ''}`, 'data-pb': 'voice', onclick: () => this.toggleVoice() }, this.voice?.on ? '🎤 Voice on' : '🎤 Switch voice on'),
@@ -294,10 +314,12 @@ export class PaintballMode {
       splatter: q('splatter'), map: h('canvas', { class: 'minimap', width: 160, height: 92 }), voice: q('voice'), hint: q('hint'), board: h('div', { id: 'pb-board', class: 'hidden' }),
     };
     hud.reloadBox.append(hud.reload);
+    if (this.royaleOn) { hud.map.width = 170; hud.map.height = 170; hud.map.classList.add('round'); hud.root.classList.add('royale'); Object.assign(hud, { R: this.royale.hudParts() }); }
     hud.root.append(hud.splatter, h('div', { class: 'top' }, hud.teams, hud.timer), hud.my, hud.feed, hud.map, hud.voice,
       h('div', { class: 'paint' }, hud.paintLabel, h('div', { class: 'meter' }, hud.meter)),
       h('div', { class: 'ammo' }, hud.name, hud.count, hud.reloadBox, hud.other), hud.cross, hud.hit, hud.big, hud.msg, hud.hint, hud.board);
-    hud.hint.textContent = 'Click to aim · WASD move · Shift run · R reload · Q switch · V view · Tab scores · hold T to talk';
+    hud.hint.textContent = this.royaleOn ? 'E open / pick up · G paint bomb · H clean · C shield · Z scan · M map · R reload · Q switch · Tab scores · T talk' : 'Click to aim · WASD move · Shift run · R reload · Q switch · V view · Tab scores · hold T to talk';
+    if (hud.R) hud.root.append(hud.R.inv, hud.R.zone, hud.R.left, hud.R.drop, hud.R.prompt, hud.R.channel, hud.R.big);
     this.hud = hud;
     const t = this.touchButtons();
     this.mount(hud.root, t);
@@ -322,6 +344,11 @@ export class PaintballMode {
       hold('p-mic', '🎤', () => this.ptt(true), () => this.ptt(false)),
       hold('p-board', '📋', () => { this.board = true; }, () => { this.board = false; }),
       tap('p-menu', '☰', () => this.menu()));
+    if (this.royaleOn) {
+      const R = this.royale;
+      box.append(tap('p-pick', '✋', () => R.interact()), tap('p-bomb', '💣', () => R.throwBomb('paintbomb')), tap('p-clean', '🧴', () => R.clean()),
+        tap('p-shield', '🛡️', () => R.gadget('shield')), tap('p-scan', '📡', () => R.gadget('scan')), tap('p-map', '🗺️', () => { R.bigMap = !R.bigMap; }), tap('p-inv', '🎒', () => { this.invOpen = !this.invOpen; this.hud?.root.classList.toggle('inv-open', this.invOpen); }));
+    }
     return box;
   }
 
@@ -329,14 +356,14 @@ export class PaintballMode {
     const s = this.state; const me = this.me; const hud = this.hud; if (!me || !hud) return;
     const mode = MODES_BY_ID[s.mode];
     const left = s.phaseEnds - s.now;
-    hud.timer.textContent = s.phase === 'countdown' ? 'GET READY' : `${s.phase === 'overtime' ? 'OT ' : ''}${fmtTime(left)}`;
+    hud.timer.textContent = s.phase === 'landing' ? 'LANDING' : s.phase === 'countdown' ? 'GET READY' : this.royaleOn ? fmtTime(Math.max(0, s.zone.ends - s.now)) : `${s.phase === 'overtime' ? 'OT ' : ''}${fmtTime(left)}`;
     hud.timer.className = `timer${s.phase === 'overtime' ? ' ot' : ''}`;
     hud.teams.replaceChildren(...(mode.teams ? [...s.teamScores].map((v, t) => h('span', { class: 'tscore', style: `--team:${TEAMS[t].colour}` }, `${TEAMS[t].name} ${v}`)) : []));
-    hud.my.textContent = `⭐ ${me.score}  ·  🎨 ${me.tags} tags  ·  🤝 ${me.assists}`;
-    hud.feed.replaceChildren(...this.feed.filter((f) => nowMs - f.at < 6000).map((f) => h('div', {}, f.text)));
+    hud.my.textContent = `⭐ ${me.score}  ·  🎨 ${me.tags} tags  ·  🤝 ${me.assists}${this.royaleOn ? `  ·  📦 ${me.supplies}` : ''}`;
+    hud.feed.replaceChildren(...this.feed.filter((f) => nowMs - f.at < 6000).map((f) => h('div', { class: f.cls || '' }, f.text)));
     hud.meter.style.width = `${(me.paint / PAINT_MAX) * 100}%`;
     hud.paintLabel.textContent = `Paint ${Math.round(me.paint)} / ${PAINT_MAX}`;
-    const e = EQUIPMENT_BY_ID[me.equip]; const o = EQUIPMENT_BY_ID[me.slot ? me.primary : me.secondary];
+    const e = EQUIPMENT_BY_ID[me.equip] || { name: 'No paintball blaster: open a supply crate', short: '—', colour: '#bbb', reload: 1, cooldown: 1 }; const o = EQUIPMENT_BY_ID[me.slot ? me.primary : me.secondary] || { short: 'empty' };
     hud.name.textContent = `${e.name}`;
     hud.name.style.color = e.colour;
     const H = me.slot ? me.hopper1 : me.hopper0; const C = me.slot ? me.carried1 : me.carried0;
@@ -351,9 +378,13 @@ export class PaintballMode {
     if (s.phase === 'countdown') hud.big.style.color = '#ffd23d';
     hud.big.textContent = big;
     let msg = '';
-    if (!me.alive && ACTIVE.has(s.phase)) msg = `Round elimination${this.taggedBy ? `: tagged by ${this.taggedBy}` : ''} · back in ${Math.max(0, Math.ceil(me.respawnAt - s.now))}`;
+    if (this.royaleOn && s.phase === 'landing') msg = '';
+    else if (this.royaleOn && me.out) msg = `Round elimination${this.taggedBy ? `: tagged by ${this.taggedBy}` : ''} · placed #${me.placement || '?'} · you are out for this match`;
+    else if (this.royaleOn && me.down) msg = `🎨 Fully painted! A squadmate can clean you off (E) · ${Math.max(0, Math.ceil(me.downUntil - s.now))} s`;
+    else if (this.royaleOn && me.shieldUntil > s.now) msg = `🛡️ Paint shield up · ${Math.ceil(me.shieldUntil - s.now)} s (no firing from inside)`;
+    else if (!me.alive && ACTIVE.has(s.phase)) msg = `Round elimination${this.taggedBy ? `: tagged by ${this.taggedBy}` : ''} · back in ${Math.max(0, Math.ceil(me.respawnAt - s.now))}`;
     else if (me.protectedUntil > s.now && s.phase !== 'countdown') msg = '🛡 Spawn protection: you cannot be painted or fire yet';
-    else if (!this.touch.on && document.pointerLockElement !== this.canvas) msg = 'Click to play';
+    else if (!this.touch.on && document.pointerLockElement !== this.canvas && s.phase !== 'landing' && !this.royale?.panel) msg = 'Click to play';
     hud.msg.textContent = msg; hud.msg.style.display = msg ? '' : 'none';
     hud.root.classList.toggle('zoom', !!(this.view.zoom && e.zoom));
     // voice
@@ -363,19 +394,22 @@ export class PaintballMode {
       ...talkers.map((n) => h('div', { class: 'me' }, `🔊 ${n}`)));
     hud.board.classList.toggle('hidden', !this.board);
     if (this.board) hud.board.replaceChildren(this.scoreTable(false));
+    if (hud.R) { const pos = this.spectatePos || this.view.pos; this.royale.updateHud(hud.R, s, me, pos); this.royale.drawMini(hud.map, s, pos); return; }
     this.drawMap();
   }
 
   scoreTable(results) {
     const s = this.state; const mode = MODES_BY_ID[s.mode]; const myId = this.room.sessionId;
+    const roy = !!ARENAS_BY_ID[s.arena]?.royale;
     const rows = results ? [...s.results.rankings].map((r) => [r.id, r]) : [...s.players.entries()].sort((a, b) => b[1].score - a[1].score);
     return h('table', { class: 'pb-table', 'data-pb': 'scoreboard' },
-      h('tr', {}, h('th', {}, '#'), h('th', {}, 'Player'), mode.teams > 0 && h('th', {}, 'Team'), h('th', { class: 'n' }, 'Score'), h('th', { class: 'n' }, 'Tags'), h('th', { class: 'n' }, 'Assists'), h('th', { class: 'n' }, 'Times tagged'), h('th', {}, '')),
+      h('tr', {}, h('th', {}, '#'), h('th', {}, 'Player'), mode.teams > 0 && h('th', {}, 'Team'), h('th', { class: 'n' }, 'Score'), h('th', { class: 'n' }, 'Tags'), h('th', { class: 'n' }, 'Assists'), h('th', { class: 'n' }, 'Times tagged'), roy && h('th', { class: 'n' }, 'Supplies'), roy && h('th', { class: 'n' }, 'Placed'), roy && h('th', { class: 'n' }, 'Survived'), h('th', {}, '')),
       ...rows.map(([id, r], i) => {
         const p = s.players.get(id);
         return h('tr', { class: id === myId ? 'me' : '' }, h('td', {}, String(r.place || i + 1)),
           h('td', {}, h('span', { class: 'tdot', style: `background:${mode.teams ? teamColour(r.team) : p?.mask || '#888'}` }), r.nickname, p?.host ? ' 👑' : ''),
           mode.teams > 0 && h('td', {}, teamName(r.team)), h('td', { class: 'n' }, String(r.score)), h('td', { class: 'n' }, String(r.tags)), h('td', { class: 'n' }, String(r.assists)), h('td', { class: 'n' }, String(r.timesTagged)),
+          roy && h('td', { class: 'n' }, String(r.supplies ?? 0)), roy && h('td', { class: 'n' }, r.placement ? `#${r.placement}` : p?.out ? 'out' : '—'), roy && h('td', { class: 'n' }, fmtTime(r.survived ?? (s.phase === 'playing' ? s.now - s.playStart : 0))),
           h('td', {}, p?.talking ? '🔊' : ''));
       }));
   }
@@ -410,6 +444,7 @@ export class PaintballMode {
     this.mount(h('div', { class: 'pb-screen see-through', 'data-pb': 'results' }, confetti(), h('div', { class: 'pb-card pb-stack' },
       h('h1', {}, `${GAME_NAME} · results`),
       h('div', { class: 'pb-winner' }, R.draw ? '🤝 Draw!' : `🏆 ${R.winner} wins!`),
+      ARENAS_BY_ID[s.arena]?.royale && h('div', { class: 'pb-sub', 'data-pb': 'royale-result' }, `🪂 Campus Royale · you placed #${me?.placement || '?'} of ${mode.teams ? `${R.teams.length} squads` : `${R.rankings.length} players`} · survived ${fmtTime(me?.survived || 0)} · ${me?.supplies || 0} suppl${me?.supplies === 1 ? "y" : "ies"} collected`),
       iWon && h('div', { class: 'pb-sub' }, 'That’s you! 🎉'),
       h('div', { class: 'pb-podium' },
         h('div', {}, h('span', { class: 'pb-note' }, 'WINNER'), h('b', {}, R.draw ? '—' : R.winner)),
@@ -429,7 +464,7 @@ export class PaintballMode {
   // ---------- input ----------
   bindInput() {
     const L = []; const on = (t, ev, fn, o) => { t.addEventListener(ev, fn, o); L.push([t, ev, fn, o]); };
-    on(this.canvas, 'click', () => { if (this.inMatch && !this.touch.on && document.pointerLockElement !== this.canvas) lockPointer(this.canvas); sfx.unlockAudio(); });
+    on(this.canvas, 'click', () => { if (this.inMatch && this.state?.phase !== 'landing' && !this.touch.on && document.pointerLockElement !== this.canvas) lockPointer(this.canvas); sfx.unlockAudio(); if (this.me?.out && this.royale) this.royale.nextSpectate(); });
     on(this.canvas, 'contextmenu', (e) => e.preventDefault());
     on(document, 'mousedown', (e) => {
       if (!this.inMatch || document.pointerLockElement !== this.canvas || !this.view) return;
@@ -452,19 +487,20 @@ export class PaintballMode {
     if (e.code === 'KeyT' && !e.repeat) { this.ptt(true); return; }
     if (!this.inMatch || !this.view) return;
     if (e.code === 'Tab') { e.preventDefault(); this.board = true; return; }
+    if (this.royaleOn && !e.repeat && this.royale.key(e)) return;
     if (e.code === 'KeyR') this.view.reloadPressed = true;
     else if (e.code === 'KeyQ') this.switchSlot();
     else if (e.code === 'KeyV') this.toggleView();
     else if (e.code === 'Escape') this.menu();
     else if (/^Digit[1-6]$/.test(e.code)) {
       const k = e.code.slice(5); const me = this.me;
-      if (EQUIPMENT_BY_ID[me.primary].key === k) this.view.slot = 0;
-      else if (EQUIPMENT_BY_ID[me.secondary].key === k) this.view.slot = 1;
+      if (EQUIPMENT_BY_ID[me.primary]?.key === k) this.view.slot = 0;
+      else if (EQUIPMENT_BY_ID[me.secondary]?.key === k) this.view.slot = 1;
       else if (k === '1' || k === '2') this.view.slot = Number(k) - 1;
     }
   }
   switchSlot() { if (this.view) this.view.slot = this.view.slot ? 0 : 1; }
-  toggleView() { if (this.view) this.view.view = this.view.view === 'first' ? 'third' : 'first'; }
+  toggleView() { if (this.me?.out && this.royale) { this.royale.nextSpectate(); return; } if (this.view) this.view.view = this.view.view === 'first' ? 'third' : 'first'; }
   ptt(down) { if (this.voice?.on) this.voice.setPTT(down); }
   menu() {
     if (document.pointerLockElement) document.exitPointerLock();
@@ -497,7 +533,14 @@ export class PaintballMode {
     if (me && this.wasAlive === false && me.alive) { this.player.yaw = me.yaw; this.player.pitch = 0; this.taggedBy = null; }
     this.wasAlive = me?.alive;
     if (ACTIVE.has(phase)) {
+      if (this.royaleOn && !this.arena.geo) { this.geoReady.then(() => { if (this.view) this.view.arena = this.arena; }); }
       this.view.update(dt, s, this.player.keys, now);
+      this.spectatePos = null;
+      if (this.royaleOn) {
+        if (phase === 'landing') { this.royale.updateLanding(s); this.aerialCam(dt); } else this.royale.hideLanding();
+        if (me?.out) this.spectatePos = this.royale.spectateCam();
+        this.royale.update(dt, s, now);
+      }
       if (now - (this.hudAt || 0) > 90) { this.hudAt = now; this.updateHud(now); }
       if (phase === 'countdown') { const n = Math.ceil(s.phaseEnds - s.now); if (n !== this.lastCount && n > 0) { this.lastCount = n; sfx.beep(false); } }
     } else {
@@ -513,25 +556,37 @@ export class PaintballMode {
       }
       this.view?.avatarsUpdate(dt, s, now);
       this.view?.fxUpdate(dt);
+      this.royale?.hideLanding();
     }
   }
 
   phaseChanged(from, to) {
+    if (from === 'landing' && to !== 'landing') { this.royale?.hideLanding(); if (!this.touch.on && to !== 'results') lockPointer(this.canvas); }
     if (ACTIVE.has(to) && !ACTIVE.has(from)) {
       this.screen = 'match'; this.sig = ''; this.feed = []; this.view.placed = false; this.view.pending = []; this.view.clearSplats();
       this.preview?.dispose(); this.preview = null;
       this.buildHud();
-      if (!this.touch.on) lockPointer(this.canvas);
+      if (!this.touch.on && to !== 'landing') lockPointer(this.canvas);
       import('../../ui/dom.js').then(({ closeAll }) => closeAll());
     }
     if (to === 'playing' && from === 'countdown') { this.big('GO!', '#7cff4f'); sfx.beep(true); }
-    if (to === 'results') { this.hud = null; this.board = false; if (document.pointerLockElement) document.exitPointerLock(); this.sig = ''; }
+    if (to === 'results') { this.royale?.closePanel(); this.royale && (this.royale.bigMap = false); this.hud = null; this.board = false; if (document.pointerLockElement) document.exitPointerLock(); this.sig = ''; }
     if (to === 'lobby') { this.hud = null; this.screen = 'lobby'; this.sig = ''; this.view?.clearSplats(); }
+  }
+
+  // over the campus while players pick their landing spots
+  aerialCam(dt) {
+    this.orbit += dt * 0.04;
+    const c = this.arena.centre;
+    this.camera.position.set(c.x + Math.cos(this.orbit) * 700, 420, c.z + Math.sin(this.orbit) * 700);
+    this.camera.lookAt(c.x, 0, c.z);
+    if (this.view?.vm) this.view.vm.visible = false;
   }
 
   orbitCam(dt) {
     this.orbit += dt * 0.06;
     const c = this.arena.centre;
+    if (this.arena.royale) { this.camera.position.set(c.x + Math.cos(this.orbit) * 600, 300, c.z + Math.sin(this.orbit) * 700); this.camera.lookAt(c.x, 0, c.z); return; }
     this.camera.position.set(c.x + Math.cos(this.orbit) * 46, 20, c.z + Math.sin(this.orbit) * 34);
     this.camera.lookAt(c.x, 0, c.z);
   }
