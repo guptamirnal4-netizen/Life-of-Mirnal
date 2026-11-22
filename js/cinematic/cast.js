@@ -89,7 +89,8 @@ export function buildCast(scene) {
 // The blaster in an actor's hands (rebuilt only when it changes) and paint on their clothes (0–100).
 export function gear(n, { blaster = 'standard', paint = 0 } = {}) {
   if (blaster !== n.filmEquip) { equip(n, blaster || null); n.filmEquip = blaster; }
-  if (n.pbBlaster) n.pbBlaster.visible = !!blaster;
+  // a little bigger than in the game so the toy blaster reads on screen (the game's camera is closer)
+  if (n.pbBlaster) { n.pbBlaster.visible = !!blaster; n.pbBlaster.scale.setScalar(1.45); }
   const k = paint >= 100 ? 4 : Math.floor(paint / 30);
   n.filmPaint.forEach((s, i) => { s.visible = i < k; });
 }
@@ -160,8 +161,9 @@ export function gesture(n, a, t, moving) {
       A[1].rotation.x = -0.6; A[1].rotation.z = 0.2; E[1].rotation.x = -0.9; break;
     }
     case 'windup': A[0].rotation.x = -2.6; A[0].rotation.z = -0.25; E[0].rotation.x = -0.9; A[1].rotation.x = -0.6; E[1].rotation.x = -0.9; break;
-    case 'reach': // opening a crate / taking an item: both hands down and forward
-      n.lean(0.42); A[0].rotation.x = -0.9; A[1].rotation.x = -0.9; A[0].rotation.z = -0.15; A[1].rotation.z = 0.15; E[0].rotation.x = -0.3; E[1].rotation.x = -0.3; break;
+    case 'reach': // opening a crate / taking an item: the left hand reaches in, the blaster stays in the right
+      n.lean(0.42); A[0].rotation.x = -0.9; A[0].rotation.z = -0.15; E[0].rotation.x = -0.3;
+      A[1].rotation.x = -0.95; A[1].rotation.z = 0.35; E[1].rotation.x = -1.0; break;
     case 'clean': // kneeling, cleaning paint off a squadmate
       n.legs[0].rotation.x = -1.4; n.knees[0].rotation.x = 1.5; n.legs[1].rotation.x = 0.1; n.knees[1].rotation.x = 1.9;
       n.feet(false); n.pos.y -= 0.42 * n.scale; n.lean(0.35);

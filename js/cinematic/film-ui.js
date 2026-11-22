@@ -553,11 +553,13 @@ export class FilmUI {
     const yaw = n?.group.visible ? n.group.rotation.y : 0;
     const mt = f.matchTime(t);
     const playing = mode !== 'loot' && mode !== 'countdown' && mt != null && mt >= 0;
+    const spec = mode === 'spectate';
     const show = (el, on) => el.classList.toggle('hidden', !on);
+    // spectate: a wide shot that follows nobody: only the match-wide parts (timer, squads, zone, drop, feed)
     const full = mode === 'full' || mode === 'scope';
-    for (const el of [H.top, H.my, H.map, H.voice, H.left, H.hint]) show(el, full || mode === 'countdown');
-    show(H.zone, full || mode === 'countdown');
-    for (const el of [H.paint, H.ammo, H.inv, H.cross]) show(el, mode !== 'feed');
+    for (const el of [H.my, H.map, H.voice, H.hint]) show(el, full || mode === 'countdown');
+    for (const el of [H.top, H.left, H.zone]) show(el, full || spec || mode === 'countdown');
+    for (const el of [H.paint, H.ammo, H.inv, H.cross]) show(el, mode !== 'feed' && !spec);
     show(H.feed, true);
     H.root.classList.toggle('zoom', mode === 'scope');
     // top: squad scores and the timer (the time until the zone's next step)
@@ -572,16 +574,16 @@ export class FilmUI {
     // paint zone line (royale.js updateHud)
     const left = Math.max(0, Z.ends - (mt ?? 0)); const dOut = Math.hypot(pos.x - Z.x, pos.z - Z.z) - Z.r;
     let zt = !playing ? 'Paint zone: the whole campus' : Z.shrinking ? `🎨 Paint zone closing · ${fmtTime(left)}` : Z.r > 0.5 ? `🎨 Paint zone shrinks in ${fmtTime(left)}` : '🎨 Paint zone closed';
-    if (dOut > 0 && playing) zt += ` · OUTSIDE: ${Math.round(dOut)} m to safety (+${Z.dps}/s paint)`;
+ if (dOut > 0 && playing && !spec) zt += ` · OUTSIDE: ${Math.round(dOut)} m to safety (+${Z.dps}/s paint)`;
     else if (!Z.shrinking && left < 20 && playing && Z.r > 0.5) zt += ' · get inside the white circle!';
     this.setText(H.zone, zt); H.zone.classList.toggle('warn', dOut > 0 && playing);
     // the special supply drop
     const A = MATCH.airdrop; const ann = ROYALE.airdrop.at - ROYALE.airdrop.warn;
     const dist = Math.round(Math.hypot(A.x - pos.x, A.z - pos.z)); const dn = dirName(A.x - pos.x, A.z - pos.z);
     const dt = playing && mt >= ROYALE.airdrop.at ? `📦 Supply drop landed ${dist} m ${dn}` : playing && mt >= ann ? `📦 Supply drop in ${fmtTime(ROYALE.airdrop.at - mt)} · ${dist} m ${dn}` : '';
-    this.setText(H.drop, dt); H.drop.style.display = dt && full ? '' : 'none';
+    this.setText(H.drop, spec && dt ? dt.replace(/ · \d+ m \w+$/, '').replace(/ \d+ m \w+$/, '') : dt); H.drop.style.display = dt && (full || spec) ? '' : 'none';
     // feed: tags, outs, clean-offs, notes from the last 6 s
-    const feed = f.feed.filter((e) => e.t <= t && t - e.t < 6 && (!e.only || e.only === pov)).slice(-6);
+    const feed = f.feed.filter((e) => e.t <= t && t - e.t < 6 && (!e.only || (e.only === pov && !spec))).slice(-6);
     this.setHtml(H.feed, feed.map((e) => `<div class="${e.mine?.includes(pov) ? 'mine' : ''}">${esc(e.text)}</div>`).join(''));
     // paint meter, blaster, paintballs, inventory
     H.meter.style.width = `${(me.paint / PAINT_MAX) * 100}%`;
@@ -596,7 +598,8 @@ export class FilmUI {
     this.setHtml(H.inv, invHtml(inv));
     // center message, prompt, channel
     let msg = '';
-    if (me.down) msg = `🎨 Fully painted! A squadmate can clean you off (E) · ${ROYALE.down} s`;
+    if (spec) msg = '';
+    else if (me.down) msg = `🎨 Fully painted! A squadmate can clean you off (E) · ${ROYALE.down} s`;
     else if (me.shieldUntil > t) msg = `🛡️ Paint shield up · ${Math.ceil(me.shieldUntil - t)} s (no firing from inside)`;
     this.setText(H.msg, msg); H.msg.style.display = msg ? '' : 'none';
     const pr = (cfg.prompt || []).find(([a, z]) => lt >= a && lt < z);
@@ -609,14 +612,14 @@ export class FilmUI {
     let big = ''; let bc = '#fff'; let bs = 1;
     if (mode === 'countdown') {
       if (lt >= 0.3 && lt < 3.3) { big = String(3 - Math.floor(lt - 0.3)); bc = '#ffd23d'; bs = 1.4 - 0.4 * smooth(0, 0.25, (lt - 0.3) % 1); } else if (lt >= 3.3) { big = 'PAINTBALL MATCH STARTED!'; bc = '#7cff4f'; bs = 1.25 - 0.25 * smooth(3.3, 3.6, lt); }
-    } else {
+    } else if (!spec) {
       const tg = f.events.filter((ev) => ev.type === 'tag' && ev.t <= t && t - ev.t < 1.1 && (ev.by === pov || ev.assists?.includes(pov))).at(-1);
       if (tg) { big = tg.by === pov ? 'TAG! +100' : 'ASSIST +40'; bc = tg.by === pov ? '#7cff4f' : '#30d5ff'; bs = 1.3 - 0.3 * smooth(tg.t, tg.t + 0.2, t); }
     }
     this.setText(H.big, big); H.big.style.color = bc; H.big.style.transform = `translate(-50%, -50%) scale(${bs.toFixed(3)})`;
     if (mode === 'countdown' && lt >= 3.3) H.big.style.fontSize = 'clamp(22px, 5.4vw, 60px)'; else H.big.style.fontSize = '';
     // hit markers
-    const hm = this.hitTimes.filter((g) => g.by === pov && t >= g.t && t - g.t < 0.35).at(-1);
+    const hm = spec ? null : this.hitTimes.filter((g) => g.by === pov && t >= g.t && t - g.t < 0.35).at(-1);
     if (hm) { this.setText(H.hit, hm.shield ? '🛡' : '✕'); H.hit.className = `hitmark${hm.precision ? ' precision' : ''}`; const u = (t - hm.t) / 0.35; H.hit.style.opacity = (1 - u).toFixed(2); H.hit.style.transform = `scale(${(1.4 - 0.5 * u).toFixed(2)})`; } else H.hit.style.opacity = '0';
     // the crate panel
     this.crate(cfg.crate, lt);
@@ -833,14 +836,14 @@ export class FilmUI {
   panel_results(lt, el) {
     el.className = 'results'; el.dataset.pb = 'results';
     const R = this.film.results; const me = R.rankings.find((r) => r.id === 'advait');
-    const row = (r, i) => `<tr class="${r.id === 'advait' ? 'me' : ''}" style="opacity:${smooth(2.2 + i * 0.22, 2.5 + i * 0.22, lt).toFixed(2)}"><td>${r.place}</td><td><span class="tdot" style="background:${TEAMS[r.team].colour}"></span>${esc(r.nickname)}${r.id === 'advait' ? ' 👑' : ''}</td><td>${TEAMS[r.team].name}</td><td class="n">${r.score}</td><td class="n">${r.tags}</td><td class="n">${r.assists}</td><td class="n">${r.timesTagged}</td><td class="n">${r.supplies}</td><td class="n">#${r.placement}</td><td class="n">${fmtTime(r.survived)}</td></tr>`;
+    const row = (r, i) => `<tr class="${r.id === 'advait' ? 'me' : ''}" style="opacity:${smooth(0.8 + i * 0.09, 1.0 + i * 0.09, lt).toFixed(2)}"><td>${r.place}</td><td><span class="tdot" style="background:${TEAMS[r.team].colour}"></span>${esc(r.nickname)}${r.id === 'advait' ? ' 👑' : ''}</td><td>${TEAMS[r.team].name}</td><td class="n">${r.score}</td><td class="n">${r.tags}</td><td class="n">${r.assists}</td><td class="n">${r.timesTagged}</td><td class="n">${r.supplies}</td><td class="n">#${r.placement}</td><td class="n">${fmtTime(r.survived)}</td></tr>`;
     const used = ['standard', 'burst', 'precision'].map((id) => EQUIPMENT_BY_ID[id].short).join(', ');
     return `<div class="pb-card pb-stack"><h1>Play with BITSians · results</h1>
       <div class="pb-winner">🏆 ${esc(R.winner)} wins!</div>
       <div class="pb-sub" data-pb="royale-result">🪂 Campus Royale · you placed #${me.placement} of ${R.teams.length} squads · survived ${fmtTime(me.survived)} · ${me.supplies} supplies collected</div>
       <div class="pb-sub">That’s you! 🎉</div>
       <div class="pb-podium"><div><span class="pb-note">WINNER</span><b>${esc(R.winner)}</b></div><div><span class="pb-note">RUNNER-UP</span><b>${esc(R.runnerUp)}</b></div><div><span class="pb-note">MVP</span><b>⭐ ${esc(R.mvpName)}</b></div></div>
-      <div class="pb-teams">${R.teams.map((q, k) => `<div class="pb-team" style="--team:${q.colour};opacity:${smooth(1.2 + k * 0.15, 1.5 + k * 0.15, lt).toFixed(2)}"><b>#${q.place} ${esc(q.name)}</b><div>${q.score} points · ${q.tags} tags</div></div>`).join('')}</div>
+      <div class="pb-teams">${R.teams.map((q, k) => `<div class="pb-team" style="--team:${q.colour};opacity:${smooth(0.5 + k * 0.08, 0.7 + k * 0.08, lt).toFixed(2)}"><b>#${q.place} ${esc(q.name)}</b><div>${q.score} points · ${q.tags} tags</div></div>`).join('')}</div>
       <table class="pb-table" data-pb="scoreboard"><tr><th>#</th><th>Player</th><th>Team</th><th class="n">Score</th><th class="n">Tags</th><th class="n">Assists</th><th class="n">Times tagged</th><th class="n">Supplies</th><th class="n">Placed</th><th class="n">Survived</th></tr>${R.rankings.map(row).join('')}</table>
       <div class="pb-note">Paintball equipment used: ${used}. Results stay in this room until it closes; nothing is saved anywhere.</div></div>`;
   }
