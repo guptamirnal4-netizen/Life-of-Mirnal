@@ -13,7 +13,7 @@ ANTHROPIC_API_KEY=sk-ant-... npm start   # optional: Claude-powered conversation
 
 The Claude key stays on your machine: only `dev/server.mjs` (locally) and `api/` (on Vercel) use it, and the browser never sees it. Replies use `claude-opus-5-5` at low effort, with server-side refusal fallbacks switched on (`fallbacks: "default"`). Override the model with `NPC_MODEL=...` or turn the AI off with `NPC_LLM=off`. If Claude is unavailable or slow, the game silently uses the offline engine.
 
-Open http://localhost:8080 in Chrome. Click the game to capture the mouse.
+Open ay-with-bitsians.vercel.app in Chrome. Click the game to capture the mouse.
 
 On a phone or tablet it switches to touch controls: put your left thumb down anywhere on the left half for a
 joystick (push it to the edge to run; on the cycle, up pedals and sideways steers) and drag on the right half to
